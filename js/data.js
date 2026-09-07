@@ -1,379 +1,219 @@
+/* Live public menu. No Supabase SDK or package installation required. */
 const RESTAURANT = {
-  name: "Meerath Kabab",
-  nameAr: "ميراث كباب",
-  phoneDisplay: "0561663119",
-  phone: "+966561663119",
-  whatsapp: "966561663119",
-  address: "Olaya Street, Riyadh, Saudi Arabia",
-  addressAr: "شارع العليا، الرياض، المملكة العربية السعودية",
+  name: "Meerath Kabab", nameAr: "ميراث كباب", phoneDisplay: "0561663119",
+  phone: "+966561663119", whatsapp: "966561663119",
+  address: "Olaya Street, Riyadh, Saudi Arabia", addressAr: "شارع العليا، الرياض، المملكة العربية السعودية",
   maps: "https://maps.app.goo.gl/wQeq8SabZ1GfgKUN7",
 };
-
-const CATEGORIES = [
-  {
-    id: "biryani",
-    name: "Biryani",
-    nameAr: "برياني",
-    image:
-      "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=400&q=80",
-  },
-  {
-    id: "bbq",
-    name: "BBQ",
-    nameAr: "مشويات",
-    image:
-      "https://images.unsplash.com/photo-1603360946369-dc9bb6258143?w=400&q=80",
-  },
-  {
-    id: "karahi",
-    name: "Karahi",
-    nameAr: "كراهي",
-    image:
-      "https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=400&q=80",
-  },
-  {
-    id: "handi",
-    name: "Handi",
-    nameAr: "هاندي",
-    image:
-      "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&q=80",
-  },
-  {
-    id: "rolls",
-    name: "Rolls",
-    nameAr: "رولز",
-    image:
-      "https://6a89aee297833836f655edcd.imgix.net/sandbox/Rolls.jpg",
-  },
-  {
-    id: "broast",
-    name: "Broast",
-    nameAr: "بروست",
-    image:
-      "https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?w=400&q=80",
-  },
-  {
-    id: "chinese",
-    name: "Chinese",
-    nameAr: "صيني",
-    image:
-      "https://images.unsplash.com/photo-1585032226651-759b368d7246?w=400&q=80",
-  },
-  {
-    id: "drinks",
-    name: "Drinks",
-    nameAr: "مشروبات",
-    image:
-      "https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=400&q=80",
-  },
-  {
-    id: "desserts",
-    name: "Desserts",
-    nameAr: "حلويات",
-    image:
-      "https://images.unsplash.com/photo-1666190092159-3171cf0fbb12?w=400&q=80",
-  },
-  {
-    id: "deals",
-    name: "Deals",
-    nameAr: "عروض",
-    image:
-      "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&q=80",
-  },
-];
-
-const ITEMS = [
-  {
-    id: "chicken-biryani",
-    category: "biryani",
-    name: "Chicken Biryani",
-    nameAr: "برياني دجاج",
-    desc: "Fragrant basmati rice with tender chicken, whole spices, and fried onions.",
-    descAr: "أرز بسمتي مع دجاج طري وتوابل كاملة وبصل مقلي.",
-    price: 28,
-    rating: 4.6,
-    bestSeller: true,
-    special: true,
-    image:
-      "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=800&q=80",
-  },
-  {
-    id: "mutton-biryani",
-    category: "biryani",
-    name: "Mutton Biryani",
-    nameAr: "برياني لحم",
-    desc: "Slow-cooked mutton layered with saffron rice.",
-    descAr: "لحم مطهو ببطء مع أرز الزعفران.",
-    price: 38,
-    rating: 4.8,
-    bestSeller: true,
-    image:
-      "https://images.unsplash.com/photo-1701579231305-d84d8af9a3fd?w=800&q=80",
-  },
-  {
-    id: "veg-biryani",
-    category: "biryani",
-    name: "Vegetable Biryani",
-    nameAr: "برياني خضار",
-    desc: "Garden vegetables, mint, and aromatic rice.",
-    descAr: "خضار طازجة ونعناع وأرز معطر.",
-    price: 22,
-    rating: 4.3,
-    image:
-      "https://images.unsplash.com/photo-1599043513900-ed6fe6d4cdbf?w=800&q=80",
-  },
-  {
-    id: "seekh-kabab",
-    category: "bbq",
-    name: "Seekh Kabab",
-    nameAr: "سيخ كباب",
-    desc: "Charcoal-grilled minced beef kababs, 4 pieces.",
-    descAr: "كباب لحم مشوي على الفحم، 4 قطع.",
-    price: 32,
-    rating: 4.7,
-    special: true,
-    image:
-      "https://images.unsplash.com/photo-1603360946369-dc9bb6258143?w=800&q=80",
-  },
-  {
-    id: "chicken-tikka",
-    category: "bbq",
-    name: "Chicken Tikka",
-    nameAr: "تكة دجاج",
-    desc: "Yogurt-marinated chicken, smoky tandoor finish.",
-    descAr: "دجاج متبل بالزبادي مع لمسة تنور مدخنة.",
-    price: 30,
-    rating: 4.5,
-    bestSeller: true,
-    image:
-      "https://images.unsplash.com/photo-1599487488170-d11ec9c172f0?w=800&q=80",
-  },
-  {
-    id: "malai-boti",
-    category: "bbq",
-    name: "Malai Boti",
-    nameAr: "ملائي بوتي",
-    desc: "Creamy white chicken boti, mild and rich.",
-    descAr: "بوتي دجاج كريمي خفيف وغني.",
-    price: 34,
-    rating: 4.4,
-    image:
-      "https://images.unsplash.com/photo-1610057099443-fde8c4d50f91?w=800&q=80",
-  },
-  {
-    id: "chicken-karahi",
-    category: "karahi",
-    name: "Chicken Karahi",
-    nameAr: "كراهي دجاج",
-    desc: "Tomato-ginger karahi, served with naan.",
-    descAr: "كراهي بالطماطم والزنجبيل مع نان.",
-    price: 42,
-    rating: 4.6,
-    special: true,
-    image:
-      "https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=800&q=80",
-  },
-  {
-    id: "mutton-karahi",
-    category: "karahi",
-    name: "Mutton Karahi",
-    nameAr: "كراهي لحم",
-    desc: "Traditional mutton karahi with green chilies.",
-    descAr: "كراهي لحم تقليدي مع فلفل أخضر.",
-    price: 55,
-    rating: 4.7,
-    image:
-      "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&q=80",
-  },
-  {
-    id: "chicken-handi",
-    category: "handi",
-    name: "Chicken Handi",
-    nameAr: "هاندي دجاج",
-    desc: "Creamy handi with cashew gravy.",
-    descAr: "هاندي كريمي بصلصة الكاجو.",
-    price: 40,
-    rating: 4.5,
-    image:
-      "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800&q=80",
-  },
-  {
-    id: "chicken-roll",
-    category: "rolls",
-    name: "Chicken Tikka Roll",
-    nameAr: "رول تكة دجاج",
-    desc: "Soft paratha wrapped around tikka and chutney.",
-    descAr: "باراثا طري مع التكة والثاتني.",
-    price: 16,
-    rating: 4.4,
-    image:
-      "https://images.unsplash.com/photo-1626700051175-64363705b21b?w=800&q=80",
-  },
-  {
-    id: "broast-quarter",
-    category: "broast",
-    name: "Broast Quarter",
-    nameAr: "ربع بروست",
-    desc: "Crispy Pakistani-style broast with fries.",
-    descAr: "بروست باكستاني مقرمش مع بطاطس.",
-    price: 24,
-    rating: 4.2,
-    image:
-      "https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?w=800&q=80",
-  },
-  {
-    id: "chicken-manchurian",
-    category: "chinese",
-    name: "Chicken Manchurian",
-    nameAr: "دجاج منشوري",
-    desc: "Indo-Chinese classic with steamed rice.",
-    descAr: "طبق صيني-هندي كلاسيكي مع أرز.",
-    price: 26,
-    rating: 4.1,
-    image:
-      "https://images.unsplash.com/photo-1585032226651-759b368d7246?w=800&q=80",
-  },
-  {
-    id: "mango-lassi",
-    category: "drinks",
-    name: "Mango Lassi",
-    nameAr: "لاسي مانجو",
-    desc: "Sweet yogurt drink with ripe mango.",
-    descAr: "مشروب زبادي حلو بالمانجو.",
-    price: 10,
-    rating: 4.6,
-    image:
-      "https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=800&q=80",
-  },
-  {
-    id: "fresh-lime",
-    category: "drinks",
-    name: "Fresh Lime",
-    nameAr: "ليمون طازج",
-    desc: "Soda or still, with mint.",
-    descAr: "بالصودا أو الماء مع النعناع.",
-    price: 8,
-    rating: 4.3,
-    image:
-      "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&q=80",
-  },
-  {
-    id: "kheer",
-    category: "desserts",
-    name: "Kheer",
-    nameAr: "خير",
-    desc: "Cardamom rice pudding, pistachio garnish.",
-    descAr: "مهلبية أرز بالهيل والفستق.",
-    price: 12,
-    rating: 4.5,
-    image:
-      "https://images.unsplash.com/photo-1488477181946-6428a0291777?w=800&q=80",
-  },
-  {
-    id: "gulab-jamun",
-    category: "desserts",
-    name: "Gulab Jamun",
-    nameAr: "غولاب جامون",
-    desc: "Warm milk dumplings in rose syrup. 2 pieces.",
-    descAr: "كرات حليب دافئة بشيرة الورد. قطعتان.",
-    price: 10,
-    rating: 4.7,
-    image:
-      "https://images.unsplash.com/photo-1666190092159-3171cf0fbb12?w=800&q=80",
-  },
-  {
-    id: "lunch-deal",
-    category: "deals",
-    name: "Lunch Deal",
-    nameAr: "عرض الغداء",
-    desc: "Chicken biryani + drink. Available 12–4 PM.",
-    descAr: "برياني دجاج + مشروب. من 12 إلى 4 عصراً.",
-    price: 32,
-    rating: 4.4,
-    offer: true,
-    image:
-      "https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=800&q=80",
-  },
-  {
-    id: "family-bbq",
-    category: "deals",
-    name: "Family BBQ Platter",
-    nameAr: "طبق مشاوي عائلي",
-    desc: "Mixed grill for 4, naan, and raita.",
-    descAr: "مشاوي مشكلة لـ 4 أشخاص مع نان ورايتا.",
-    price: 149,
-    rating: 4.8,
-    offer: true,
-    special: true,
-    image:
-      "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&q=80",
-  },
-  {
-    id: "weekend-karahi",
-    category: "deals",
-    name: "Weekend Karahi Offer",
-    nameAr: "عرض كراهي نهاية الأسبوع",
-    desc: "Chicken karahi + 4 naan + 2 drinks.",
-    descAr: "كراهي دجاج + 4 نان + مشروبان.",
-    price: 79,
-    rating: 4.5,
-    offer: true,
-    image:
-      "https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=800&q=80",
-  },
-];
-
-const OFFERS = [
-  {
-    id: "o1",
-    title: "Lunch Deal",
-    titleAr: "عرض الغداء",
-    subtitle: "Biryani + drink · 12–4 PM",
-    subtitleAr: "برياني + مشروب · 12–4 عصراً",
-    price: 32,
-    itemId: "lunch-deal",
-    tab: "deals",
-  },
-  {
-    id: "o2",
-    title: "Family BBQ Platter",
-    titleAr: "طبق مشاوي عائلي",
-    subtitle: "Grill for 4 people",
-    subtitleAr: "مشاوي لـ 4 أشخاص",
-    price: 149,
-    itemId: "family-bbq",
-    tab: "deals",
-  },
-  {
-    id: "o3",
-    title: "Weekend Karahi Offer",
-    titleAr: "عرض كراهي نهاية الأسبوع",
-    subtitle: "Karahi + naan + drinks",
-    subtitleAr: "كراهي + نان + مشروبات",
-    price: 79,
-    itemId: "weekend-karahi",
-    tab: "deals",
-  },
-  {
-    id: "o4",
-    title: "Free Dessert",
-    titleAr: "حلوى مجانية",
-    subtitle: "On orders above SAR 80",
-    subtitleAr: "على الطلبات فوق 80 ر.س",
-    price: null,
-    itemId: "gulab-jamun",
-    tab: "all",
-  },
-];
-
+const MENU_CONFIG = Object.freeze({
+  url: "https://skwburtcthxihpgqagmm.supabase.co",
+  publicKey: "sb_publishable_6f7rQ5e2pJ_rdUoBxaInoA_wJW5KtHW",
+  restaurantId: "11111111-1111-1111-1111-111111111111",
+  branchId: "", // Optional exact branch UUID. Auto-selects sole branch or unique Olaya branch.
+  timeZone: "Asia/Riyadh", refreshMs: 30000, maxAgeMs: 90000,
+});
+let CATEGORIES = [], SUBCATEGORIES = [], ITEMS = [];
+// Promotions, modifiers and rewards are not supplied by the menu API.
+const OFFERS = [], EXTRAS = [];
 const VOUCHERS = [
   { id: "v1", title: "SAR 10 off", titleAr: "خصم 10 ر.س", cost: 100 },
   { id: "v2", title: "Free drink", titleAr: "مشروب مجاني", cost: 60 },
   { id: "v3", title: "SAR 25 off", titleAr: "خصم 25 ر.س", cost: 200 },
 ];
-
-const EXTRAS = [
-  { id: "raita", name: "Extra Raita", nameAr: "رايتا إضافي", price: 4 },
-  { id: "salad", name: "Extra Salad", nameAr: "سلطة إضافية", price: 5 },
-  { id: "drink", name: "Soft Drink", nameAr: "مشروب غازي", price: 6 },
-];
+const menuConnection = { status: "loading", lastSuccess: 0, error: "", payload: null,
+  fingerprint: "", pending: null, started: false, pendingRender: false };
+const MENU_COPY = {
+  en: { loading: "Loading menu…", error: "Menu could not be updated. Please try again.",
+    empty: "The menu is being updated. Please check again shortly.", retry: "Retry", unavailable: "Unavailable now",
+    changed: "Your cart was updated. Please review the items and prices.",
+    unavailableItem: "This item is currently unavailable.", noOffers: "No offers available right now.",
+    noSpecials: "Explore our menu below.", all: "All", noItems: "No items in this category right now." },
+  ar: { loading: "جارٍ تحميل القائمة…", error: "تعذر تحديث القائمة. يرجى المحاولة مرة أخرى.",
+    empty: "جارٍ تحديث القائمة. يرجى العودة قريباً.", retry: "إعادة المحاولة", unavailable: "غير متوفر الآن",
+    changed: "تم تحديث السلة. يرجى مراجعة الأصناف والأسعار.", unavailableItem: "هذا الصنف غير متوفر حالياً.",
+    noOffers: "لا توجد عروض حالياً.", noSpecials: "تصفح قائمتنا أدناه.", all: "الكل", noItems: "لا توجد أصناف في هذا القسم حالياً." },
+};
+function menuText(key) { return MENU_COPY[state.lang === "ar" ? "ar" : "en"][key] || key; }
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function menuImage(value) {
+  try { const u = new URL(value); if (["https:", "http:"].includes(u.protocol)) return escapeHtml(u.href); } catch (_) {}
+  return "assets/images/meerath-logo.png";
+}
+const isMenuId = value => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+function riyadhClock(date = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: MENU_CONFIG.timeZone,
+    weekday: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"
+  }).formatToParts(date).map(x => [x.type, x.value]));
+  return { day: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(p.weekday) + 1,
+    seconds: Number(p.hour) * 3600 + Number(p.minute) * 60 + Number(p.second) };
+}
+function scheduleAllows(rows, date = new Date()) {
+  // Admin creates ISO weekdays: Monday=1 ... Sunday=7. No schedule rows means unrestricted.
+  if (!rows.length) return true;
+  const {day, seconds} = riyadhClock(date);
+  const parse = (s, fallback) => {
+    if (s == null || s === "") return fallback;
+    if (!/^\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(String(s))) return NaN;
+    const [h,m,sec=0] = String(s).split(":").map(Number);
+    return h < 24 && m < 60 && sec < 60 ? h*3600+m*60+sec : NaN;
+  };
+  return rows.some(r => {
+    if (r.is_available !== true) return false;
+    const start = parse(r.start_time, 0), end = parse(r.end_time, 86400);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
+    const d = Number(r.day_of_week);
+    if (start < end) return d === day && seconds >= start && seconds < end;
+    if (start === end) return false; // Explicit zero-length interval is closed.
+    return (d === day && seconds >= start) || (d === (day === 1 ? 7 : day - 1) && seconds < end);
+  });
+}
+function selectMenuBranch(branches) {
+  if (MENU_CONFIG.branchId) {
+    const b = branches.find(b => b.id === MENU_CONFIG.branchId);
+    if (!b) throw new Error("Configured branch is not active.");
+    return b.id;
+  }
+  if (branches.length === 1) return branches[0].id;
+  const olaya = branches.filter(b => /olaya|olayya|العليا/i.test(b.name || ""));
+  if (olaya.length === 1) return olaya[0].id;
+  throw new Error("Select one active branch in MENU_CONFIG.branchId; no unique Olaya branch was found.");
+}
+function mapMenu(payload, date = new Date()) {
+  if (!payload || payload.version !== 1 || payload.restaurant_id !== MENU_CONFIG.restaurantId ||
+      !["categories","subcategories","items","schedules","branches","branch_items"].every(k => Array.isArray(payload[k]))) {
+    throw new Error("Unexpected customer menu response.");
+  }
+  const branchId = selectMenuBranch(payload.branches);
+  const group = r => ({id:r.id, name:String(r.name_en || ""), nameAr:String(r.name_ar || ""),
+    category:r.category_id, image:menuImage(r.image_url)});
+  const cats = payload.categories.filter(r => isMenuId(r.id)).map(group);
+  const subs = payload.subcategories.filter(r => isMenuId(r.id) && cats.some(c => c.id === r.category_id)).map(group);
+  const items = payload.items.filter(r => isMenuId(r.id) && cats.some(c => c.id === r.category_id) &&
+    (!r.subcategory_id || subs.some(s => s.id === r.subcategory_id && s.category === r.category_id)) &&
+    r.base_price != null && r.base_price !== "" && Number.isFinite(Number(r.base_price)) && Number(r.base_price) >= 0
+  ).map(r => ({
+    id:r.id, category:r.category_id, subcategory:r.subcategory_id || null,
+    name:String(r.name_en || ""), nameAr:String(r.name_ar || ""),
+    desc:String(r.description_en || ""), descAr:String(r.description_ar || ""),
+    price:Number(r.base_price), image:menuImage(r.image_url),
+    special:r.is_featured === true, bestSeller:r.is_best_seller === true, newItem:r.is_new === true,
+    prepTime:Number(r.prep_time) || 25,
+    available:r.is_available === true && payload.branch_items.some(b => b.branch_id === branchId &&
+      b.menu_item_id === r.id && b.is_available === true) &&
+      scheduleAllows(payload.schedules.filter(s => s.menu_item_id === r.id), date),
+  }));
+  cats.forEach(c => {
+    if (c.image === "assets/images/meerath-logo.png") c.image = items.find(i => i.category === c.id)?.image || c.image;
+  });
+  return {categories:cats, subcategories:subs, items};
+}
+function menuReady() {
+  return menuConnection.status === "ready" && Date.now() - menuConnection.lastSuccess <= MENU_CONFIG.maxAgeMs;
+}
+function canOrderItem(item) {
+  return !!item && item.available === true && menuReady() &&
+    scheduleAllows((menuConnection.payload?.schedules || []).filter(s => s.menu_item_id === item.id));
+}
+function reconcileMenuCart() {
+  if (!state.cart.length) return false;
+  const before = JSON.stringify(state.cart);
+  state.cart = state.cart.flatMap(line => {
+    const item = ITEMS.find(i => i.id === line.id);
+    if (!item?.available) return [];
+    return [{...line, price:item.price, image:item.image, size:"regular", extras:[]}];
+  });
+  const changed = before !== JSON.stringify(state.cart);
+  if (changed) toast(menuText("changed"));
+  return changed;
+}
+function applyMenuPayload(payload) {
+  const mapped = mapMenu(payload);
+  const fingerprint = JSON.stringify(mapped);
+  const changed = fingerprint !== menuConnection.fingerprint;
+  CATEGORIES = mapped.categories; SUBCATEGORIES = mapped.subcategories; ITEMS = mapped.items;
+  menuConnection.fingerprint = fingerprint;
+  if (!CATEGORIES.some(c => c.id === state.categoryId)) {
+    state.categoryId = CATEGORIES[0]?.id || ""; state.subcategoryId = "";
+  }
+  if (state.subcategoryId && !SUBCATEGORIES.some(s => s.id === state.subcategoryId && s.category === state.categoryId)) state.subcategoryId = "";
+  if (state.screen === "detail" && !ITEMS.some(i => i.id === state.itemId)) state.screen = "listing";
+  return {changed, cartChanged:reconcileMenuCart()};
+}
+function refreshMenuUI() {
+  if (!["home","menu","listing","detail","cart","checkout","offers"].includes(state.screen)) return;
+  if (document.activeElement?.matches("input,textarea,select")) { menuConnection.pendingRender = true; return; }
+  menuConnection.pendingRender = false;
+  renderKeepScroll();
+}
+async function refreshMenu() {
+  if (menuConnection.pending) return menuConnection.pending;
+  menuConnection.pending = (async () => {
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 12000);
+    const previous = menuConnection.status;
+    try {
+      const response = await fetch(`${MENU_CONFIG.url}/rest/v1/rpc/meerath_customer_menu_v1`, {
+        method:"POST", headers:{apikey:MENU_CONFIG.publicKey, "Content-Type":"application/json"},
+        body:"{}", signal:controller.signal, cache:"no-store", credentials:"omit",
+      });
+      if (!response.ok) {
+        const detail = (await response.text()).slice(0,500);
+        throw new Error(`Menu API ${response.status}: ${detail}`);
+      }
+      const payload = await response.json();
+      const result = applyMenuPayload(payload);
+      menuConnection.payload = payload; menuConnection.status = "ready";
+      menuConnection.lastSuccess = Date.now(); menuConnection.error = "";
+      if (result.changed || result.cartChanged || previous !== "ready") refreshMenuUI();
+      return {ok:true, cartChanged:result.cartChanged};
+    } catch(error) {
+      menuConnection.status = "error"; menuConnection.error = String(error.message || error);
+      console.warn("Meerath menu:", menuConnection.error);
+      if (previous !== "error") refreshMenuUI();
+      return {ok:false, cartChanged:false};
+    } finally { clearTimeout(timer); }
+  })();
+  try { return await menuConnection.pending; } finally { menuConnection.pending = null; }
+}
+function menuStatusMarkup() {
+  const key = menuConnection.status === "loading" ? "loading" : !menuReady() ? "error" : !ITEMS.length ? "empty" : "";
+  if (!key) return "";
+  return `<div class="menu-status" role="status">${menuText(key)}${key !== "loading" ?
+    ` <button class="link" onclick="refreshMenu()">${menuText("retry")}</button>` : ""}</div>`;
+}
+async function validateMenuCart() {
+  const result = await refreshMenu();
+  if (!result.ok) { toast(menuText("error")); return false; }
+  if (result.cartChanged) { go("cart"); return false; }
+  if (!state.cart.length) { toast(t("cartIsEmpty")); return false; }
+  return state.cart.every(line => canOrderItem(itemById(line.id)));
+}
+function startMenuSync() {
+  if (menuConnection.started) return;
+  menuConnection.started = true;
+  refreshMenu();
+  setInterval(() => { if (!document.hidden) refreshMenu(); }, MENU_CONFIG.refreshMs);
+  // Schedule transitions are recalculated in Riyadh time, including overnight windows.
+  setInterval(() => {
+    if (document.hidden || !menuConnection.payload) return;
+    if (!menuReady()) {
+      if (menuConnection.status === "ready") { menuConnection.status = "error"; refreshMenuUI(); }
+      return;
+    }
+    const result = applyMenuPayload(menuConnection.payload);
+    if (result.changed || result.cartChanged) refreshMenuUI();
+  }, 10000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshMenu(); });
+  window.addEventListener("online", () => refreshMenu());
+  window.addEventListener("focus", () => refreshMenu());
+  document.addEventListener("focusout", () => setTimeout(() => {
+    if (menuConnection.pendingRender) refreshMenuUI();
+  }, 0));
+  document.addEventListener("error", event => {
+    const img = event.target;
+    if (img.tagName === "IMG" && !img.dataset.menuFallback) {
+      img.dataset.menuFallback = "1"; img.src = "assets/images/meerath-logo.png";
+    }
+  }, true);
+}

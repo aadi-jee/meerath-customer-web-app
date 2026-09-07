@@ -10,8 +10,9 @@ const state = {
     ? localStorage.getItem("mk-appearance")
     : "dark",
   screen: "splash",
-  categoryId: "biryani",
-  itemId: "chicken-biryani",
+  categoryId: "",
+  subcategoryId: "",
+  itemId: "",
   orderType: "dinein",
   cart: [],
   size: "regular",
@@ -64,7 +65,7 @@ function t(key) {
 
 function loc(obj, field) {
   if (!obj) return "";
-  return state.lang === "ar" ? obj[field + "Ar"] || obj[field] : obj[field];
+  return escapeHtml(state.lang === "ar" ? obj[field + "Ar"] || obj[field] : obj[field]);
 }
 
 function applyDir() {
@@ -107,6 +108,11 @@ function setLang(lang) {
 }
 
 function go(screen, extra = {}) {
+  if (screen === "checkout") {
+    validateMenuCart().then(ok => { if (ok) { Object.assign(state, extra, {screen}); render(); } });
+    return;
+  }
+  if (screen === "listing" && extra.categoryId !== undefined && extra.categoryId !== state.categoryId) state.subcategoryId = "";
   Object.assign(state, extra, { screen });
   render();
   $app().parentElement.scrollTop = 0;
@@ -121,12 +127,7 @@ function cartCount() {
 }
 
 function linePrice(line) {
-  const extraSum = (line.extras || []).reduce((n, id) => {
-    const e = EXTRAS.find((x) => x.id === id);
-    return n + (e ? e.price : 0);
-  }, 0);
-  const sizeAdd = line.size === "large" ? 8 : 0;
-  return (line.price + extraSum + sizeAdd) * line.qty;
+  return Number(line.price) * line.qty;
 }
 
 function totals() {
@@ -152,6 +153,8 @@ function toast(msg) {
 }
 
 function addToCart(item, qty = 1) {
+  if (!canOrderItem(item)) { toast(menuText("unavailableItem")); return false; }
+  state.size = "regular"; state.extras = [];
   const extras = [...state.extras];
   const size = state.size;
   const spice = state.spice;
@@ -175,6 +178,7 @@ function addToCart(item, qty = 1) {
     });
   toast(t("added"));
   updateCartButtons();
+  return true;
 }
 
 function waLink(text) {
@@ -268,15 +272,16 @@ function nav(active) {
     ["account", icons.account, "account"],
   ];
 
-  return `<nav class="nav">${items
-    .map(
-      ([id, icon, key]) =>
-        `<button class="${active === id ? "active" : ""}" onclick="go('${id}')">
-          ${icon}
-          <span class="nav-label">${t(key)}</span>
-        </button>`
-    )
-    .join("")}</nav>`;
+  return `<nav class="nav">
+    <div class="desktop-nav-brand">
+      <img src="assets/images/meerath-logo.png" alt="Meerath Kabab" />
+      <div><strong>${RESTAURANT.name}</strong><span>Olaya, Riyadh</span></div>
+    </div>
+    ${items.map(([id, icon, key]) =>
+      `<button class="${active === id ? "active" : ""}" onclick="go('${id}')">
+        ${icon}<span class="nav-label">${t(key)}</span>
+      </button>`).join("")}
+  </nav>`;
 }
 
 function back(to = "home") {
@@ -586,9 +591,9 @@ function setHomeOrderType(type, button) {
 }
 
 function home() {
-  const specials = ITEMS.filter((i) => i.special);
+  const specials = ITEMS.filter((i) => i.special && i.available);
   return `
-    <section class="screen">
+    <section class="screen home-screen">
       <div class="topbar home-topbar">
 
   <div class="home-brand-location">
@@ -632,7 +637,7 @@ function home() {
 
     <input
       type="search"
-      value="${state.searchQuery}"
+      value="${escapeHtml(state.searchQuery)}"
       placeholder="${t("search")}"
       autocomplete="off"
       spellcheck="false"
@@ -670,6 +675,7 @@ function home() {
       </div>
       <div class="h-row"><h3>${t("todaysSpecial")}</h3><button class="link" onclick="go('menu')">${t("seeAll")}</button></div>
       <div class="scroll">
+        ${!specials.length && menuReady() ? `<p class="menu-hint">${menuText("noSpecials")}</p>` : ""}
         ${specials
           .map(
             (i) => `
@@ -701,7 +707,7 @@ function home() {
 
 function menu() {
   return `
-    <section class="screen">
+    <section class="screen menu-screen">
       <div class="topbar">
   <h2>${t("menu")}</h2>
   ${back("home")}
@@ -717,29 +723,31 @@ function menu() {
 }
 
 function listing() {
-  const cat = CATEGORIES.find((c) => c.id === state.categoryId);
-  const items = ITEMS.filter((i) => i.category === state.categoryId);
+  const cat = CATEGORIES.find(c => c.id === state.categoryId);
+  const subs = SUBCATEGORIES.filter(s => s.category === state.categoryId);
+  const items = ITEMS.filter(i => i.category === state.categoryId && (!state.subcategoryId || i.subcategory === state.subcategoryId));
   return `
-    <section class="screen">
-      <div class="topbar">${back("menu")}<h2>${cat ? loc(cat, "name") : t("items")}</h2>
-      ${cartButton()}</div>
-      ${items
-        .map(
-          (i) => `
-        <article class="item">
+    <section class="screen listing-screen">
+      <div class="topbar">${back("menu")}<h2>${cat ? loc(cat, "name") : t("items")}</h2>${cartButton()}</div>
+      ${subs.length ? `<div class="menu-subcategories" aria-label="${t("categories")}">
+        <button class="${!state.subcategoryId ? "on" : ""}" onclick="state.subcategoryId='';render()">${menuText("all")}</button>
+        ${subs.map(s => `<button class="${state.subcategoryId === s.id ? "on" : ""}" onclick="state.subcategoryId='${s.id}';render()">${loc(s,"name")}</button>`).join("")}
+      </div>` : ""}
+      ${!items.length && menuReady() ? `<p class="menu-hint">${menuText("noItems")}</p>` : ""}
+      <div class="menu-items-grid">
+      ${items.map(i => `
+        <article class="item ${canOrderItem(i) ? "" : "menu-unavailable"}">
           <img src="${i.image}" alt="${loc(i, "name")}" onclick="openItem('${i.id}')" />
           <div onclick="openItem('${i.id}')">
             ${i.bestSeller ? `<span class="badge">${t("bestSeller")}</span>` : ""}
-            <h4>${loc(i, "name")}</h4>
-            <p>${loc(i, "desc")}</p>
+            <h4>${loc(i,"name")}</h4><p>${loc(i,"desc")}</p>
             <div class="price">${money(i.price)}</div>
+            ${!i.available ? `<small class="menu-availability">${menuText("unavailable")}</small>` : ""}
           </div>
-          <button class="add" onclick="quickAdd('${i.id}')">${t("add")}</button>
-        </article>`
-        )
-        .join("")}
-    </section>
-    ${nav("menu")}`;
+          <button class="add" ${canOrderItem(i) ? "" : "disabled"} onclick="quickAdd('${i.id}')">${t("add")}</button>
+        </article>`).join("")}
+      </div>
+    </section>${nav("menu")}`;
 }
 
 function detail() {
@@ -747,31 +755,16 @@ function detail() {
   if (!i) return listing();
   const dish = loc(i, "name");
   return `
-    <section class="screen">
+    <section class="screen detail-screen">
       <img class="hero-img" src="${i.image}" alt="${dish}" />
       <div class="topbar" style="margin-top:-48px;position:relative">
         ${back("listing")}
         ${cartButton()}
       </div>
       <h2>${dish}</h2>
-      <div class="stars">★ ${i.rating} · ${t("kitchen")}</div>
+      <div class="stars">${t("kitchen")}</div>
       <p style="color:var(--muted);font-size:14px">${loc(i, "desc")}</p>
       <p class="price" style="margin:12px 0;font-size:20px">${money(i.price)}</p>
-      <div class="options">
-        <h4>${t("chooseSize")}</h4>
-        <div class="choice"><label><input type="radio" name="size" ${state.size === "regular" ? "checked" : ""} onchange="state.size='regular'"> ${t("regular")}</label><span>${money(i.price)}</span></div>
-        <div class="choice"><label><input type="radio" name="size" ${state.size === "large" ? "checked" : ""} onchange="state.size='large'"> ${t("large")}</label><span>${money(i.price + 8)}</span></div>
-      </div>
-      <div class="options">
-        <h4>${t("addExtras")}</h4>
-        ${EXTRAS.map(
-          (e) => `
-          <div class="choice">
-            <label><input type="checkbox" ${state.extras.includes(e.id) ? "checked" : ""} onchange="toggleExtra('${e.id}')"> ${loc(e, "name")}</label>
-            <span>+ ${money(e.price)}</span>
-          </div>`
-        ).join("")}
-      </div>
       <div class="options">
         <h4>${t("spiceLevel")}</h4>
         <div class="spice">
@@ -784,8 +777,8 @@ function detail() {
         </div>
       </div>
       <div class="sticky-actions single-action">
-  <button class="btn btn-primary" onclick="addFromDetail()">
-    ${t("addToCart")}
+  <button class="btn btn-primary" ${canOrderItem(i) ? "" : "disabled"} onclick="addFromDetail()">
+    ${canOrderItem(i) ? t("addToCart") : menuText("unavailable")}
   </button>
 </div>
     </section>`;
@@ -795,7 +788,7 @@ function cart() {
   const tot = totals();
   if (!state.cart.length) {
     return `
-      <section class="screen">
+      <section class="screen cart-screen">
         <div class="topbar">${back("home")}<h2>${t("yourCart")}</h2>${langSwitch()}</div>
         <div class="empty">${t("cartEmpty")}<br><button class="link" onclick="go('menu')">${t("browseTheMenu")}</button></div>
       </section>${nav("home")}`;
@@ -822,8 +815,8 @@ function cart() {
         </div>`;
         })
         .join("")}
-      <textarea class="field" rows="2" placeholder="${t("cookingNotes")}" oninput="state.notes=this.value">${state.notes}</textarea>
-      <input class="field" placeholder="${t("coupon")}" value="${state.coupon}" oninput="state.coupon=this.value" />
+      <textarea class="field" rows="2" placeholder="${t("cookingNotes")}" oninput="state.notes=this.value">${escapeHtml(state.notes)}</textarea>
+      <input class="field" placeholder="${t("coupon")}" value="${escapeHtml(state.coupon)}" oninput="state.coupon=this.value" />
       <button class="link" onclick="applyCoupon()">${t("applyCoupon")}</button>
       <div class="breakdown" id="cartBreakdown" style="margin-top:14px">
         <div><span>${t("subtotal")}</span><span>${money(tot.subtotal)}</span></div>
@@ -1369,7 +1362,9 @@ function reorderFromHistory(id) {
 
   if (!order) return;
 
+  if (!menuReady()) { toast(menuText("error")); refreshMenu(); return; }
   state.cart = order.items.map((item) => ({ ...item }));
+  reconcileMenuCart();
   state.orderType = order.orderType || "dinein";
 
   go("cart");
@@ -1652,6 +1647,7 @@ const idx = o
 function offers() {
   const tab = state.offerTab;
   const list = OFFERS.filter((o) => {
+    if (!itemById(o.itemId)) return false;
     if (tab === "all") return true;
     if (tab === "deals") return o.tab === "deals";
     return o.id === "o4";
@@ -1668,6 +1664,7 @@ function offers() {
         <button class="${tab === "deals" ? "on" : ""}" onclick="state.offerTab='deals'; render()">${t("deals")}</button>
         <button class="${tab === "mine" ? "on" : ""}" onclick="state.offerTab='mine'; render()">${t("myOffers")}</button>
       </div>
+      ${!list.length ? `<p class="menu-hint">${menuText("noOffers")}</p>` : ""}
       ${list
         .map((o) => {
           const item = itemById(o.itemId);
@@ -3173,6 +3170,10 @@ function render() {
     account,
   };
   $app().innerHTML = (map[state.screen] || home)();
+  if (["home","menu","listing","detail","cart","checkout","offers"].includes(state.screen)) {
+    const screen = $app().querySelector(".screen");
+    if (screen) screen.insertAdjacentHTML("afterbegin", menuStatusMarkup());
+  }
   $app().style.paddingBottom =
     state.screen === "splash" ||
     state.screen === "detail" ||
@@ -3184,6 +3185,10 @@ function render() {
 }
 
 function openItem(id) {
+  const item = itemById(id);
+  if (!item) { toast(menuText("unavailableItem")); return; }
+  if (state.categoryId !== item.category) state.subcategoryId = "";
+  state.categoryId = item.category;
   state.itemId = id;
   state.size = "regular";
   state.extras = [];
@@ -3227,8 +3232,7 @@ function setSpiceLevel(button, spice) {
 }
 
 function addFromDetail() {
-  addToCart(itemById(state.itemId));
-  go("cart");
+  if (addToCart(itemById(state.itemId))) go("cart");
 }
 
 function quickAdd(id) {
@@ -3282,8 +3286,8 @@ function updateCartBreakdown() {
 
 function chgQty(idx, d, button) {
   const line = state.cart[idx];
-
   if (!line) return;
+  if (d > 0 && !canOrderItem(itemById(line.id))) return toast(menuText("unavailableItem"));
 
   line.qty += d;
 
@@ -3363,7 +3367,8 @@ function getScheduledFor() {
   return Date.now() + minutes * 60 * 1000;
 }
 
-function placeOrder() {
+async function placeOrder() {
+  if (!(await validateMenuCart())) return;
   if (!state.cart.length) {
     return toast(t("cartIsEmpty"));
   }
@@ -3393,7 +3398,8 @@ function placeOrder() {
 
   go("otpPage");
 }
-function createOrderAfterVerification() {
+async function createOrderAfterVerification() {
+  if (!(await validateMenuCart())) return;
   state.order = {
     id: "MK" + Math.floor(1000 + Math.random() * 9000),
 
@@ -3485,3 +3491,5 @@ window.setAppearance = setAppearance;
 applyDir();
 applyAppearance();
 render();
+
+startMenuSync();
