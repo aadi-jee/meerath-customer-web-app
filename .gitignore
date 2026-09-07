@@ -1,16 +1,8 @@
-# Environment variables
 .env
-.env.local
-.env.production
-
-# Node modules
+.env.*
+!.env.example
+.vscode/
 node_modules/
-
-# Build output
-.next/
-out/
-build/
-
-# Misc
-.DS_Store
 *.log
+.DS_Store
+Thumbs.db
