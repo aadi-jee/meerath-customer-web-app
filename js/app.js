@@ -133,7 +133,9 @@ function linePrice(line) {
 function totals() {
   const itemsTotal = state.cart.reduce((n, l) => n + linePrice(l), 0);
   const delivery = state.orderType === "delivery" ? DELIVERY : 0;
-  const discount = state.couponOn ? 10 : 0;
+  // Do not stack the legacy demo coupon on top of a live item offer.
+  const hasItemOffer = state.cart.some(l => itemById(l.id)?.offer);
+  const discount = state.couponOn && !hasItemOffer ? 10 : 0;
 
   // Menu prices already include 15% VAT.
   const total = Math.max(0, itemsTotal - discount + delivery);
@@ -304,7 +306,15 @@ function back(to = "home") {
 }
 
 function money(n) {
-  return `${t("sar")} ${n.toFixed(0)}`;
+  return `${t("sar")} ${Number(n).toFixed(2)}`;
+}
+function itemPriceMarkup(item) {
+  const old = item.offer ? `<del style="color:var(--muted);font-size:0.85em;margin-inline-end:8px">${money(item.basePrice)}</del>` : "";
+  return `${old}<span>${money(item.price)}</span>`;
+}
+function offerLabel(offer) {
+  const amount = offer.type === "percentage" ? `${offer.amount}%` : money(offer.amount);
+  return state.lang === "ar" ? `خصم ${amount}` : `${amount} off`;
 }
 function cartButton() {
   const count = cartCount();
@@ -683,7 +693,7 @@ function home() {
             <img src="${i.image}" alt="${loc(i, "name")}" />
             <div>
               <h4>${loc(i, "name")}</h4>
-              <p class="price">${money(i.price)}</p>
+              <p class="price">${itemPriceMarkup(i)}</p>
             </div>
           </article>`
           )
@@ -741,7 +751,7 @@ function listing() {
           <div onclick="openItem('${i.id}')">
             ${i.bestSeller ? `<span class="badge">${t("bestSeller")}</span>` : ""}
             <h4>${loc(i,"name")}</h4><p>${loc(i,"desc")}</p>
-            <div class="price">${money(i.price)}</div>
+            <div class="price">${itemPriceMarkup(i)}</div>
             ${!i.available ? `<small class="menu-availability">${menuText("unavailable")}</small>` : ""}
           </div>
           <button class="add" ${canOrderItem(i) ? "" : "disabled"} onclick="quickAdd('${i.id}')">${t("add")}</button>
@@ -764,7 +774,7 @@ function detail() {
       <h2>${dish}</h2>
       <div class="stars">${t("kitchen")}</div>
       <p style="color:var(--muted);font-size:14px">${loc(i, "desc")}</p>
-      <p class="price" style="margin:12px 0;font-size:20px">${money(i.price)}</p>
+      <p class="price" style="margin:12px 0;font-size:20px">${itemPriceMarkup(i)}</p>
       <div class="options">
         <h4>${t("spiceLevel")}</h4>
         <div class="spice">
@@ -1645,13 +1655,7 @@ const idx = o
 }
 
 function offers() {
-  const tab = state.offerTab;
-  const list = OFFERS.filter((o) => {
-    if (!itemById(o.itemId)) return false;
-    if (tab === "all") return true;
-    if (tab === "deals") return o.tab === "deals";
-    return o.id === "o4";
-  });
+  const list = menuReady() ? OFFERS.filter(o => canOrderItem(itemById(o.itemId))) : [];
   return `
     <section class="screen">
       <div class="topbar offers-topbar">
@@ -1659,12 +1663,10 @@ function offers() {
   <h2>${t("offersDeals")}</h2>
   ${langSwitch()}
 </div>
-      <div class="tabs">
-        <button class="${tab === "all" ? "on" : ""}" onclick="state.offerTab='all'; render()">${t("allOffers")}</button>
-        <button class="${tab === "deals" ? "on" : ""}" onclick="state.offerTab='deals'; render()">${t("deals")}</button>
-        <button class="${tab === "mine" ? "on" : ""}" onclick="state.offerTab='mine'; render()">${t("myOffers")}</button>
-      </div>
-      ${!list.length ? `<p class="menu-hint">${menuText("noOffers")}</p>` : ""}
+      <button class="link" onclick="refreshMenu()">${state.lang === "ar" ? "تحديث العروض" : "Refresh offers"}</button>
+      ${menuReady() && menuConnection.payload?.offers_version !== 1 ? `<p class="menu-hint" role="status">${state.lang === "ar" ? "العروض قيد التحديث. يرجى المحاولة لاحقاً." : "Offers are being updated. Please check again shortly."}</p>` : ""}
+      ${menuReady() && menuConnection.payload?.offers_version === 1 && !list.length ? `<p class="menu-hint">${menuText("noOffers")}</p>` : ""}
+      <div class="menu-items-grid">
       ${list
         .map((o) => {
           const item = itemById(o.itemId);
@@ -1672,14 +1674,16 @@ function offers() {
           <article class="item">
             <img src="${item.image}" alt="" />
             <div>
-              <h4>${loc(o, "title")}</h4>
-              <p>${loc(o, "subtitle")}</p>
-              <div class="price">${o.price == null ? t("gift") : money(o.price)}</div>
+              <span class="badge">${offerLabel(item.offer)}</span>
+              <h4>${loc(item, "name")}</h4>
+              <p>${loc(item, "desc")}</p>
+              <div class="price">${itemPriceMarkup(item)}</div>
             </div>
             <button class="add" onclick="openItem('${o.itemId}')">${t("add")}</button>
           </article>`;
         })
         .join("")}
+      </div>
     </section>
     ${nav("more")}`;
 }
@@ -3321,6 +3325,12 @@ function chgQty(idx, d, button) {
 }
 
 function applyCoupon() {
+  if (state.cart.some(l => itemById(l.id)?.offer)) {
+    state.couponOn = false;
+    toast(state.lang === "ar" ? "لا يمكن جمع الكوبون مع عروض الأصناف." : "Coupons cannot be combined with item offers.");
+    render();
+    return;
+  }
   state.couponOn = state.coupon.trim().toUpperCase() === "MEERATH10";
   toast(state.couponOn ? t("couponOk") : t("couponBad"));
   render();

@@ -13,8 +13,9 @@ const MENU_CONFIG = Object.freeze({
   timeZone: "Asia/Riyadh", refreshMs: 30000, maxAgeMs: 90000,
 });
 let CATEGORIES = [], SUBCATEGORIES = [], ITEMS = [];
-// Promotions, modifiers and rewards are not supplied by the menu API.
-const OFFERS = [], EXTRAS = [];
+// Offers are derived from the menu API. Modifiers/rewards remain unchanged.
+let OFFERS = [];
+const EXTRAS = [];
 const VOUCHERS = [
   { id: "v1", title: "SAR 10 off", titleAr: "خصم 10 ر.س", cost: 100 },
   { id: "v2", title: "Free drink", titleAr: "مشروب مجاني", cost: 60 },
@@ -80,12 +81,41 @@ function selectMenuBranch(branches) {
   if (olaya.length === 1) return olaya[0].id;
   throw new Error("Select one active branch in MENU_CONFIG.branchId; no unique Olaya branch was found.");
 }
+// Admin stores Saudi calendar dates in attributes. Never read legacy root columns.
+function offerDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}(?:$|T)/.test(value)) return null;
+  const day = value.slice(0, 10);
+  const parsed = new Date(day + "T00:00:00Z");
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === day ? day : null;
+}
+function saudiDay(date) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: MENU_CONFIG.timeZone, year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(date).map(p => [p.type, p.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+function roundMoney(value) { return Math.round((value + Number.EPSILON) * 100) / 100; }
+function activeItemOffer(row, date = new Date()) {
+  const o = row.offer;
+  if (!o || o.has_offer !== true || o.offer_active !== true) return null;
+  const start = offerDate(o.offer_valid_from), end = offerDate(o.offer_valid_to);
+  const day = saudiDay(date), amount = o.offer_discount, base = Number(row.base_price);
+  if (!start || !end || start > end || day < start || day > end ||
+      typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0 ||
+      !Number.isFinite(base) || base < 0) return null;
+  if (o.offer_type !== "percentage" && o.offer_type !== "fixed") return null;
+  if (o.offer_type === "percentage" ? amount > 100 : amount > base) return null;
+  const price = roundMoney(o.offer_type === "percentage" ? base * (1 - amount / 100) : base - amount);
+  if (price >= roundMoney(base)) return null;
+  return {type: o.offer_type, amount, start, end, price};
+}
 function mapMenu(payload, date = new Date()) {
   if (!payload || payload.version !== 1 || payload.restaurant_id !== MENU_CONFIG.restaurantId ||
       !["categories","subcategories","items","schedules","branches","branch_items"].every(k => Array.isArray(payload[k]))) {
     throw new Error("Unexpected customer menu response.");
   }
-  const branchId = selectMenuBranch(payload.branches);
+  // An inactive restaurant / no active branch produces an empty public menu.
+  const branchId = payload.branches.length ? selectMenuBranch(payload.branches) : null;
   const group = r => ({id:r.id, name:String(r.name_en || ""), nameAr:String(r.name_ar || ""),
     category:r.category_id, image:menuImage(r.image_url)});
   const cats = payload.categories.filter(r => isMenuId(r.id)).map(group);
@@ -104,10 +134,17 @@ function mapMenu(payload, date = new Date()) {
       b.menu_item_id === r.id && b.is_available === true) &&
       scheduleAllows(payload.schedules.filter(s => s.menu_item_id === r.id), date),
   }));
+  items.forEach(item => {
+    const row = payload.items.find(r => r.id === item.id);
+    item.basePrice = roundMoney(item.price);
+    item.offer = item.available ? activeItemOffer(row, date) : null;
+    item.price = item.offer ? item.offer.price : item.basePrice;
+  });
   cats.forEach(c => {
     if (c.image === "assets/images/meerath-logo.png") c.image = items.find(i => i.category === c.id)?.image || c.image;
   });
-  return {categories:cats, subcategories:subs, items};
+  return {categories:cats, subcategories:subs, items,
+    offers:items.filter(i => i.offer).map(i => ({itemId:i.id}))};
 }
 function menuReady() {
   return menuConnection.status === "ready" && Date.now() - menuConnection.lastSuccess <= MENU_CONFIG.maxAgeMs;
@@ -133,6 +170,7 @@ function applyMenuPayload(payload) {
   const fingerprint = JSON.stringify(mapped);
   const changed = fingerprint !== menuConnection.fingerprint;
   CATEGORIES = mapped.categories; SUBCATEGORIES = mapped.subcategories; ITEMS = mapped.items;
+  OFFERS = mapped.offers;
   menuConnection.fingerprint = fingerprint;
   if (!CATEGORIES.some(c => c.id === state.categoryId)) {
     state.categoryId = CATEGORIES[0]?.id || ""; state.subcategoryId = "";
