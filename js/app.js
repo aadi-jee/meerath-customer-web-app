@@ -13,6 +13,7 @@ const state = {
   categoryId: "",
   subcategoryId: "",
   itemId: "",
+  cartEditKey: null,
   orderType: "dinein",
   cart: [],
   size: "regular",
@@ -56,6 +57,24 @@ editingAddressId: null,
   orderTiming: "asap",
 };
 
+let cartLineSequence = 0;
+function newCartKey() { return "line-" + (++cartLineSequence); }
+function cartCopy(en, ar) { return state.lang === "ar" ? ar : en; }
+function itemCartQty(id) {
+  return state.cart.filter(l => l.id === id).reduce((n,l) => n + l.qty, 0);
+}
+function limitMessage(item) {
+  const cap = item?.offer?.maxQty;
+  return cartCopy(`Maximum ${cap} of this item per cart with this offer.`,
+    `الحد الأقصى لهذا الصنف في السلة مع العرض: ${cap}.`);
+}
+function canAddItem(item, qty = 1) {
+  return canOrderItem(item) && Number.isSafeInteger(qty) && qty > 0 &&
+    itemCartQty(item.id) + qty <= (item.offer?.maxQty ?? Infinity);
+}
+function offerLimitMarkup(item) {
+  return item?.offer?.maxQty > 0 ? `<p class="offer-cap">${escapeHtml(limitMessage(item))}</p>` : "";
+}
 const $app = () => document.getElementById("app");
 const $toast = () => document.getElementById("toast");
 
@@ -108,6 +127,7 @@ function setLang(lang) {
 }
 
 function go(screen, extra = {}) {
+  if (screen !== "detail") state.cartEditKey = null;
   if (screen === "checkout") {
     validateMenuCart().then(ok => { if (ok) { Object.assign(state, extra, {screen}); render(); } });
     return;
@@ -131,20 +151,27 @@ function linePrice(line) {
 }
 
 function totals() {
-  const itemsTotal = state.cart.reduce((n, l) => n + linePrice(l), 0);
+  // Sum integer halalas; the line prices already include VAT and item offers.
+  const cents = n => Math.round(Number(n) * 100);
+  const itemsCents = state.cart.reduce((n,l) => n + cents(l.price) * l.qty, 0);
+  const regularCents = state.cart.reduce((n,l) =>
+    n + cents(l.basePrice ?? itemById(l.id)?.basePrice ?? l.price) * l.qty, 0);
   const delivery = state.orderType === "delivery" ? DELIVERY : 0;
-  // Do not stack the legacy demo coupon on top of a live item offer.
   const hasItemOffer = state.cart.some(l => itemById(l.id)?.offer);
-  const discount = state.couponOn && !hasItemOffer ? 10 : 0;
-
-  // Menu prices already include 15% VAT.
-  const total = Math.max(0, itemsTotal - discount + delivery);
-
-  // Extract VAT from the VAT-inclusive total instead of adding VAT again.
-  const vat = total * VAT / (1 + VAT);
-  const subtotal = total - vat;
-
-  return { subtotal, delivery, discount, vat, total };
+  const discountCents = state.couponOn && !hasItemOffer ? Math.min(1000, itemsCents) : 0;
+  const total = Math.max(0, itemsCents - discountCents + cents(delivery)) / 100;
+  const vat = roundMoney(total * VAT / (1 + VAT));
+  return {subtotal:roundMoney(total - vat), delivery, discount:discountCents / 100, vat, total,
+    regularItemsTotal:regularCents / 100, offerSavings:Math.max(0, regularCents - itemsCents) / 100};
+}
+function cartSummaryMarkup() {
+  const tot = totals();
+  return `<div><span>${cartCopy("Items total (VAT included)", "إجمالي الأصناف (شامل الضريبة)")}</span><span>${money(tot.regularItemsTotal)}</span></div>
+    ${tot.offerSavings ? `<div class="offer-saving"><span>${cartCopy("Offer savings", "توفير العروض")}</span><span>− ${money(tot.offerSavings)}</span></div>` : ""}
+    ${tot.discount ? `<div><span>${t("coupon")}</span><span>− ${money(tot.discount)}</span></div>` : ""}
+    ${state.orderType === "delivery" ? `<div><span>${t("deliveryFee")}</span><span>${money(tot.delivery)}</span></div>` : ""}
+    <div class="total"><span>${t("total")}</span><span>${money(tot.total)}</span></div>
+    <div class="included-vat"><span>${cartCopy("Includes VAT 15%", "يشمل ضريبة القيمة المضافة 15%")}</span><span>${money(tot.vat)}</span></div>`;
 }
 
 function toast(msg) {
@@ -156,6 +183,7 @@ function toast(msg) {
 
 function addToCart(item, qty = 1) {
   if (!canOrderItem(item)) { toast(menuText("unavailableItem")); return false; }
+  if (!canAddItem(item, qty)) { toast(limitMessage(item)); return false; }
   state.size = "regular"; state.extras = [];
   const extras = [...state.extras];
   const size = state.size;
@@ -171,6 +199,8 @@ function addToCart(item, qty = 1) {
   else
     state.cart.push({
       id: item.id,
+      cartKey: newCartKey(),
+      basePrice: item.basePrice,
       price: item.price,
       image: item.image,
       qty,
@@ -180,6 +210,7 @@ function addToCart(item, qty = 1) {
     });
   toast(t("added"));
   updateCartButtons();
+  if (["listing","detail","offers"].includes(state.screen)) renderKeepScroll();
   return true;
 }
 
@@ -752,9 +783,10 @@ function listing() {
             ${i.bestSeller ? `<span class="badge">${t("bestSeller")}</span>` : ""}
             <h4>${loc(i,"name")}</h4><p>${loc(i,"desc")}</p>
             <div class="price">${itemPriceMarkup(i)}</div>
+            ${offerLimitMarkup(i)}
             ${!i.available ? `<small class="menu-availability">${menuText("unavailable")}</small>` : ""}
           </div>
-          <button class="add" ${canOrderItem(i) ? "" : "disabled"} onclick="quickAdd('${i.id}')">${t("add")}</button>
+          <button class="add" ${canAddItem(i) ? "" : "disabled"} onclick="quickAdd('${i.id}')">${t("add")}</button>
         </article>`).join("")}
       </div>
     </section>${nav("menu")}`;
@@ -762,19 +794,24 @@ function listing() {
 
 function detail() {
   const i = itemById(state.itemId);
-  if (!i) return listing();
+  if (!i) return state.cartEditKey ? cart() : listing();
+  const editing = !!state.cartEditKey;
+  const editLine = state.cart.find(l => l.cartKey === state.cartEditKey);
+  const allowed = editing ? !!editLine && canOrderItem(i) : canAddItem(i);
   const dish = loc(i, "name");
   return `
     <section class="screen detail-screen">
       <img class="hero-img" src="${i.image}" alt="${dish}" />
       <div class="topbar" style="margin-top:-48px;position:relative">
-        ${back("listing")}
+        ${back(editing ? "cart" : "listing")}
         ${cartButton()}
       </div>
       <h2>${dish}</h2>
       <div class="stars">${t("kitchen")}</div>
       <p style="color:var(--muted);font-size:14px">${loc(i, "desc")}</p>
       <p class="price" style="margin:12px 0;font-size:20px">${itemPriceMarkup(i)}</p>
+      ${offerLimitMarkup(i)}
+      ${editing && !editLine ? `<p role="status">${cartCopy("This cart item was removed after a menu update. Return to your cart.", "تمت إزالة هذا الصنف بعد تحديث القائمة. ارجع إلى السلة.")}</p>` : ""}
       <div class="options">
         <h4>${t("spiceLevel")}</h4>
         <div class="spice">
@@ -787,56 +824,75 @@ function detail() {
         </div>
       </div>
       <div class="sticky-actions single-action">
-  <button class="btn btn-primary" ${canOrderItem(i) ? "" : "disabled"} onclick="addFromDetail()">
-    ${canOrderItem(i) ? t("addToCart") : menuText("unavailable")}
+  <button class="btn btn-primary" ${allowed ? "" : "disabled"} onclick="addFromDetail()">
+    ${editing ? cartCopy("Update cart", "تحديث السلة") : canOrderItem(i) ? (allowed ? t("addToCart") : cartCopy("Offer limit reached", "تم بلوغ حد العرض")) : menuText("unavailable")}
   </button>
 </div>
     </section>`;
 }
 
+function openCartItem(index) {
+  const line = state.cart[index];
+  const item = line && itemById(line.id);
+  if (!item) return toast(menuText("unavailableItem"));
+  line.cartKey ||= newCartKey();
+  state.cartEditKey = line.cartKey;
+  state.itemId = item.id;
+  state.size = line.size;
+  state.spice = line.spice;
+  state.extras = [...line.extras];
+  go("detail");
+}
+function cartRowClick(event, index) {
+  if (!event.target.closest("button,a,input,textarea")) openCartItem(index);
+}
+function removeCartItem(index) {
+  if (!state.cart[index]) return;
+  state.cart.splice(index, 1);
+  renderKeepScroll();
+}
 function cart() {
-  const tot = totals();
   if (!state.cart.length) {
-    return `
-      <section class="screen cart-screen">
-        <div class="topbar">${back("home")}<h2>${t("yourCart")}</h2>${langSwitch()}</div>
-        <div class="empty">${t("cartEmpty")}<br><button class="link" onclick="go('menu')">${t("browseTheMenu")}</button></div>
-      </section>${nav("home")}`;
-  }
-  return `
-    <section class="screen">
+    return `<section class="screen cart-screen">
       <div class="topbar">${back("home")}<h2>${t("yourCart")}</h2>${langSwitch()}</div>
-      ${state.cart
-        .map((l, idx) => {
-          const item = itemById(l.id);
-          return `
-        <div class="cart-line">
+      <div class="empty">${t("cartEmpty")}<br><button class="link" onclick="go('menu')">${t("browseTheMenu")}</button></div>
+    </section>${nav("home")}`;
+  }
+  return `<section class="screen cart-screen">
+    <div class="topbar">${back("home")}<h2>${t("yourCart")}</h2>${langSwitch()}</div>
+    ${state.cart.map((l,idx) => {
+      const item = itemById(l.id), name = item ? loc(item,"name") : "";
+      const saved = roundMoney(Math.max(0, (l.basePrice ?? item?.basePrice ?? l.price) - l.price) * l.qty);
+      return `<div class="cart-line cart-editable" onclick="cartRowClick(event,${idx})">
+        <button class="cart-image-link" onclick="openCartItem(${idx})" aria-label="${cartCopy("Edit", "تعديل")} ${name}">
           <img src="${l.image}" alt="" />
-          <div>
-            <h4>${item ? loc(item, "name") : ""}</h4>
-            <p style="color:var(--muted);font-size:12px">${t(l.size)} · ${t(l.spice)}</p>
+        </button>
+        <div class="cart-line-content">
+          <button class="cart-name-link" onclick="openCartItem(${idx})"><h4>${name}</h4></button>
+          <p class="cart-choice">${t(l.size)} · ${t(l.spice)}</p>
+          ${item?.offer ? `<span class="badge">${offerLabel(item.offer)}</span>
+            <p class="cart-unit-price">${itemPriceMarkup(item)} <small>${cartCopy("each", "للوحدة")}</small></p>
+            <p class="offer-saving">${cartCopy("You saved", "وفّرت")} ${money(saved)}</p>` : ""}
+          ${offerLimitMarkup(item)}
+          <div class="cart-controls">
             <div class="qty">
-              <button onclick="chgQty(${idx},-1,this)">−</button>
-              <span>${l.qty}</span>
-              <button onclick="chgQty(${idx},1,this)">+</button>
+              <button aria-label="${cartCopy("Decrease quantity", "تقليل الكمية")}" onclick="chgQty(${idx},-1,this)">−</button>
+              <span aria-live="polite">${l.qty}</span>
+              <button aria-label="${cartCopy("Increase quantity", "زيادة الكمية")}" ${canAddItem(item) ? "" : "disabled"}
+                title="${item?.offer?.maxQty ? escapeHtml(limitMessage(item)) : ""}" onclick="chgQty(${idx},1,this)">+</button>
             </div>
+            <button class="link cart-remove" onclick="removeCartItem(${idx})">${cartCopy("Remove", "إزالة")}</button>
           </div>
-          <strong>${money(linePrice(l))}</strong>
-        </div>`;
-        })
-        .join("")}
-      <textarea class="field" rows="2" placeholder="${t("cookingNotes")}" oninput="state.notes=this.value">${escapeHtml(state.notes)}</textarea>
-      <input class="field" placeholder="${t("coupon")}" value="${escapeHtml(state.coupon)}" oninput="state.coupon=this.value" />
-      <button class="link" onclick="applyCoupon()">${t("applyCoupon")}</button>
-      <div class="breakdown" id="cartBreakdown" style="margin-top:14px">
-        <div><span>${t("subtotal")}</span><span>${money(tot.subtotal)}</span></div>
-        <div><span>${t("deliveryFee")}</span><span>${state.orderType === "pickup" ? "—" : money(tot.delivery)}</span></div>
-        ${tot.discount ? `<div><span>${t("coupon")}</span><span>− ${money(tot.discount)}</span></div>` : ""}
-        <div><span>${t("vat")}</span><span>${money(tot.vat)}</span></div>
-        <div class="total"><span>${t("total")}</span><span>${money(tot.total)}</span></div>
-      </div>
-      <button class="btn btn-primary" style="margin-top:16px" onclick="go('checkout')">${t("proceed")}</button>
-    </section>`;
+        </div>
+        <strong class="cart-line-total">${money(linePrice(l))}</strong>
+      </div>`;
+    }).join("")}
+    <textarea class="field" rows="2" placeholder="${t("cookingNotes")}" oninput="state.notes=this.value">${escapeHtml(state.notes)}</textarea>
+    <input class="field" placeholder="${t("coupon")}" value="${escapeHtml(state.coupon)}" oninput="state.coupon=this.value" />
+    <button class="link" onclick="applyCoupon()">${t("applyCoupon")}</button>
+    <div class="breakdown" id="cartBreakdown" style="margin-top:14px">${cartSummaryMarkup()}</div>
+    <button class="btn btn-primary" style="margin-top:16px" onclick="go('checkout')">${t("proceed")}</button>
+  </section>`;
 }
 
 function checkoutTimingOptions() {
@@ -1003,7 +1059,6 @@ function setCheckoutOrderType(type, button) {
 }
 
 function checkout() {
-  const tot = totals();
   const timingOptions = checkoutTimingOptions();
 
   const timingSub =
@@ -1163,12 +1218,7 @@ function checkout() {
         ${timingSub}
       </p>
 
-      <div class="breakdown checkout-total-card">
-        <div class="total">
-          <span>${t("totalPayable")}</span>
-          <span>${money(tot.total)}</span>
-        </div>
-      </div>
+      <div class="breakdown checkout-total-card">${cartSummaryMarkup()}</div>
 
       <button
         class="btn btn-primary checkout-place-order"
@@ -1678,6 +1728,7 @@ function offers() {
               <h4>${loc(item, "name")}</h4>
               <p>${loc(item, "desc")}</p>
               <div class="price">${itemPriceMarkup(item)}</div>
+              ${offerLimitMarkup(item)}
             </div>
             <button class="add" onclick="openItem('${o.itemId}')">${t("add")}</button>
           </article>`;
@@ -3189,6 +3240,7 @@ function render() {
 }
 
 function openItem(id) {
+  state.cartEditKey = null;
   const item = itemById(id);
   if (!item) { toast(menuText("unavailableItem")); return; }
   if (state.categoryId !== item.category) state.subcategoryId = "";
@@ -3236,6 +3288,22 @@ function setSpiceLevel(button, spice) {
 }
 
 function addFromDetail() {
+  if (state.cartEditKey) {
+    const index = state.cart.findIndex(l => l.cartKey === state.cartEditKey);
+    const item = itemById(state.itemId);
+    if (index < 0 || !canOrderItem(item)) {
+      toast(menuText("unavailableItem")); go("cart"); return;
+    }
+    // Edit the existing line, preserving its quantity. Merge matching choices.
+    const line = state.cart[index];
+    line.spice = state.spice;
+    const match = state.cart.find(l => l.cartKey !== line.cartKey && l.id === line.id &&
+      l.spice === line.spice && l.size === line.size && l.extras.join() === line.extras.join());
+    if (match) { match.qty += line.qty; state.cart.splice(index,1); }
+    reconcileMenuCart();
+    go("cart");
+    return;
+  }
   if (addToCart(itemById(state.itemId))) go("cart");
 }
 
@@ -3249,79 +3317,18 @@ function quickAdd(id) {
 
 function updateCartBreakdown() {
   const box = document.getElementById("cartBreakdown");
-
-  if (!box) return;
-
-  const tot = totals();
-
-  box.innerHTML = `
-    <div>
-      <span>${t("subtotal")}</span>
-      <span>${money(tot.subtotal)}</span>
-    </div>
-
-    <div>
-      <span>${t("deliveryFee")}</span>
-      <span>${state.orderType === "delivery" ? money(tot.delivery) : "—"}</span>
-    </div>
-
-    ${
-      tot.discount
-        ? `
-          <div>
-            <span>${t("coupon")}</span>
-            <span>− ${money(tot.discount)}</span>
-          </div>
-        `
-        : ""
-    }
-
-    <div>
-      <span>${t("vat")}</span>
-      <span>${money(tot.vat)}</span>
-    </div>
-
-    <div class="total">
-      <span>${t("total")}</span>
-      <span>${money(tot.total)}</span>
-    </div>
-  `;
+  if (box) box.innerHTML = cartSummaryMarkup();
 }
-
 function chgQty(idx, d, button) {
   const line = state.cart[idx];
-  if (!line) return;
-  if (d > 0 && !canOrderItem(itemById(line.id))) return toast(menuText("unavailableItem"));
-
+  if (!line || (d !== 1 && d !== -1)) return;
+  const item = itemById(line.id);
+  if (d > 0 && !canOrderItem(item)) return toast(menuText("unavailableItem"));
+  if (d > 0 && !canAddItem(item)) return toast(limitMessage(item));
   line.qty += d;
-
-  const cartRow = button.closest(".cart-line");
-
-  if (line.qty <= 0) {
-    state.cart.splice(idx, 1);
-
-    if (cartRow) {
-      cartRow.remove();
-    }
-
-    updateCartBreakdown();
-    return;
-  }
-
-  if (cartRow) {
-    const qtyText = cartRow.querySelector(".qty span");
-    const priceText = cartRow.querySelector(":scope > strong");
-
-    if (qtyText) {
-      qtyText.textContent = line.qty;
-    }
-
-    if (priceText) {
-      priceText.textContent = money(linePrice(line));
-    }
-  }
-
-  updateCartBreakdown();
+  if (line.qty <= 0) state.cart.splice(idx,1);
+  // Rebuild handlers after removal so old indices cannot change the wrong item.
+  renderKeepScroll();
 }
 
 function applyCoupon() {

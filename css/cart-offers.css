@@ -1,0 +1,31 @@
+/* Additive cart styles. Keep the existing styles.css. */
+.cart-editable { cursor: pointer; }
+.cart-image-link, .cart-name-link {
+  padding: 0; border: 0; background: transparent; color: inherit;
+  font: inherit; text-align: start; cursor: pointer;
+}
+.cart-image-link { align-self: start; }
+.cart-image-link img { display: block; }
+.cart-name-link:hover h4 { text-decoration: underline; }
+.cart-image-link:focus-visible, .cart-name-link:focus-visible {
+  outline: 2px solid var(--gold, #ffab20); outline-offset: 4px; border-radius: 8px;
+}
+.cart-line-content { min-width: 0; }
+.cart-choice { color: var(--muted); font-size: 12px; margin: 3px 0 6px; }
+.cart-unit-price { margin: 6px 0; font-size: 14px; }
+.cart-unit-price small { color: var(--muted); }
+.cart-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 9px; }
+.cart-controls .qty { margin: 0; }
+.cart-line .qty button:disabled { opacity: .4; cursor: not-allowed; }
+.cart-remove { font-size: 13px; }
+.cart-line-total { white-space: nowrap; align-self: center; }
+.offer-saving { color: var(--gold, #ffab20); font-size: 13px; }
+.offer-cap { font-size: 12px; line-height: 1.5; color: var(--muted); margin: 7px 0; }
+.breakdown .included-vat { font-size: 12px; color: var(--muted); border-top: 0; }
+.breakdown > div { gap: 12px; }
+.breakdown > div > span:last-child { white-space: nowrap; }
+@media (max-width: 480px) {
+  .cart-line.cart-editable { grid-template-columns: 64px minmax(0, 1fr); gap: 12px; }
+  .cart-editable .cart-image-link img { width: 64px; height: 72px; object-fit: cover; }
+  .cart-line-total { grid-column: 2; justify-self: end; }
+}

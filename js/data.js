@@ -107,7 +107,10 @@ function activeItemOffer(row, date = new Date()) {
   if (o.offer_type === "percentage" ? amount > 100 : amount > base) return null;
   const price = roundMoney(o.offer_type === "percentage" ? base * (1 - amount / 100) : base - amount);
   if (price >= roundMoney(base)) return null;
-  return {type: o.offer_type, amount, start, end, price};
+  // Missing/null is explicitly unlimited; malformed limits fail closed.
+  const cap = o.offer_max_qty;
+  const maxQty = cap == null ? null : Number.isInteger(cap) && cap >= 1 && cap <= 999 ? cap : 0;
+  return {type: o.offer_type, amount, start, end, price, maxQty};
 }
 function mapMenu(payload, date = new Date()) {
   if (!payload || payload.version !== 1 || payload.restaurant_id !== MENU_CONFIG.restaurantId ||
@@ -150,16 +153,23 @@ function menuReady() {
   return menuConnection.status === "ready" && Date.now() - menuConnection.lastSuccess <= MENU_CONFIG.maxAgeMs;
 }
 function canOrderItem(item) {
-  return !!item && item.available === true && menuReady() &&
+  return !!item && item.available === true && item.offer?.maxQty !== 0 && menuReady() &&
     scheduleAllows((menuConnection.payload?.schedules || []).filter(s => s.menu_item_id === item.id));
 }
 function reconcileMenuCart() {
   if (!state.cart.length) return false;
   const before = JSON.stringify(state.cart);
+  const used = new Map();
   state.cart = state.cart.flatMap(line => {
     const item = ITEMS.find(i => i.id === line.id);
     if (!item?.available) return [];
-    return [{...line, price:item.price, image:item.image, size:"regular", extras:[]}];
+    const cap = item.offer?.maxQty ?? Infinity;
+    const qty = Math.min(Number.isSafeInteger(line.qty) && line.qty > 0 ? line.qty : 0,
+      Math.max(0, cap - (used.get(item.id) || 0)));
+    if (!qty) return [];
+    used.set(item.id, (used.get(item.id) || 0) + qty);
+    return [{...line, cartKey:line.cartKey || newCartKey(), qty,
+      price:item.price, basePrice:item.basePrice, image:item.image, size:"regular", extras:[]}];
   });
   const changed = before !== JSON.stringify(state.cart);
   if (changed) toast(menuText("changed"));
@@ -176,7 +186,10 @@ function applyMenuPayload(payload) {
     state.categoryId = CATEGORIES[0]?.id || ""; state.subcategoryId = "";
   }
   if (state.subcategoryId && !SUBCATEGORIES.some(s => s.id === state.subcategoryId && s.category === state.categoryId)) state.subcategoryId = "";
-  if (state.screen === "detail" && !ITEMS.some(i => i.id === state.itemId)) state.screen = "listing";
+  if (state.screen === "detail" && !ITEMS.some(i => i.id === state.itemId)) {
+    state.screen = state.cartEditKey ? "cart" : "listing";
+    state.cartEditKey = null;
+  }
   return {changed, cartChanged:reconcileMenuCart()};
 }
 function refreshMenuUI() {

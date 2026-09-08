@@ -7,11 +7,11 @@ const vm = require('node:vm');
 const root = path.join(__dirname, '..');
 function environment() {
   const c = vm.createContext({console, URL, Intl, Date, setTimeout:()=>0,
-    localStorage:{getItem:()=>null}, window:{}, document:{}});
+    localStorage:{getItem:()=>null}, window:{}, document:{getElementById:()=>({parentElement:{scrollTop:0}})}});
   vm.runInContext(fs.readFileSync(path.join(root,'js/data.js'),'utf8'),c);
   const app = fs.readFileSync(path.join(root,'js/app.js'),'utf8');
   vm.runInContext(app.slice(0, app.lastIndexOf('\napplyDir();')),c);
-  vm.runInContext(`toast = () => {}; render = () => {}; updateCartButtons = () => {};
+  vm.runInContext(`toast = () => {}; render = () => {}; renderKeepScroll = () => {}; updateCartButtons = () => {};
     const I18N = {en:{sar:'SAR'},ar:{sar:'ر.س'}};
     const id = '22222222-2222-2222-2222-222222222222';
     const cat = '33333333-3333-3333-3333-333333333333';
@@ -117,4 +117,80 @@ test('money preserves decimals; Arabic offer text renders',()=> {
   const run=environment();
   assert.equal(run(`money(14.4)`),'SAR 14.40');
   assert.equal(run(`ready();state.lang='ar';offers().includes('خصم 20%')`),true);
+});
+test('cap counts same item across spice variants and blocks excess',()=> {
+  const run=environment();
+  assert.equal(run(`row.offer.offer_max_qty=2;ready();state.spice='mild';addToCart(ITEMS[0])`),true);
+  assert.equal(run(`state.spice='spicy';addToCart(ITEMS[0])`),true);
+  assert.equal(run(`state.spice='medium';addToCart(ITEMS[0])`),false);
+  assert.equal(run(`itemCartQty(id)`),2);
+});
+test('bulk add and plus both obey cap; minus permits another addition',()=> {
+  const run=environment();
+  assert.equal(run(`row.offer.offer_max_qty=2;ready();addToCart(ITEMS[0],3)`),false);
+  assert.equal(run(`addToCart(ITEMS[0],2);chgQty(0,1);itemCartQty(id)`),2);
+  assert.equal(run(`chgQty(0,-1);addToCart(ITEMS[0]);itemCartQty(id)`),2);
+});
+test('absent/null cap unlimited; invalid cap fails closed',()=> {
+  const run=environment();
+  assert.equal(run(`ready();addToCart(ITEMS[0],20)`),true);
+  assert.equal(run(`state.cart=[];row.offer.offer_max_qty=null;ready();addToCart(ITEMS[0],20)`),true);
+  for (const cap of ['0','-1','1.5','1000','"2"','false']) {
+    assert.equal(run(`row.offer.offer_max_qty=${cap};ready();canOrderItem(ITEMS[0])`),false);
+  }
+});
+test('admin lowering cap trims across all variants and notifies a change',()=> {
+  const run=environment();
+  assert.equal(run(`ready();state.spice='mild';addToCart(ITEMS[0],2);state.spice='spicy';addToCart(ITEMS[0],2);
+    row.offer.offer_max_qty=3;ready();reconcileMenuCart()`),true);
+  assert.equal(run(`itemCartQty(id)`),3);
+  assert.equal(run(`state.cart[0].qty === 2 && state.cart[1].qty === 1`),true);
+});
+test('inactive offer no longer caps regular price items',()=> {
+  assert.equal(environment()(`row.offer.offer_max_qty=1;row.offer.offer_active=false;ready();addToCart(ITEMS[0],3)`),true);
+});
+test('cart click opens editor preserving quantity and choices; update does not add',()=> {
+  const run=environment();
+  assert.equal(run(`ready();state.spice='mild';addToCart(ITEMS[0],2);openCartItem(0);state.screen`),'detail');
+  assert.equal(run(`state.spice`),'mild');
+  assert.equal(run(`detail().includes('Update cart')`),true);
+  assert.equal(run(`state.spice='spicy';addFromDetail();state.cart.length`),1);
+  assert.equal(run(`state.cart[0].qty === 2 && state.cart[0].spice === 'spicy' && state.screen === 'cart'`),true);
+});
+test('cart edit merges identical spice choices without exceeding cap',()=> {
+  const run=environment();
+  assert.equal(run(`row.offer.offer_max_qty=2;ready();state.spice='mild';addToCart(ITEMS[0]);state.spice='spicy';addToCart(ITEMS[0]);
+    openCartItem(0);state.spice='spicy';addFromDetail();state.cart.length`),1);
+  assert.equal(run(`itemCartQty(id)`),2);
+});
+test('editor back abandons changes; removed editing line never edits its neighbour',()=> {
+  const run=environment();
+  assert.equal(run(`ready();state.spice='mild';addToCart(ITEMS[0]);openCartItem(0);state.spice='spicy';go('cart');state.cart[0].spice`),'mild');
+  assert.equal(run(`openCartItem(0);state.cart=[];state.spice='medium';addToCart(ITEMS[0]);addFromDetail();state.cart[0].spice`),'medium');
+});
+test('control click does not navigate; card background click does',()=> {
+  const run=environment();
+  assert.equal(run(`ready();addToCart(ITEMS[0]);state.screen='cart';cartRowClick({target:{closest:()=>true}},0);state.screen`),'cart');
+  assert.equal(run(`cartRowClick({target:{closest:()=>null}},0);state.screen`),'detail');
+});
+test('removing first line refreshes indices; last removal gives empty cart',()=> {
+  const run=environment();
+  assert.equal(run(`ready();state.spice='mild';addToCart(ITEMS[0]);state.spice='spicy';addToCart(ITEMS[0]);chgQty(0,-1);
+    cart().includes('chgQty(0,1,this)')`),true);
+  assert.equal(run(`chgQty(0,1);state.cart[0].qty`),2);
+  assert.equal(run(`removeCartItem(0);cart().includes('empty')`),true);
+});
+test('mixed cart savings summary: 8 + 16 - 1.60 = 22.40, VAT included 2.92',()=> {
+  const run=environment();
+  assert.equal(run(`row.base_price=8;ready();addToCart(ITEMS[0]);state.cart.push({id:'other',price:16,basePrice:16,qty:1});totals().regularItemsTotal`),24);
+  assert.equal(run(`totals().offerSavings`),1.6);
+  assert.equal(run(`totals().total`),22.4);
+  assert.equal(run(`totals().vat`),2.92);
+  assert.equal(run(`cartSummaryMarkup().includes('Offer savings') && cartSummaryMarkup().includes('Includes VAT')`),true);
+});
+test('savings scale with quantity and regular price returns after toggle',()=> {
+  const run=environment();
+  assert.equal(run(`row.base_price=8;ready();addToCart(ITEMS[0],2);totals().offerSavings`),3.2);
+  assert.equal(run(`row.offer.offer_active=false;ready();reconcileMenuCart();totals().offerSavings`),0);
+  assert.equal(run(`totals().total`),16);
 });
