@@ -5092,6 +5092,145 @@ html, body, button, a { touch-action: manipulation; }
 .item-choice-row input { width:18px; height:18px; accent-color:var(--orange); flex:0 0 auto; }
 .item-choice-row span { flex:1; }
 .item-choice-row small { color:var(--muted); }
+
+/* ========================================
+   LIGHT THEME - CHECKOUT, BRANCH, SUPPORT
+======================================== */
+
+/* Checkout fields and cards must follow the selected theme instead of keeping
+   their old hard-coded dark backgrounds. */
+body.light-theme .checkout-screen > .field,
+body.light-theme .checkout-order-types,
+body.light-theme .checkout-location-card,
+body.light-theme .checkout-time-options button,
+body.light-theme .checkout-total-card {
+  background: #ffffff !important;
+  border-color: #dedbd6 !important;
+  color: #171717 !important;
+}
+
+body.light-theme .checkout-screen > .field::placeholder {
+  color: #85817b !important;
+}
+
+body.light-theme .checkout-section-title,
+body.light-theme .checkout-location-card h4,
+body.light-theme .checkout-total-card .total,
+body.light-theme .checkout-total-card .total span:first-child {
+  color: #171717 !important;
+}
+
+body.light-theme .checkout-location-card p,
+body.light-theme .checkout-time-note,
+body.light-theme .checkout-order-types button,
+body.light-theme .checkout-time-options button,
+body.light-theme .checkout-total-card > div:not(.total) {
+  color: #74706b !important;
+}
+
+body.light-theme .checkout-order-types button.active {
+  background: var(--orange) !important;
+  color: #17100a !important;
+}
+
+body.light-theme .checkout-time-options button.active {
+  background: #fff4e5 !important;
+  border-color: var(--orange) !important;
+  color: #b75e00 !important;
+}
+
+/* Branch & Contact */
+body.light-theme .account-screen .branch-location,
+body.light-theme .branch-card,
+body.light-theme .branch-info-card {
+  background: #ffffff !important;
+  border-color: #dedbd6 !important;
+  color: #171717 !important;
+}
+
+body.light-theme .account-screen .branch-location:active,
+body.light-theme .branch-card:active {
+  background: #faf8f5 !important;
+}
+
+body.light-theme .branch-location-text strong,
+body.light-theme .branch-card h3,
+body.light-theme .branch-info-row strong {
+  color: #171717 !important;
+}
+
+body.light-theme .branch-location-text span,
+body.light-theme .branch-location-arrow,
+body.light-theme .branch-card p,
+body.light-theme .branch-info-row span {
+  color: #74706b !important;
+}
+
+body.light-theme .branch-info-row + .branch-info-row {
+  border-color: #ece9e4 !important;
+}
+
+body.light-theme .branch-action:not(.branch-action-primary):not(.branch-action-wa) {
+  background: #ffffff !important;
+  border-color: #d9d4cd !important;
+  color: #171717 !important;
+}
+
+body.light-theme .branch-action-primary {
+  background: var(--orange) !important;
+  border-color: var(--orange) !important;
+  color: #17100a !important;
+}
+
+body.light-theme .branch-action-wa {
+  background: #1f4933 !important;
+  border-color: #2d6848 !important;
+  color: #e4f8eb !important;
+}
+
+/* Help & Support and its request form */
+body.light-theme .support-item {
+  background: #ffffff !important;
+  border-color: #dedbd6 !important;
+  color: #171717 !important;
+}
+
+body.light-theme .support-item:active {
+  background: #faf8f5 !important;
+  border-color: rgba(240, 138, 26, 0.55) !important;
+}
+
+body.light-theme .support-item strong,
+body.light-theme .support-field-label {
+  color: #171717 !important;
+}
+
+body.light-theme .support-intro,
+body.light-theme .support-item div span,
+body.light-theme .support-arrow {
+  color: #74706b !important;
+}
+
+body.light-theme .support-icon {
+  background: #fff3e3 !important;
+  color: #c96800 !important;
+}
+
+body.light-theme .support-request-screen .field {
+  background: #ffffff !important;
+  border-color: #dedbd6 !important;
+  color: #171717 !important;
+}
+
+body.light-theme .support-request-screen .field::placeholder {
+  color: #85817b !important;
+}
+
+body.light-theme .support-note {
+  background: #fff7ed !important;
+  border-color: #f1d5b2 !important;
+  color: #6f675e !important;
+}
 /* Live menu additions: retain all existing layout/theme rules above. */
 .menu-status { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); color: var(--text); font-size: 14px; line-height: 1.5; }
 .menu-status .link { margin-inline-start: 8px; }
