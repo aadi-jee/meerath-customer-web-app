@@ -65,7 +65,7 @@ function itemCartQty(id) {
 }
 function limitMessage(item) {
   const cap = item?.offer?.maxQty;
-  return cartCopy(`Maximum ${cap} of this item per cart with this offer.`,
+  return cartCopy(`Maximum limit is ${cap} for this offer.`,
     `الحد الأقصى لهذا الصنف في السلة مع العرض: ${cap}.`);
 }
 function canAddItem(item, qty = 1) {
@@ -73,8 +73,39 @@ function canAddItem(item, qty = 1) {
     itemCartQty(item.id) + qty <= (item.offer?.maxQty ?? Infinity);
 }
 function offerLimitMarkup(item) {
-  return item?.offer?.maxQty > 0 ? `<p class="offer-cap">${escapeHtml(limitMessage(item))}</p>` : "";
+  const cap = item?.offer?.maxQty;
+  const min = item?.offer?.minRegularSpend;
+  return `${cap > 0 ? `<p class="offer-cap">${cartCopy(`Limit ${cap} per order`, `الحد الأقصى ${cap} لكل طلب`)}</p>` : ""}
+    ${min > 0 ? `<p class="offer-cap">${cartCopy(`Requires ${money(min)} in regular-priced items per discounted unit.`, `يتطلب كل صنف مخفض ${money(min)} من الأصناف بالسعر العادي.`)}</p>` : ""}`;
 }
+function offerSpendStatus() {
+  let required = 0, grossCents = 0;
+  for (const line of state.cart) {
+    const item = itemById(line.id);
+    if (!item || !Number.isSafeInteger(line.qty) || line.qty <= 0) continue;
+    if (item.offer) required += Math.round((item.offer.minRegularSpend || 0) * 100) * line.qty;
+    else if (canOrderItem(item)) grossCents += Math.round(item.price * 100) * line.qty;
+  }
+  // Customer-facing threshold uses displayed, VAT-inclusive menu prices.
+  const qualifying = grossCents;
+  return {required: required / 100, qualifying: qualifying / 100,
+    remaining: Math.max(0, required - qualifying) / 100};
+}
+function offerSpendMessage(status = offerSpendStatus()) {
+  return cartCopy(`Add ${money(status.remaining)} more in regular-priced items to use this offer, or remove the offer item.`,
+    `أضف أصنافاً بالسعر العادي بقيمة ${money(status.remaining)} إضافية للاستفادة من العرض، أو احذف صنف العرض.`);
+}
+function checkOfferSpend() {
+  const status = offerSpendStatus();
+  if (status.remaining > 0) { toast(offerSpendMessage(status), 5000); return false; }
+  return true;
+}
+function offerSpendMarkup() {
+  const status = offerSpendStatus();
+  if (!status.required || !status.remaining) return "";
+  return `<p class="offer-spend-notice" role="status">${escapeHtml(offerSpendMessage(status))}</p>`;
+}
+function checkOfferCartRules() { return checkOfferSpend(); }
 const $app = () => document.getElementById("app");
 const $toast = () => document.getElementById("toast");
 
@@ -129,7 +160,7 @@ function setLang(lang) {
 function go(screen, extra = {}) {
   if (screen !== "detail") state.cartEditKey = null;
   if (screen === "checkout") {
-    validateMenuCart().then(ok => { if (ok) { Object.assign(state, extra, {screen}); render(); } });
+    validateMenuCart().then(ok => { if (ok && checkOfferCartRules()) { Object.assign(state, extra, {screen}); render(); } });
     return;
   }
   if (screen === "listing" && extra.categoryId !== undefined && extra.categoryId !== state.categoryId) state.subcategoryId = "";
@@ -166,7 +197,7 @@ function totals() {
 }
 function cartSummaryMarkup() {
   const tot = totals();
-  return `<div><span>${cartCopy("Items total (VAT included)", "إجمالي الأصناف (شامل الضريبة)")}</span><span>${money(tot.regularItemsTotal)}</span></div>
+  return `${offerSpendMarkup()}<div><span>${cartCopy("Items total (VAT included)", "إجمالي الأصناف (شامل الضريبة)")}</span><span>${money(tot.regularItemsTotal)}</span></div>
     ${tot.offerSavings ? `<div class="offer-saving"><span>${cartCopy("Offer savings", "توفير العروض")}</span><span>− ${money(tot.offerSavings)}</span></div>` : ""}
     ${tot.discount ? `<div><span>${t("coupon")}</span><span>− ${money(tot.discount)}</span></div>` : ""}
     ${state.orderType === "delivery" ? `<div><span>${t("deliveryFee")}</span><span>${money(tot.delivery)}</span></div>` : ""}
@@ -174,11 +205,11 @@ function cartSummaryMarkup() {
     <div class="included-vat"><span>${cartCopy("Includes VAT 15%", "يشمل ضريبة القيمة المضافة 15%")}</span><span>${money(tot.vat)}</span></div>`;
 }
 
-function toast(msg) {
+function toast(msg, duration = 1600) {
   const el = $toast();
   el.textContent = msg;
   el.classList.add("show");
-  setTimeout(() => el.classList.remove("show"), 1600);
+  setTimeout(() => el.classList.remove("show"), duration);
 }
 
 function addToCart(item, qty = 1) {
@@ -710,10 +741,7 @@ function home() {
 >
   ✓ ${t("deliveryScope")}
 </div>
-      <div class="banner">
-        <small>${t("bannerKicker")}</small>
-        <h2>${t("bannerTitle")}</h2>
-      </div>
+      ${homeBannersMarkup()}
       <div class="h-row"><h3>${t("todaysSpecial")}</h3><button class="link" onclick="go('menu')">${t("seeAll")}</button></div>
       <div class="scroll">
         ${!specials.length && menuReady() ? `<p class="menu-hint">${menuText("noSpecials")}</p>` : ""}
@@ -723,6 +751,7 @@ function home() {
           <article class="special-card" onclick="openItem('${i.id}')">
             <img src="${i.image}" alt="${loc(i, "name")}" />
             <div>
+              ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
               <h4>${loc(i, "name")}</h4>
               <p class="price">${itemPriceMarkup(i)}</p>
             </div>
@@ -780,13 +809,14 @@ function listing() {
         <article class="item ${canOrderItem(i) ? "" : "menu-unavailable"}">
           <img src="${i.image}" alt="${loc(i, "name")}" onclick="openItem('${i.id}')" />
           <div onclick="openItem('${i.id}')">
+            ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
             ${i.bestSeller ? `<span class="badge">${t("bestSeller")}</span>` : ""}
             <h4>${loc(i,"name")}</h4><p>${loc(i,"desc")}</p>
             <div class="price">${itemPriceMarkup(i)}</div>
             ${offerLimitMarkup(i)}
             ${!i.available ? `<small class="menu-availability">${menuText("unavailable")}</small>` : ""}
           </div>
-          <button class="add" ${canAddItem(i) ? "" : "disabled"} onclick="quickAdd('${i.id}')">${t("add")}</button>
+          <button class="add ${canOrderItem(i) && !canAddItem(i) ? "offer-add-blocked" : ""}" ${canOrderItem(i) ? "" : "disabled"} onclick="quickAdd('${i.id}')">${t("add")}</button>
         </article>`).join("")}
       </div>
     </section>${nav("menu")}`;
@@ -797,7 +827,7 @@ function detail() {
   if (!i) return state.cartEditKey ? cart() : listing();
   const editing = !!state.cartEditKey;
   const editLine = state.cart.find(l => l.cartKey === state.cartEditKey);
-  const allowed = editing ? !!editLine && canOrderItem(i) : canAddItem(i);
+  const allowed = editing ? !!editLine && canOrderItem(i) : canOrderItem(i);
   const dish = loc(i, "name");
   return `
     <section class="screen detail-screen">
@@ -806,6 +836,7 @@ function detail() {
         ${back(editing ? "cart" : "listing")}
         ${cartButton()}
       </div>
+      ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
       <h2>${dish}</h2>
       <div class="stars">${t("kitchen")}</div>
       <p style="color:var(--muted);font-size:14px">${loc(i, "desc")}</p>
@@ -873,12 +904,11 @@ function cart() {
           ${item?.offer ? `<span class="badge">${offerLabel(item.offer)}</span>
             <p class="cart-unit-price">${itemPriceMarkup(item)} <small>${cartCopy("each", "للوحدة")}</small></p>
             <p class="offer-saving">${cartCopy("You saved", "وفّرت")} ${money(saved)}</p>` : ""}
-          ${offerLimitMarkup(item)}
           <div class="cart-controls">
             <div class="qty">
               <button aria-label="${cartCopy("Decrease quantity", "تقليل الكمية")}" onclick="chgQty(${idx},-1,this)">−</button>
               <span aria-live="polite">${l.qty}</span>
-              <button aria-label="${cartCopy("Increase quantity", "زيادة الكمية")}" ${canAddItem(item) ? "" : "disabled"}
+              <button class="${canOrderItem(item) && !canAddItem(item) ? "offer-add-blocked" : ""}" aria-label="${cartCopy("Increase quantity", "زيادة الكمية")}" ${canOrderItem(item) ? "" : "disabled"}
                 title="${item?.offer?.maxQty ? escapeHtml(limitMessage(item)) : ""}" onclick="chgQty(${idx},1,this)">+</button>
             </div>
             <button class="link cart-remove" onclick="removeCartItem(${idx})">${cartCopy("Remove", "إزالة")}</button>
@@ -887,6 +917,7 @@ function cart() {
         <strong class="cart-line-total">${money(linePrice(l))}</strong>
       </div>`;
     }).join("")}
+    ${cartRecommendationsMarkup()}
     <textarea class="field" rows="2" placeholder="${t("cookingNotes")}" oninput="state.notes=this.value">${escapeHtml(state.notes)}</textarea>
     <input class="field" placeholder="${t("coupon")}" value="${escapeHtml(state.coupon)}" oninput="state.coupon=this.value" />
     <button class="link" onclick="applyCoupon()">${t("applyCoupon")}</button>
@@ -3386,6 +3417,7 @@ function getScheduledFor() {
 
 async function placeOrder() {
   if (!(await validateMenuCart())) return;
+  if (!checkOfferCartRules()) return;
   if (!state.cart.length) {
     return toast(t("cartIsEmpty"));
   }
@@ -3417,6 +3449,7 @@ async function placeOrder() {
 }
 async function createOrderAfterVerification() {
   if (!(await validateMenuCart())) return;
+  if (!checkOfferCartRules()) return;
   state.order = {
     id: "MK" + Math.floor(1000 + Math.random() * 9000),
 

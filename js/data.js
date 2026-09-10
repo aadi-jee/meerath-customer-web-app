@@ -109,8 +109,12 @@ function activeItemOffer(row, date = new Date()) {
   if (price >= roundMoney(base)) return null;
   // Missing/null is explicitly unlimited; malformed limits fail closed.
   const cap = o.offer_max_qty;
-  const maxQty = cap == null ? null : Number.isInteger(cap) && cap >= 1 && cap <= 999 ? cap : 0;
-  return {type: o.offer_type, amount, start, end, price, maxQty};
+  let maxQty = cap == null ? null : Number.isInteger(cap) && cap >= 1 && cap <= 999 ? cap : 0;
+  const minimum = o.offer_min_regular_spend;
+  const minRegularSpend = minimum == null ? 0 : minimum;
+  if (typeof minRegularSpend !== 'number' || !Number.isFinite(minRegularSpend) ||
+      minRegularSpend < 0 || minRegularSpend > 99999.99 || roundMoney(minRegularSpend) !== minRegularSpend) maxQty = 0;
+  return {type: o.offer_type, amount, start, end, price, maxQty, minRegularSpend};
 }
 function mapMenu(payload, date = new Date()) {
   if (!payload || payload.version !== 1 || payload.restaurant_id !== MENU_CONFIG.restaurantId ||
@@ -216,6 +220,7 @@ async function refreshMenu() {
       const result = applyMenuPayload(payload);
       menuConnection.payload = payload; menuConnection.status = "ready";
       menuConnection.lastSuccess = Date.now(); menuConnection.error = "";
+      if (typeof requestCustomerContent === 'function') requestCustomerContent();
       if (result.changed || result.cartChanged || previous !== "ready") refreshMenuUI();
       return {ok:true, cartChanged:result.cartChanged};
     } catch(error) {

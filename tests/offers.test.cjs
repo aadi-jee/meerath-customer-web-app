@@ -9,6 +9,7 @@ function environment() {
   const c = vm.createContext({console, URL, Intl, Date, setTimeout:()=>0,
     localStorage:{getItem:()=>null}, window:{}, document:{getElementById:()=>({parentElement:{scrollTop:0}})}});
   vm.runInContext(fs.readFileSync(path.join(root,'js/data.js'),'utf8'),c);
+  vm.runInContext(fs.readFileSync(path.join(root,'js/content.js'),'utf8'),c);
   const app = fs.readFileSync(path.join(root,'js/app.js'),'utf8');
   vm.runInContext(app.slice(0, app.lastIndexOf('\napplyDir();')),c);
   vm.runInContext(`toast = () => {}; render = () => {}; renderKeepScroll = () => {}; updateCartButtons = () => {};
@@ -31,6 +32,100 @@ function environment() {
   `,c);
   return code => vm.runInContext(code,c);
 }
+function spendEnvironment() {
+  const run = environment();
+  run(`row.offer.offer_min_regular_spend=30;ready();addToCart(ITEMS[0]);
+    function regular(price, qty=1) {
+      const item={id:'regular-'+ITEMS.length, name:'Regular', price, basePrice:price, available:true, offer:null};
+      ITEMS.push(item); addToCart(item,qty); return item;
+    }`);
+  return run;
+}
+test('cart cap has clickable plus, no permanent cap sentence, and popup on excess',()=> {
+  const run=environment();
+  run(`row.offer.offer_max_qty=1;ready();addToCart(ITEMS[0]);let message='';toast=m=>{message=m;};`);
+  assert.equal(run(`cart().includes('Limit 1 per order')`),false);
+  assert.equal(run(`/aria-label="Increase quantity"[^>]*disabled/.test(cart())`),false);
+  assert.equal(run(`chgQty(0,1);message`),'Maximum limit is 1 for this offer.');
+  assert.equal(run(`itemCartQty(id)`),1);
+  assert.equal(run(`state.lang='ar';chgQty(0,1);message.includes('1') && message.includes('الحد')`),true);
+});
+test('offer only fails; water does not meet SAR 30 net minimum',()=> {
+  const run=spendEnvironment();
+  assert.equal(run(`checkOfferSpend()`),false);
+  assert.equal(run(`offerSpendStatus().remaining`),30);
+  assert.equal(run(`regular(2);offerSpendStatus().remaining`),28);
+  assert.equal(run(`checkOfferSpend()`),false);
+});
+test('regular displayed-price spend includes VAT, excludes delivery, and exact boundary passes',()=> {
+  const run=spendEnvironment();
+  assert.equal(run(`regular(29.99);state.orderType='delivery';offerSpendStatus().remaining`),0.01);
+  assert.equal(run(`ITEMS.at(-1).price=30;offerSpendStatus().qualifying`),30);
+  assert.equal(run(`checkOfferSpend()`),true);
+});
+test('multiple offers are allowed and their per-unit requirements add together',()=> {
+  const run=spendEnvironment();
+  assert.equal(run(`const extra={...ITEMS[0],id:'second-offer',offer:{...ITEMS[0].offer,minRegularSpend:20}};
+    ITEMS.push(extra);addToCart(extra)`),true);
+  assert.equal(run(`offerSpendStatus().required`),50);
+  assert.equal(run(`regular(49.99);offerSpendStatus().remaining`),0.01);
+  assert.equal(run(`ITEMS.at(-1).price=50;checkOfferSpend()`),true);
+  assert.equal(run(`addToCart(ITEMS[0]);offerSpendStatus().required`),80);
+});
+test('qualifying item removal or unavailability blocks again; removing offer removes requirement',()=> {
+  const run=spendEnvironment();
+  assert.equal(run(`regular(30);checkOfferSpend()`),true);
+  assert.equal(run(`ITEMS.at(-1).available=false;checkOfferSpend()`),false);
+  assert.equal(run(`ITEMS.at(-1).available=true;removeCartItem(1);checkOfferSpend()`),false);
+  assert.equal(run(`removeCartItem(0);offerSpendStatus().required`),0);
+});
+test('blank/null/zero minimum unrestricted; malformed configuration unorderable',()=> {
+  const run=environment();
+  for (const value of ['null','0','undefined']) {
+    assert.equal(run(`row.offer.offer_min_regular_spend=${value};ready();canOrderItem(ITEMS[0])`),true);
+  }
+  for (const value of ['-1','"30"','NaN','Infinity','1.111','100000','false']) {
+    assert.equal(run(`row.offer.offer_min_regular_spend=${value};ready();canOrderItem(ITEMS[0])`),false);
+  }
+});
+test('live changes recompute threshold; offer expiry removes its requirement',()=> {
+  const run=spendEnvironment();
+  assert.equal(run(`regular(30);checkOfferSpend()`),true);
+  assert.equal(run(`ITEMS[0].offer.minRegularSpend=40;checkOfferSpend()`),false);
+  assert.equal(run(`ITEMS[0].offer=null;offerSpendStatus().required`),0);
+});
+test('minimum wording visible before add and in cart/checkout summary in both languages',()=> {
+  const run=spendEnvironment();
+  assert.equal(run(`offerLimitMarkup(ITEMS[0]).includes('SAR 30.00')`),true);
+  assert.equal(run(`cartSummaryMarkup().includes('regular-priced items')`),true);
+  assert.equal(run(`state.lang='ar';cartSummaryMarkup().includes('بالسعر العادي')`),true);
+  assert.equal(run(`state.lang='en';regular(30);cartSummaryMarkup().includes('Minimum regular-items spend met')`),false);
+});
+test('all three checkout/order entry points block unmet spend',async()=> {
+  const run=spendEnvironment();
+  run(`validateMenuCart=async()=>true;state.screen='cart';state.customer={name:'Test',mobile:'0500000000'};`);
+  run(`go('checkout')`); await Promise.resolve();
+  assert.equal(run(`state.screen`),'cart');
+  await run(`placeOrder()`);
+  assert.equal(run(`state.screen`),'cart');
+  await run(`createOrderAfterVerification()`);
+  assert.equal(run(`!!state.order`),false);
+  run(`regular(30);go('checkout')`); await Promise.resolve();
+  assert.equal(run(`state.screen`),'checkout');
+});
+test('failed menu refresh never advances checkout even when spend qualifies',async()=> {
+  const run=spendEnvironment();
+  run(`regular(30);validateMenuCart=async()=>false;state.screen='cart';go('checkout')`);
+  await Promise.resolve();
+  assert.equal(run(`state.screen`),'cart');
+});
+test('active offer badge appears in regular menu, home special and detail',()=> {
+  const run=environment();
+  assert.equal(run(`ready();state.categoryId=cat;listing().includes('20% off')`),true);
+  assert.equal(run(`ITEMS[0].special=true;home().includes('20% off')`),true);
+  assert.equal(run(`state.itemId=id;detail().includes('20% off')`),true);
+  assert.equal(run(`ITEMS[0].offer=null;listing().includes('20% off')`),false);
+});
 test('percentage: 18 minus 20% is exactly 14.40',()=> {
   assert.equal(environment()('activeItemOffer(row,now).price'),14.4);
 });
