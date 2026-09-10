@@ -17,6 +17,7 @@ const state = {
   orderType: "dinein",
   cart: [],
   size: "regular",
+  choice: null,
   extras: [],
   spice: "medium",
   notes: "",
@@ -72,6 +73,45 @@ function canAddItem(item, qty = 1) {
   return canOrderItem(item) && Number.isSafeInteger(qty) && qty > 0 &&
     itemCartQty(item.id) + qty <= (item.offer?.maxQty ?? Infinity);
 }
+function prepareChoices(item, selection = {}) {
+  const normalized = normalizeItemChoices(item, selection);
+  state.size = normalized.size;
+  state.choice = normalized.choice;
+  state.extras = normalized.extras;
+  return normalized;
+}
+function selectedChoices(item, selection = state) {
+  const normalized = normalizeItemChoices(item, selection);
+  const ids = new Set([normalized.size, normalized.choice, ...normalized.extras].filter(Boolean));
+  return (item?.options || []).filter(x => ids.has(x.id));
+}
+function choicesValid(item, selection = state) {
+  const rows = enabledChoices(item, "Option");
+  return !rows.some(x => x.required) || rows.some(x => x.id === selection.choice);
+}
+function choicePriceText(choice) {
+  return choice.price > 0 ? ` <small>+ ${money(choice.price)}</small>` : "";
+}
+function itemChoiceMarkup(item) {
+  const variants = enabledChoices(item, "Variant");
+  const options = enabledChoices(item, "Option");
+  const addons = enabledChoices(item, "Add-on");
+  const group = (title, rows, mode, allowNone = false) => !rows.length ? "" : `<div class="item-choice-group"><h4>${title}</h4>
+    ${allowNone ? `<label class="item-choice-row"><input type="radio" name="choice-Option" ${state.choice == null ? "checked" : ""} onchange="clearChoice()"><span>${cartCopy("No option", "بدون خيار")}</span></label>` : ""}
+    ${rows.map(row => `<label class="item-choice-row"><input type="${mode}" name="${mode === "radio" ? `choice-${row.type}` : row.id}"
+      ${row.type === "Variant" ? (state.size === row.id ? "checked" : "") : row.type === "Option" ? (state.choice === row.id ? "checked" : "") : (state.extras.includes(row.id) ? "checked" : "")}
+      ${row.type === "Add-on" && row.required ? "disabled" : ""}
+      onchange="${row.type === "Variant" ? `selectVariant('${row.id}')` : row.type === "Option" ? `selectChoice('${row.id}')` : `toggleExtra('${row.id}')`}">
+      <span>${escapeHtml(row.name)}${row.required ? ` <small>${cartCopy("Required", "مطلوب")}</small>` : ""}</span><strong>${choicePriceText(row)}</strong></label>`).join("")}</div>`;
+  return `${group(cartCopy("Choose a variant", "اختر النوع"), variants, "radio")}
+    ${group(cartCopy("Choose an option", "اختر خياراً"), options, "radio", !options.some(x => x.required))}
+    ${group(cartCopy("Add-ons", "إضافات"), addons, "checkbox")}`;
+}
+function cartChoiceText(item, line) {
+  const labels = selectedChoices(item, line).map(row => row.name);
+  labels.push(t(line.spice));
+  return escapeHtml(labels.join(" · "));
+}
 function offerLimitMarkup(item) {
   const cap = item?.offer?.maxQty;
   const min = item?.offer?.minRegularSpend;
@@ -84,7 +124,10 @@ function offerSpendStatus() {
     const item = itemById(line.id);
     if (!item || !Number.isSafeInteger(line.qty) || line.qty <= 0) continue;
     if (item.offer) required += Math.round((item.offer.minRegularSpend || 0) * 100) * line.qty;
-    else if (canOrderItem(item)) grossCents += Math.round(item.price * 100) * line.qty;
+    else if (canOrderItem(item)) {
+      const extraPrice = normalizeItemChoices(item, line).extraPrice;
+      grossCents += Math.round((item.price + extraPrice) * 100) * line.qty;
+    }
   }
   // Customer-facing threshold uses displayed, VAT-inclusive menu prices.
   const qualifying = grossCents;
@@ -215,14 +258,20 @@ function toast(msg, duration = 1600) {
 function addToCart(item, qty = 1) {
   if (!canOrderItem(item)) { toast(menuText("unavailableItem")); return false; }
   if (!canAddItem(item, qty)) { toast(limitMessage(item)); return false; }
-  state.size = "regular"; state.extras = [];
+  if (!choicesValid(item)) {
+    toast(cartCopy("Please choose the required option.", "يرجى اختيار الخيار المطلوب."));
+    return false;
+  }
+  const normalized = prepareChoices(item, state);
   const extras = [...state.extras];
   const size = state.size;
+  const choice = state.choice;
   const spice = state.spice;
   const existing = state.cart.find(
     (l) =>
       l.id === item.id &&
       l.size === size &&
+      l.choice === choice &&
       l.spice === spice &&
       l.extras.join() === extras.join()
   );
@@ -231,11 +280,12 @@ function addToCart(item, qty = 1) {
     state.cart.push({
       id: item.id,
       cartKey: newCartKey(),
-      basePrice: item.basePrice,
-      price: item.price,
+      basePrice: roundMoney(item.basePrice + normalized.extraPrice),
+      price: roundMoney(item.price + normalized.extraPrice),
       image: item.image,
       qty,
       size,
+      choice,
       spice,
       extras,
     });
@@ -761,7 +811,7 @@ function home() {
       </div>
       <div class="h-row"><h3>${t("categories")}</h3></div>
       <div class="grid">
-        ${CATEGORIES.slice(0, 6)
+        ${CATEGORIES
           .map(
             (c) =>
               `<button class="cat cat-photo" onclick="go('listing',{categoryId:'${c.id}'})">
@@ -842,6 +892,7 @@ function detail() {
       <p style="color:var(--muted);font-size:14px">${loc(i, "desc")}</p>
       <p class="price" style="margin:12px 0;font-size:20px">${itemPriceMarkup(i)}</p>
       ${offerLimitMarkup(i)}
+      ${itemChoiceMarkup(i)}
       ${editing && !editLine ? `<p role="status">${cartCopy("This cart item was removed after a menu update. Return to your cart.", "تمت إزالة هذا الصنف بعد تحديث القائمة. ارجع إلى السلة.")}</p>` : ""}
       <div class="options">
         <h4>${t("spiceLevel")}</h4>
@@ -870,8 +921,9 @@ function openCartItem(index) {
   state.cartEditKey = line.cartKey;
   state.itemId = item.id;
   state.size = line.size;
+  state.choice = line.choice ?? null;
   state.spice = line.spice;
-  state.extras = [...line.extras];
+  state.extras = [...(line.extras || [])];
   go("detail");
 }
 function cartRowClick(event, index) {
@@ -900,9 +952,9 @@ function cart() {
         </button>
         <div class="cart-line-content">
           <button class="cart-name-link" onclick="openCartItem(${idx})"><h4>${name}</h4></button>
-          <p class="cart-choice">${t(l.size)} · ${t(l.spice)}</p>
+          <p class="cart-choice">${cartChoiceText(item,l)}</p>
           ${item?.offer ? `<span class="badge">${offerLabel(item.offer)}</span>
-            <p class="cart-unit-price">${itemPriceMarkup(item)} <small>${cartCopy("each", "للوحدة")}</small></p>
+            <p class="cart-unit-price"><s>${money(l.basePrice)}</s> <strong>${money(l.price)}</strong> <small>${cartCopy("each", "للوحدة")}</small></p>
             <p class="offer-saving">${cartCopy("You saved", "وفّرت")} ${money(saved)}</p>` : ""}
           <div class="cart-controls">
             <div class="qty">
@@ -3277,8 +3329,8 @@ function openItem(id) {
   if (state.categoryId !== item.category) state.subcategoryId = "";
   state.categoryId = item.category;
   state.itemId = id;
-  state.size = "regular";
-  state.extras = [];
+  state.choice = null;
+  prepareChoices(item, {size:"regular", choice:null, extras:[]});
   state.spice = "medium";
   go("detail");
 }
@@ -3298,11 +3350,30 @@ function renderKeepScroll() {
 }
 
 function toggleExtra(id) {
+  const item = itemById(state.itemId);
+  const row = enabledChoices(item, "Add-on").find(x => x.id === id);
+  if (!row || (row.required && state.extras.includes(id))) return;
   if (state.extras.includes(id)) {
     state.extras = state.extras.filter((x) => x !== id);
   } else {
     state.extras.push(id);
   }
+  renderKeepScroll();
+}
+function selectVariant(id) {
+  if (!enabledChoices(itemById(state.itemId), "Variant").some(x => x.id === id)) return;
+  state.size = id;
+  renderKeepScroll();
+}
+function selectChoice(id) {
+  if (!enabledChoices(itemById(state.itemId), "Option").some(x => x.id === id)) return;
+  state.choice = id;
+  renderKeepScroll();
+}
+function clearChoice() {
+  if (enabledChoices(itemById(state.itemId), "Option").some(x => x.required)) return;
+  state.choice = null;
+  renderKeepScroll();
 }
 function setSpiceLevel(button, spice) {
   state.spice = spice;
@@ -3327,9 +3398,19 @@ function addFromDetail() {
     }
     // Edit the existing line, preserving its quantity. Merge matching choices.
     const line = state.cart[index];
+    if (!choicesValid(item)) {
+      toast(cartCopy("Please choose the required option.", "يرجى اختيار الخيار المطلوب.")); return;
+    }
+    const normalized = prepareChoices(item, state);
     line.spice = state.spice;
+    line.size = normalized.size;
+    line.choice = normalized.choice;
+    line.extras = [...normalized.extras];
+    line.price = roundMoney(item.price + normalized.extraPrice);
+    line.basePrice = roundMoney(item.basePrice + normalized.extraPrice);
     const match = state.cart.find(l => l.cartKey !== line.cartKey && l.id === line.id &&
-      l.spice === line.spice && l.size === line.size && l.extras.join() === line.extras.join());
+      l.spice === line.spice && l.size === line.size && l.choice === line.choice &&
+      l.extras.join() === line.extras.join());
     if (match) { match.qty += line.qty; state.cart.splice(index,1); }
     reconcileMenuCart();
     go("cart");
@@ -3339,10 +3420,16 @@ function addFromDetail() {
 }
 
 function quickAdd(id) {
+  const item = itemById(id);
+  if (!item) return toast(menuText("unavailableItem"));
+  if (enabledChoices(item, "Variant").length || enabledChoices(item, "Option").length || enabledChoices(item, "Add-on").length) {
+    openItem(id); return;
+  }
   state.size = "regular";
+  state.choice = null;
   state.extras = [];
   state.spice = "medium";
-  addToCart(itemById(id));
+  addToCart(item);
   
 }
 
@@ -3509,6 +3596,9 @@ function redeem(cost) {
 window.go = go;
 window.openItem = openItem;
 window.toggleExtra = toggleExtra;
+window.selectVariant = selectVariant;
+window.selectChoice = selectChoice;
+window.clearChoice = clearChoice;
 window.setSpiceLevel = setSpiceLevel;
 window.addFromDetail = addFromDetail;
 window.quickAdd = quickAdd;

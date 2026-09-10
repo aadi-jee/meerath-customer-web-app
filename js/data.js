@@ -15,7 +15,6 @@ const MENU_CONFIG = Object.freeze({
 let CATEGORIES = [], SUBCATEGORIES = [], ITEMS = [];
 // Offers are derived from the menu API. Modifiers/rewards remain unchanged.
 let OFFERS = [];
-const EXTRAS = [];
 const VOUCHERS = [
   { id: "v1", title: "SAR 10 off", titleAr: "خصم 10 ر.س", cost: 100 },
   { id: "v2", title: "Free drink", titleAr: "مشروب مجاني", cost: 60 },
@@ -95,6 +94,46 @@ function saudiDay(date) {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 function roundMoney(value) { return Math.round((value + Number.EPSILON) * 100) / 100; }
+function choiceKey(value) {
+  let hash = 2166136261;
+  for (const character of value) { hash ^= character.codePointAt(0); hash = Math.imul(hash, 16777619); }
+  return (hash >>> 0).toString(36);
+}
+function mapItemChoices(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Map();
+  return value.slice(0, 30).flatMap(row => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return [];
+    const name = typeof row.name === "string" ? row.name.trim() : "";
+    const type = row.type;
+    const price = row.price;
+    if (!name || name.length > 60 || !["Add-on", "Option", "Variant"].includes(type) ||
+        typeof price !== "number" || !Number.isFinite(price) || price < 0 || price > 99999.99 || roundMoney(price) !== price ||
+        typeof row.enabled !== "boolean" || typeof row.required !== "boolean") return [];
+    const base = `choice-${choiceKey(`${type}\u0000${name.toLocaleLowerCase('en')}`)}`;
+    const duplicate = seen.get(base) || 0;
+    seen.set(base, duplicate + 1);
+    return [{id:duplicate ? `${base}-${duplicate}` : base, name, type, price:roundMoney(price),
+      enabled:row.enabled, required:row.required}];
+  });
+}
+function enabledChoices(item, type) {
+  return (item?.options || []).filter(choice => choice.enabled && choice.type === type);
+}
+function normalizeItemChoices(item, selection = {}) {
+  const variants = enabledChoices(item, "Variant");
+  const options = enabledChoices(item, "Option");
+  const addons = enabledChoices(item, "Add-on");
+  const variant = variants.some(x => x.id === selection.size) ? selection.size : (variants[0]?.id || "regular");
+  let choice = options.some(x => x.id === selection.choice) ? selection.choice : null;
+  if (!choice && options.some(x => x.required)) choice = options[0]?.id || null;
+  const extras = [...new Set(Array.isArray(selection.extras) ? selection.extras : [])]
+    .filter(id => addons.some(x => x.id === id));
+  for (const row of addons.filter(x => x.required)) if (!extras.includes(row.id)) extras.push(row.id);
+  const selected = [...variants.filter(x => x.id === variant), ...options.filter(x => x.id === choice),
+    ...addons.filter(x => extras.includes(x.id))];
+  return {size:variant, choice, extras, extraPrice:roundMoney(selected.reduce((n,x) => n + x.price, 0))};
+}
 function activeItemOffer(row, date = new Date()) {
   const o = row.offer;
   if (!o || o.has_offer !== true || o.offer_active !== true) return null;
@@ -136,7 +175,7 @@ function mapMenu(payload, date = new Date()) {
     desc:String(r.description_en || ""), descAr:String(r.description_ar || ""),
     price:Number(r.base_price), image:menuImage(r.image_url),
     special:r.is_featured === true, bestSeller:r.is_best_seller === true, newItem:r.is_new === true,
-    prepTime:Number(r.prep_time) || 25,
+    prepTime:Number(r.prep_time) || 25, options:mapItemChoices(r.options),
     available:r.is_available === true && payload.branch_items.some(b => b.branch_id === branchId &&
       b.menu_item_id === r.id && b.is_available === true) &&
       scheduleAllows(payload.schedules.filter(s => s.menu_item_id === r.id), date),
@@ -146,9 +185,6 @@ function mapMenu(payload, date = new Date()) {
     item.basePrice = roundMoney(item.price);
     item.offer = item.available ? activeItemOffer(row, date) : null;
     item.price = item.offer ? item.offer.price : item.basePrice;
-  });
-  cats.forEach(c => {
-    if (c.image === "assets/images/meerath-logo.png") c.image = items.find(i => i.category === c.id)?.image || c.image;
   });
   return {categories:cats, subcategories:subs, items,
     offers:items.filter(i => i.offer).map(i => ({itemId:i.id}))};
@@ -172,8 +208,11 @@ function reconcileMenuCart() {
       Math.max(0, cap - (used.get(item.id) || 0)));
     if (!qty) return [];
     used.set(item.id, (used.get(item.id) || 0) + qty);
+    const choices = normalizeItemChoices(item, line);
     return [{...line, cartKey:line.cartKey || newCartKey(), qty,
-      price:item.price, basePrice:item.basePrice, image:item.image, size:"regular", extras:[]}];
+      price:roundMoney(item.price + choices.extraPrice),
+      basePrice:roundMoney(item.basePrice + choices.extraPrice), image:item.image,
+      size:choices.size, choice:choices.choice, extras:choices.extras}];
   });
   const changed = before !== JSON.stringify(state.cart);
   if (changed) toast(menuText("changed"));

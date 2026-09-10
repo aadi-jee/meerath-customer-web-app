@@ -289,3 +289,51 @@ test('savings scale with quantity and regular price returns after toggle',()=> {
   assert.equal(run(`row.offer.offer_active=false;ready();reconcileMenuCart();totals().offerSavings`),0);
   assert.equal(run(`totals().total`),16);
 });
+
+test('admin item choices are mapped safely and malformed rows are ignored',()=> {
+  const run=environment();
+  assert.equal(run(`row.options=[
+    {name:'Large',type:'Variant',price:4,enabled:true,required:false},
+    {name:'Cheese',type:'Add-on',price:2.5,enabled:true,required:true},
+    {name:'Bad',type:'Unknown',price:1,enabled:true,required:false}
+  ];ready();ITEMS[0].options.length`),2);
+  assert.equal(run(`ITEMS[0].options[0].id.startsWith('choice-') && ITEMS[0].options[1].price === 2.5`),true);
+  assert.equal(run(`const original=ITEMS[0].options[1].id;row.options.unshift({name:'Sauce',type:'Add-on',price:1,enabled:true,required:false});
+    ready();ITEMS[0].options.find(x=>x.name==='Cheese').id===original`),true);
+});
+
+test('variant and add-on prices reach cart while item offer only discounts base dish',()=> {
+  const run=environment();
+  assert.equal(run(`row.options=[
+    {name:'Large',type:'Variant',price:4,enabled:true,required:false},
+    {name:'Cheese',type:'Add-on',price:2,enabled:true,required:false}
+  ];ready();openItem(id);state.extras=[ITEMS[0].options[1].id];addToCart(ITEMS[0]);totals().total`),20.4);
+  assert.equal(run(`state.cart[0].basePrice`),24);
+  assert.equal(run(`totals().offerSavings`),3.6);
+});
+
+test('required add-ons are selected automatically and cannot be removed',()=> {
+  const run=environment();
+  assert.equal(run(`row.options=[{name:'Required sauce',type:'Add-on',price:1,enabled:true,required:true}];
+    ready();openItem(id);state.extras.includes(ITEMS[0].options[0].id)`),true);
+  assert.equal(run(`toggleExtra(ITEMS[0].options[0].id);state.extras.includes(ITEMS[0].options[0].id)`),true);
+});
+
+test('customisable quick add opens detail instead of bypassing choices',()=> {
+  const run=environment();
+  assert.equal(run(`row.options=[{name:'Small',type:'Variant',price:0,enabled:true,required:false}];
+    ready();state.screen='listing';quickAdd(id);state.screen`),'detail');
+  assert.equal(run(`state.cart.length`),0);
+});
+
+test('category uses its dedicated image and never borrows an item image',()=> {
+  const run=environment();
+  assert.equal(run(`payload.categories[0].image_url='https://example.com/category.jpg';row.image_url='https://example.com/item.jpg';
+    mapMenu(payload,now).categories[0].image.includes('category.jpg')`),true);
+  assert.equal(run(`delete payload.categories[0].image_url;mapMenu(payload,now).categories[0].image`),'assets/images/meerath-logo.png');
+});
+
+test('home category rendering has no six-category cap',()=> {
+  const source=fs.readFileSync(path.join(root,'js/app.js'),'utf8');
+  assert.equal(source.includes('CATEGORIES.slice(0, 6)'),false);
+});

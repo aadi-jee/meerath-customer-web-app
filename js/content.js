@@ -65,6 +65,10 @@ function cartRecommendations() {
 function addRecommended(id) {
   const item = cartRecommendations().find(i => i.id === id);
   if (!item) { toast(menuText('unavailableItem')); return; }
+  if (enabledChoices(item, 'Variant').length || enabledChoices(item, 'Option').length || enabledChoices(item, 'Add-on').length) {
+    openItem(id); return;
+  }
+  state.size = 'regular'; state.choice = null; state.extras = [];
   state.spice = 'medium';
   if (addToCart(item)) renderKeepScroll();
 }

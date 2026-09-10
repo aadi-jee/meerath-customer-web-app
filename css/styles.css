@@ -5080,6 +5080,18 @@ body.light-theme .language-setting-item.active strong {
 body.light-theme .language-setting-item.active .language-check {
   color: var(--orange) !important;
 }
+
+html, body, button, a { touch-action: manipulation; }
+@media (max-width: 768px) {
+  input, textarea, select { font-size: 16px !important; }
+}
+
+.item-choice-group { margin: 18px 0; }
+.item-choice-group h4 { margin: 0 0 10px; }
+.item-choice-row { display:flex; align-items:center; gap:10px; min-height:48px; padding:10px 12px; margin:8px 0; border:1px solid var(--line); border-radius:12px; cursor:pointer; }
+.item-choice-row input { width:18px; height:18px; accent-color:var(--orange); flex:0 0 auto; }
+.item-choice-row span { flex:1; }
+.item-choice-row small { color:var(--muted); }
 /* Live menu additions: retain all existing layout/theme rules above. */
 .menu-status { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); color: var(--text); font-size: 14px; line-height: 1.5; }
 .menu-status .link { margin-inline-start: 8px; }
