@@ -3662,6 +3662,7 @@ window.setAppearance = setAppearance;
 
 applyDir();
 applyAppearance();
+restoreCustomerOrderHistory();
 restoreTrackedCustomerOrder();
 render();
 

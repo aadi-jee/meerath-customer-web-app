@@ -5548,3 +5548,67 @@ body.light-theme .restaurant-closed-notice {
   color: #5a3510;
   box-shadow: 0 10px 26px rgba(108, 66, 15, .08);
 }
+
+/* Orders and live tracking in light theme */
+body.light-theme .orders-tabs {
+  background: #ebe9e5;
+  border-color: #dedbd5;
+}
+body.light-theme .orders-tabs button {
+  color: #68645e;
+}
+body.light-theme .orders-tabs button.active {
+  background: var(--orange);
+  color: #17120b;
+  box-shadow: 0 3px 10px rgba(240, 138, 26, .2);
+}
+body.light-theme .active-order-card,
+body.light-theme .history-order-card {
+  background: #ffffff;
+  border-color: #e1ded8;
+  color: #171717;
+  box-shadow: 0 10px 28px rgba(40, 34, 26, .06);
+}
+body.light-theme .active-order-head,
+body.light-theme .active-order-items,
+body.light-theme .history-order-top {
+  border-color: #e8e5df;
+}
+body.light-theme .active-order-head > div > span,
+body.light-theme .active-order-items h4,
+body.light-theme .history-order-top > div > span,
+body.light-theme .history-order-meta > span {
+  color: #77716a;
+}
+body.light-theme .active-order-head > div > strong,
+body.light-theme .active-order-item,
+body.light-theme .history-order-top strong {
+  color: #171717;
+}
+body.light-theme .order-step:not(:last-child)::after {
+  background: #ddd9d2;
+}
+body.light-theme .order-step-dot {
+  background: #ffffff;
+  border-color: #bdb8b0;
+}
+body.light-theme .order-step-copy strong {
+  color: #827d75;
+}
+body.light-theme .order-step.done .order-step-copy strong {
+  color: #292622;
+}
+body.light-theme .history-order-meta > span:not(:last-of-type)::after {
+  color: #aaa49b;
+}
+body.light-theme .history-status {
+  background: #e9f8ef;
+  border-color: #b9e6c9;
+  color: #23824d;
+}
+body.light-theme .history-reorder-btn,
+body.light-theme .orders-call-btn {
+  background: #fffaf2;
+  border-color: rgba(240, 138, 26, .38);
+  color: #a85608;
+}

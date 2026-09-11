@@ -330,6 +330,7 @@ function startMenuSync() {
 }
 
 const CUSTOMER_ORDER_STORAGE_KEY = "meerath-active-customer-order-v1";
+const CUSTOMER_ORDER_HISTORY_STORAGE_KEY = "meerath-customer-order-history-v1";
 const customerOrderConnection = { pending: null, timer: null };
 
 async function customerOrderRpc(name, params) {
@@ -385,6 +386,47 @@ function restoreTrackedCustomerOrder() {
   }
 }
 
+function saveCustomerOrderHistory() {
+  try {
+    localStorage.setItem(
+      CUSTOMER_ORDER_HISTORY_STORAGE_KEY,
+      JSON.stringify(state.orderHistory.slice(0, 20))
+    );
+  } catch (_) {}
+}
+
+function restoreCustomerOrderHistory() {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(CUSTOMER_ORDER_HISTORY_STORAGE_KEY) || "[]"
+    );
+    state.orderHistory = Array.isArray(saved)
+      ? saved.filter(order => order && typeof order.id === "string").slice(0, 20)
+      : [];
+  } catch (_) {
+    state.orderHistory = [];
+    localStorage.removeItem(CUSTOMER_ORDER_HISTORY_STORAGE_KEY);
+  }
+}
+
+function archiveCompletedCustomerOrder(order, remote) {
+  const archived = {
+    ...order,
+    status: "completed",
+    step: customerStatusStep("completed"),
+    updatedAt: remote.updated_at,
+    completedAt: remote.updated_at ? Date.parse(remote.updated_at) : Date.now(),
+  };
+  state.orderHistory = [
+    archived,
+    ...state.orderHistory.filter(previous => previous.id !== archived.id),
+  ].slice(0, 20);
+  saveCustomerOrderHistory();
+  state.order = null;
+  state.orderTab = "history";
+  saveTrackedCustomerOrder();
+}
+
 function customerStatusStep(status) {
   return ({pending_confirmation:0, accepted:1, preparing:2, ready:3, completed:4})[status] ?? 0;
 }
@@ -409,7 +451,11 @@ async function refreshTrackedCustomerOrder() {
         scheduledFor: remote.scheduled_for ? Date.parse(remote.scheduled_for) : order.scheduledFor,
         rejectionReason: remote.rejection_reason || "",
       });
-      saveTrackedCustomerOrder();
+      if (remote.status === "completed") {
+        archiveCompletedCustomerOrder(order, remote);
+      } else {
+        saveTrackedCustomerOrder();
+      }
       if (changed && ["confirmation", "track"].includes(state.screen)) renderKeepScroll();
     } catch (error) {
       console.warn("Meerath order tracking:", error.message || error);

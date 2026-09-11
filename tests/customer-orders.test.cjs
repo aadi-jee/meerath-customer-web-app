@@ -76,3 +76,16 @@ test('temporary customer-side Next status control is removed', () => {
   assert.equal(source.includes('advanceOrderStatus'), false);
   assert.equal(source.includes('orders-test-status'), false);
 });
+
+test('completed POS order leaves active tracking and persists in history', async () => {
+  const run = environment();
+  run(`state.order={id:'MK001001',backendId:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    trackingToken:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',status:'ready',items:[],createdAt:1};
+    customerOrderRpc=async()=>({id:state.order.backendId,order_number:'MK001001',status:'completed',
+      total:35,updated_at:'2026-09-11T12:30:00Z'});`);
+  await run('refreshTrackedCustomerOrder()');
+  assert.equal(run('state.order'), null);
+  assert.equal(run('state.orderHistory.length'), 1);
+  assert.equal(run('state.orderHistory[0].status'), 'completed');
+  assert.equal(run('state.orderTab'), 'history');
+});
