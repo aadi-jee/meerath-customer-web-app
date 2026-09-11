@@ -3862,24 +3862,6 @@ body.is-ar .order-step:not(:last-child)::after {
   right: 6px;
 }
 
-/* Temporary order status testing control */
-.orders-test-status {
-  width: 100%;
-  min-height: 38px;
-  margin-top: 9px;
-
-  background: transparent;
-  border: 1px dashed rgba(240, 138, 26, 0.28);
-  border-radius: 11px;
-
-  color: var(--muted);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-
-  cursor: pointer;
-}
-
 /* ========================================
    ORDER HISTORY CARDS
 ======================================== */

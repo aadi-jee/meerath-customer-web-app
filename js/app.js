@@ -25,6 +25,7 @@ const state = {
   couponOn: false,
   customer: { name: "", mobile: "", email: "" },
   order: null,
+  orderSubmitting: false,
   orderTab: "active",
 orderHistory: [],
   offerTab: "all",
@@ -1320,6 +1321,16 @@ function confirmation() {
 
   const type = o.orderType || state.orderType;
 
+  if (o.status === "rejected") {
+    return `<section class="screen confirmation-screen"><div class="success">
+      <img class="confirmation-brand-logo" src="assets/images/meerath-logo.png" alt="Meerath" />
+      <h2>${cartCopy("Order could not be accepted", "تعذر قبول الطلب")}</h2>
+      <p class="confirmation-message">${escapeHtml(o.rejectionReason || cartCopy("Please contact the restaurant for help.", "يرجى التواصل مع المطعم للمساعدة."))}</p>
+      <p class="confirmation-order">${t("order")} <strong>${escapeHtml(o.id)}</strong></p>
+    </div><a class="btn btn-wa" href="${waLink(t("order") + " " + o.id)}" target="_blank" rel="noopener">${t("whatsappHelp")}</a>
+    <button class="btn btn-ghost" onclick="go('home')">${t("continueShopping")}</button></section>`;
+  }
+
   const typeKey =
     type === "dinein"
       ? "dineIn"
@@ -1454,39 +1465,6 @@ function confirmation() {
     </section>`;
 }
 
-function advanceOrderStatus() {
-  if (!state.order) return;
-
-  // 1st click: restaurant accepts the order
-  if (state.order.status === "pending_confirmation") {
-    state.order.status = "confirmed";
-    state.order.step = 1;
-
-    render();
-    return;
-  }
-
-  // After confirmation, move step by step
-  if (state.order.step < 4) {
-    state.order.step += 1;
-
-    render();
-    return;
-  }
-
-  // Final step completed -> move order to History
-  state.orderHistory.unshift({
-    ...state.order,
-    completedAt: Date.now(),
-  });
-
-  state.order = null;
-  state.orderTab = "history";
-
-  render();
-  toast(t("orderCompleted"));
-}
-
 function formatOrderDate(timestamp) {
   if (!timestamp) return "";
 
@@ -1543,17 +1521,15 @@ if (o) {
       "awaitingConfirmation",
       "confirmed",
       "preparing",
-      "onTheWay",
+      "ready",
       "delivered",
     ];
   }
 }
 
-const idx = o
-  ? o.status === "pending_confirmation"
-    ? 0
-    : Math.max(1, o.step ?? 1)
-  : 0;
+if (o?.status === "rejected") return confirmation();
+
+const idx = o ? customerStatusStep(o.status) : 0;
 
   return `
     <section class="screen orders-screen">
@@ -1659,13 +1635,6 @@ const idx = o
                     >
                       ${t("callRestaurant")}
                     </a>
-                    <button
-  class="orders-test-status"
-  onclick="advanceOrderStatus()"
->
-  ${t("nextStatus")}
-</button>
-
                   </div>
                 `
                 : `
@@ -3537,53 +3506,70 @@ async function placeOrder() {
 async function createOrderAfterVerification() {
   if (!(await validateMenuCart())) return;
   if (!checkOfferCartRules()) return;
-  state.order = {
-    id: "MK" + Math.floor(1000 + Math.random() * 9000),
-
-    items: state.cart.map((l) => ({ ...l })),
-
-    customer: {
-      name: state.customer.name,
-      mobile: state.customer.mobile,
-      email: state.customer.email,
-    },
-
-    phoneVerified: true,
-
-    customerType:
-      state.isLoggedIn
-        ? "registered"
-        : "guest",
-
-    orderType: state.orderType,
-    status: "pending_confirmation",
-
-    suggestedEta: calculateSuggestedEta(
-      state.orderType,
-      state.cart
-    ),
-    
-    confirmedEta: null,
-
-    scheduleType:
-      state.orderTiming === "asap"
-        ? "asap"
-        : "scheduled",
-
-    orderTiming: state.orderTiming,
-
-    scheduledFor: getScheduledFor(),
-
-    total: totals().total,
-
-    createdAt: Date.now(),
-
-    step: 0,
-  };
-
-  state.cart = [];
-
-  go("confirmation");
+  if (state.orderSubmitting) return;
+  state.orderSubmitting = true;
+  const cart = state.cart.map((line) => ({ ...line, extras:[...(line.extras || [])] }));
+  const suggestedEta = calculateSuggestedEta(state.orderType, cart);
+  const defaultAddress = state.savedAddresses.find(row => row.id === state.defaultAddressId);
+  const address = state.orderType === "delivery" && defaultAddress
+    ? [defaultAddress.area, defaultAddress.street, defaultAddress.building, defaultAddress.unit, defaultAddress.directions].filter(Boolean).join(", ")
+    : "";
+  const clientOrderId = crypto.randomUUID();
+  try {
+    const result = await submitCustomerOrder({
+      client_order_id: clientOrderId,
+      customer_name: state.customer.name.trim(),
+      customer_phone: state.customer.mobile.trim(),
+      customer_email: state.customer.email.trim(),
+      customer_registered: state.isLoggedIn,
+      fulfillment_type: state.orderType,
+      schedule_type: state.orderTiming === "asap" ? "asap" : "scheduled",
+      order_timing: state.orderTiming,
+      scheduled_for: getScheduledFor() ? new Date(getScheduledFor()).toISOString() : null,
+      suggested_eta: suggestedEta,
+      coupon_code: state.couponOn ? state.coupon.trim().toUpperCase() : "",
+      address,
+      items: cart.map(line => {
+        const item = itemById(line.id);
+        return {
+          menu_item_id: line.id,
+          quantity: line.qty,
+          notes: line.notes || "",
+          choices: selectedChoices(item, line).map(choice => ({
+            name: choice.name,
+            type: choice.type,
+          })),
+        };
+      }),
+    });
+    state.order = {
+      id: result.order_number,
+      backendId: result.id,
+      trackingToken: result.tracking_token,
+      items: cart,
+      customer: {...state.customer},
+      customerType: state.isLoggedIn ? "registered" : "guest",
+      orderType: state.orderType,
+      status: result.status,
+      suggestedEta,
+      confirmedEta: null,
+      scheduleType: state.orderTiming === "asap" ? "asap" : "scheduled",
+      orderTiming: state.orderTiming,
+      scheduledFor: getScheduledFor(),
+      total: Number(result.total),
+      createdAt: Date.parse(result.created_at),
+      step: 0,
+    };
+    state.cart = [];
+    state.couponOn = false;
+    saveTrackedCustomerOrder();
+    go("confirmation");
+    refreshTrackedCustomerOrder();
+  } catch (error) {
+    toast(error.message || cartCopy("Could not place order. Try again.", "تعذر إرسال الطلب. حاول مرة أخرى."), 5000);
+  } finally {
+    state.orderSubmitting = false;
+  }
 }
 
 function redeem(cost) {
@@ -3620,7 +3606,6 @@ window.startAddAddress = startAddAddress;
 window.editAddress = editAddress;
 window.deleteAddress = deleteAddress;
 window.setDefaultAddress = setDefaultAddress;
-window.advanceOrderStatus = advanceOrderStatus;
 window.reorderFromHistory = reorderFromHistory;
 window.setHomeOrderType = setHomeOrderType;
 window.setCheckoutOrderType = setCheckoutOrderType;
@@ -3630,6 +3615,8 @@ window.setAppearance = setAppearance;
 
 applyDir();
 applyAppearance();
+restoreTrackedCustomerOrder();
 render();
 
 startMenuSync();
+startCustomerOrderSync();

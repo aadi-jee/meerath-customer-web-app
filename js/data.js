@@ -162,10 +162,14 @@ function mapMenu(payload, date = new Date()) {
   }
   // An inactive restaurant / no active branch produces an empty public menu.
   const branchId = payload.branches.length ? selectMenuBranch(payload.branches) : null;
+  const safeOrder = value => Number.isSafeInteger(Number(value)) && Number(value) >= 0
+    ? Number(value) : Number.MAX_SAFE_INTEGER;
   const group = r => ({id:r.id, name:String(r.name_en || ""), nameAr:String(r.name_ar || ""),
-    category:r.category_id, image:menuImage(r.image_url)});
-  const cats = payload.categories.filter(r => isMenuId(r.id)).map(group);
-  const subs = payload.subcategories.filter(r => isMenuId(r.id) && cats.some(c => c.id === r.category_id)).map(group);
+    category:r.category_id, image:menuImage(r.image_url), sortOrder:safeOrder(r.sort_order)});
+  const cats = payload.categories.filter(r => isMenuId(r.id)).map(group)
+    .sort((a,b)=>a.sortOrder-b.sortOrder||a.id.localeCompare(b.id));
+  const subs = payload.subcategories.filter(r => isMenuId(r.id) && cats.some(c => c.id === r.category_id)).map(group)
+    .sort((a,b)=>a.sortOrder-b.sortOrder||a.id.localeCompare(b.id));
   const items = payload.items.filter(r => isMenuId(r.id) && cats.some(c => c.id === r.category_id) &&
     (!r.subcategory_id || subs.some(s => s.id === r.subcategory_id && s.category === r.category_id)) &&
     r.base_price != null && r.base_price !== "" && Number.isFinite(Number(r.base_price)) && Number(r.base_price) >= 0
@@ -175,7 +179,7 @@ function mapMenu(payload, date = new Date()) {
     desc:String(r.description_en || ""), descAr:String(r.description_ar || ""),
     price:Number(r.base_price), image:menuImage(r.image_url),
     special:r.is_featured === true, bestSeller:r.is_best_seller === true, newItem:r.is_new === true,
-    prepTime:Number(r.prep_time) || 25, options:mapItemChoices(r.options),
+    prepTime:Number(r.prep_time) || 25, options:mapItemChoices(r.options), sortOrder:safeOrder(r.sort_order),
     available:r.is_available === true && payload.branch_items.some(b => b.branch_id === branchId &&
       b.menu_item_id === r.id && b.is_available === true) &&
       scheduleAllows(payload.schedules.filter(s => s.menu_item_id === r.id), date),
@@ -186,6 +190,12 @@ function mapMenu(payload, date = new Date()) {
     item.offer = item.available ? activeItemOffer(row, date) : null;
     item.price = item.offer ? item.offer.price : item.basePrice;
   });
+  const categoryPosition=new Map(cats.map((row,index)=>[row.id,index]));
+  const subcategoryPosition=new Map(subs.map((row,index)=>[row.id,index]));
+  items.sort((a,b)=>(categoryPosition.get(a.category)??Number.MAX_SAFE_INTEGER)-(categoryPosition.get(b.category)??Number.MAX_SAFE_INTEGER)
+    ||(a.subcategory==null?-1:(subcategoryPosition.get(a.subcategory)??Number.MAX_SAFE_INTEGER))
+      -(b.subcategory==null?-1:(subcategoryPosition.get(b.subcategory)??Number.MAX_SAFE_INTEGER))
+    ||a.sortOrder-b.sortOrder||a.id.localeCompare(b.id));
   return {categories:cats, subcategories:subs, items,
     offers:items.filter(i => i.offer).map(i => ({itemId:i.id}))};
 }
@@ -311,4 +321,106 @@ function startMenuSync() {
       img.dataset.menuFallback = "1"; img.src = "assets/images/meerath-logo.png";
     }
   }, true);
+}
+
+const CUSTOMER_ORDER_STORAGE_KEY = "meerath-active-customer-order-v1";
+const customerOrderConnection = { pending: null, timer: null };
+
+async function customerOrderRpc(name, params) {
+  const response = await fetch(`${MENU_CONFIG.url}/rest/v1/rpc/${name}`, {
+    method: "POST",
+    headers: {
+      apikey: MENU_CONFIG.publicKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(params),
+    cache: "no-store",
+    credentials: "omit",
+  });
+  if (!response.ok) {
+    let message = "Order service is unavailable. Please try again.";
+    try {
+      const detail = await response.json();
+      if (typeof detail?.message === "string" && detail.message.length < 220) message = detail.message;
+    } catch (_) {}
+    throw new Error(message);
+  }
+  return response.json();
+}
+
+async function submitCustomerOrder(order) {
+  const branchId = selectMenuBranch(menuConnection.payload?.branches || []);
+  return customerOrderRpc("oracy_create_customer_order_v1", {
+    p_restaurant_id: MENU_CONFIG.restaurantId,
+    p_branch_id: branchId,
+    p_order: order,
+  });
+}
+
+function saveTrackedCustomerOrder() {
+  try {
+    if (state.order?.backendId && state.order?.trackingToken) {
+      localStorage.setItem(CUSTOMER_ORDER_STORAGE_KEY, JSON.stringify(state.order));
+    } else {
+      localStorage.removeItem(CUSTOMER_ORDER_STORAGE_KEY);
+    }
+  } catch (_) {}
+}
+
+function restoreTrackedCustomerOrder() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOMER_ORDER_STORAGE_KEY) || "null");
+    if (saved && typeof saved === "object" && isMenuId(saved.backendId) && isMenuId(saved.trackingToken)) {
+      state.order = saved;
+      state.orderTab = "active";
+    }
+  } catch (_) {
+    localStorage.removeItem(CUSTOMER_ORDER_STORAGE_KEY);
+  }
+}
+
+function customerStatusStep(status) {
+  return ({pending_confirmation:0, accepted:1, preparing:2, ready:3, completed:4})[status] ?? 0;
+}
+
+async function refreshTrackedCustomerOrder() {
+  const order = state.order;
+  if (!order?.backendId || !order?.trackingToken || customerOrderConnection.pending) return;
+  customerOrderConnection.pending = (async () => {
+    try {
+      const remote = await customerOrderRpc("oracy_track_customer_order_v1", {
+        p_order_id: order.backendId,
+        p_tracking_token: order.trackingToken,
+      });
+      if (!remote?.id) throw new Error("Order tracking is unavailable.");
+      const changed = order.status !== remote.status || order.updatedAt !== remote.updated_at;
+      Object.assign(order, {
+        id: remote.order_number,
+        status: remote.status,
+        step: customerStatusStep(remote.status),
+        total: Number(remote.total),
+        updatedAt: remote.updated_at,
+        scheduledFor: remote.scheduled_for ? Date.parse(remote.scheduled_for) : order.scheduledFor,
+        rejectionReason: remote.rejection_reason || "",
+      });
+      saveTrackedCustomerOrder();
+      if (changed && ["confirmation", "track"].includes(state.screen)) renderKeepScroll();
+    } catch (error) {
+      console.warn("Meerath order tracking:", error.message || error);
+    }
+  })();
+  try { await customerOrderConnection.pending; } finally { customerOrderConnection.pending = null; }
+}
+
+function startCustomerOrderSync() {
+  if (customerOrderConnection.timer) return;
+  customerOrderConnection.timer = setInterval(() => {
+    if (!document.hidden) refreshTrackedCustomerOrder();
+  }, 5000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshTrackedCustomerOrder();
+  });
+  window.addEventListener("online", refreshTrackedCustomerOrder);
+  window.addEventListener("focus", refreshTrackedCustomerOrder);
+  refreshTrackedCustomerOrder();
 }
