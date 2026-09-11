@@ -10,6 +10,7 @@ const MENU_CONFIG = Object.freeze({
   publicKey: "sb_publishable_6f7rQ5e2pJ_rdUoBxaInoA_wJW5KtHW",
   restaurantId: "11111111-1111-1111-1111-111111111111",
   branchId: "", // Optional exact branch UUID. Auto-selects sole branch or unique Olaya branch.
+  testingAlwaysOpen: true, // Temporary end-to-end testing mode. Set false before launch.
   timeZone: "Asia/Riyadh", refreshMs: 30000, maxAgeMs: 90000,
 });
 let CATEGORIES = [], SUBCATEGORIES = [], ITEMS = [];
@@ -49,7 +50,12 @@ function riyadhClock(date = new Date()) {
   return { day: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(p.weekday) + 1,
     seconds: Number(p.hour) * 3600 + Number(p.minute) * 60 + Number(p.second) };
 }
+function testingAlwaysOpenActive() {
+  return MENU_CONFIG.testingAlwaysOpen &&
+    typeof window !== "undefined" && Boolean(window.location?.hostname);
+}
 function scheduleAllows(rows, date = new Date()) {
+  if (testingAlwaysOpenActive()) return true;
   // Admin creates ISO weekdays: Monday=1 ... Sunday=7. No schedule rows means unrestricted.
   if (!rows.length) return true;
   const {day, seconds} = riyadhClock(date);

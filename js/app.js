@@ -67,6 +67,7 @@ let cartLineSequence = 0;
 function newCartKey() { return "line-" + (++cartLineSequence); }
 function cartCopy(en, ar) { return state.lang === "ar" ? ar : en; }
 function restaurantAcceptingOrders(date = new Date()) {
+  if (testingAlwaysOpenActive()) return true;
   const { seconds } = riyadhClock(date);
   return seconds >= RESTAURANT_ORDER_WINDOW.openSeconds ||
     seconds < RESTAURANT_ORDER_WINDOW.closeSeconds;
