@@ -5231,6 +5231,150 @@ body.light-theme .support-note {
   border-color: #f1d5b2 !important;
   color: #6f675e !important;
 }
+
+/* ========================================
+   LIGHT THEME - AUTH, PROFILE & ADDRESSES
+======================================== */
+
+/* Authentication and profile fields */
+body.light-theme .mobile-field-wrap,
+body.light-theme .otp-input.field,
+body.light-theme .profile-setup-screen .field,
+body.light-theme .add-address-screen .field {
+  background: #ffffff !important;
+  border-color: #dedbd6 !important;
+  color: #171717 !important;
+  caret-color: #171717;
+}
+
+body.light-theme .mobile-input.field {
+  background: transparent !important;
+  color: #171717 !important;
+}
+
+body.light-theme .country-code {
+  color: #171717 !important;
+  border-color: #dedbd6 !important;
+}
+
+body.light-theme .mobile-input.field::placeholder,
+body.light-theme .otp-input.field::placeholder,
+body.light-theme .profile-setup-screen .field::placeholder,
+body.light-theme .add-address-screen .field::placeholder {
+  color: #85817b !important;
+  opacity: 1;
+}
+
+body.light-theme .mobile-field-wrap:focus-within,
+body.light-theme .otp-input.field:focus,
+body.light-theme .profile-setup-screen .field:focus,
+body.light-theme .add-address-screen .field:focus {
+  border-color: rgba(240, 138, 26, 0.78) !important;
+  box-shadow: 0 0 0 3px rgba(240, 138, 26, 0.1) !important;
+}
+
+body.light-theme .signin-label,
+body.light-theme .otp-label,
+body.light-theme .profile-setup-label,
+body.light-theme .address-form-label,
+body.light-theme .otp-intro strong {
+  color: #171717 !important;
+}
+
+/* Signed-in account summary */
+body.light-theme .signed-profile-card,
+body.light-theme .signed-rewards-card {
+  background: #ffffff !important;
+  border-color: #dedbd6 !important;
+  color: #171717 !important;
+}
+
+body.light-theme .signed-profile-copy h3 {
+  color: #171717 !important;
+}
+
+body.light-theme .signed-profile-copy > span,
+body.light-theme .signed-profile-copy p,
+body.light-theme .signed-profile-copy small,
+body.light-theme .signed-reward-stat span {
+  color: #74706b !important;
+}
+
+body.light-theme .signed-reward-divider {
+  background: #dedbd6 !important;
+}
+
+body.light-theme .account-signout-btn {
+  background: #ffffff !important;
+  border-color: #dedbd6 !important;
+  color: #6f6b65 !important;
+}
+
+body.light-theme .account-signout-btn:active {
+  background: #faf8f5 !important;
+}
+
+/* Saved-address empty state and saved cards */
+body.light-theme .address-empty-state,
+body.light-theme .saved-address-card {
+  background: #ffffff !important;
+  border-color: #dedbd6 !important;
+  color: #171717 !important;
+}
+
+body.light-theme .address-empty-state h3,
+body.light-theme .saved-address-copy strong,
+body.light-theme .saved-address-copy > span {
+  color: #171717 !important;
+}
+
+body.light-theme .address-empty-state p,
+body.light-theme .saved-address-copy small {
+  color: #74706b !important;
+}
+
+body.light-theme .saved-address-card.is-default {
+  border-color: rgba(240, 138, 26, 0.48) !important;
+}
+
+body.light-theme .saved-address-actions button {
+  background: #faf8f5 !important;
+  border-color: #dedbd6 !important;
+  color: #6f6b65 !important;
+}
+
+body.light-theme .saved-address-actions button:first-child {
+  color: #b75e00 !important;
+  border-color: rgba(240, 138, 26, 0.38) !important;
+}
+
+body.light-theme .saved-address-actions .address-delete-btn {
+  color: #b54d4d !important;
+  border-color: rgba(181, 77, 77, 0.3) !important;
+}
+
+/* Address-type selector */
+body.light-theme .address-type-toggle button {
+  background: #ffffff !important;
+  border-color: #dedbd6 !important;
+  color: #6f6b65 !important;
+}
+
+body.light-theme .address-type-toggle button.active {
+  background: var(--orange) !important;
+  border-color: var(--orange) !important;
+  color: #17100a !important;
+}
+
+/* Prevent browser autofill from restoring a dark-looking field in light mode. */
+body.light-theme input:-webkit-autofill,
+body.light-theme input:-webkit-autofill:hover,
+body.light-theme input:-webkit-autofill:focus,
+body.light-theme textarea:-webkit-autofill {
+  -webkit-text-fill-color: #171717 !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+  caret-color: #171717;
+}
 /* Live menu additions: retain all existing layout/theme rules above. */
 .menu-status { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); color: var(--text); font-size: 14px; line-height: 1.5; }
 .menu-status .link { margin-inline-start: 8px; }
@@ -5366,4 +5510,12 @@ body.light-theme .support-note {
     border-radius: 0 !important;
     box-shadow: none !important;
   }
+}
+/* Splash: center tagline and buttons on every screen size */
+#app .splash > p,
+#app .splash > .btn {
+  width: 100%;
+  max-width: 460px;
+  margin-inline: auto;
+  text-align: center;
 }
