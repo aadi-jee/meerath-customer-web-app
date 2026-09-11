@@ -5501,3 +5501,50 @@ body.light-theme textarea:-webkit-autofill {
   margin-inline: auto;
   text-align: center;
 }
+
+/* Checkout: clear restaurant closed state */
+.restaurant-closed-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid rgba(255, 181, 71, .58);
+  border-radius: 16px;
+  background: rgba(255, 164, 28, .13);
+  color: #fff4df;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .14);
+}
+.restaurant-closed-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #f2a528;
+  color: #17120a;
+  font-size: 20px;
+  font-weight: 900;
+}
+.restaurant-closed-notice strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 16px;
+}
+.restaurant-closed-notice p {
+  margin: 0;
+  color: inherit;
+  line-height: 1.5;
+}
+.checkout-place-order:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+  filter: grayscale(.15);
+}
+body.light-theme .restaurant-closed-notice {
+  border-color: #e6a13c;
+  background: #fff3df;
+  color: #5a3510;
+  box-shadow: 0 10px 26px rgba(108, 66, 15, .08);
+}

@@ -1,6 +1,10 @@
 const VAT = 0.15;
 const DELIVERY = 0;
 const MIN_DELIVERY_ORDER = 30;
+const RESTAURANT_ORDER_WINDOW = Object.freeze({
+  openSeconds: 12 * 60 * 60,
+  closeSeconds: 1 * 60 * 60,
+});
 
 const state = {
   lang: localStorage.getItem("mk-lang") === "ar" ? "ar" : "en",
@@ -62,6 +66,23 @@ editingAddressId: null,
 let cartLineSequence = 0;
 function newCartKey() { return "line-" + (++cartLineSequence); }
 function cartCopy(en, ar) { return state.lang === "ar" ? ar : en; }
+function restaurantAcceptingOrders(date = new Date()) {
+  const { seconds } = riyadhClock(date);
+  return seconds >= RESTAURANT_ORDER_WINDOW.openSeconds ||
+    seconds < RESTAURANT_ORDER_WINDOW.closeSeconds;
+}
+function restaurantClosedMessage() {
+  return cartCopy(
+    "Meerath Kabab is currently closed. Please place your order during our working hours: 12:00 PM to 1:00 AM.",
+    "مطعم ميراث كباب مغلق حالياً. يرجى تقديم طلبكم خلال ساعات العمل: من 12:00 ظهراً إلى 1:00 صباحاً."
+  );
+}
+function unavailableTimeMessage() {
+  return cartCopy(
+    "One or more items in your cart are not available at this time. Please remove the unavailable item or choose another item.",
+    "صنف واحد أو أكثر في سلتك غير متاح في هذا الوقت. يرجى إزالة الصنف غير المتاح أو اختيار صنف آخر."
+  );
+}
 function itemCartQty(id) {
   return state.cart.filter(l => l.id === id).reduce((n,l) => n + l.qty, 0);
 }
@@ -1144,6 +1165,7 @@ function setCheckoutOrderType(type, button) {
 
 function checkout() {
   const timingOptions = checkoutTimingOptions();
+  const acceptingOrders = restaurantAcceptingOrders();
 
   const timingSub =
     state.orderTiming === "asap"
@@ -1302,13 +1324,24 @@ function checkout() {
         ${timingSub}
       </p>
 
+      ${acceptingOrders ? "" : `
+        <div class="restaurant-closed-notice" role="alert" aria-live="assertive">
+          <span class="restaurant-closed-icon" aria-hidden="true">!</span>
+          <div>
+            <strong>${cartCopy("Restaurant is currently closed", "المطعم مغلق حالياً")}</strong>
+            <p>${restaurantClosedMessage()}</p>
+          </div>
+        </div>
+      `}
+
       <div class="breakdown checkout-total-card">${cartSummaryMarkup()}</div>
 
       <button
         class="btn btn-primary checkout-place-order"
         onclick="placeOrder()"
+        ${acceptingOrders ? "" : "disabled aria-disabled=\"true\""}
       >
-        ${t("placeOrder")}
+        ${acceptingOrders ? t("placeOrder") : cartCopy("Ordering is closed", "الطلبات مغلقة")}
       </button>
 
     </section>`;
@@ -3472,6 +3505,10 @@ function getScheduledFor() {
 }
 
 async function placeOrder() {
+  if (!restaurantAcceptingOrders()) {
+    render();
+    return toast(restaurantClosedMessage(), 7000);
+  }
   if (!(await validateMenuCart())) return;
   if (!checkOfferCartRules()) return;
   if (!state.cart.length) {
@@ -3566,7 +3603,16 @@ async function createOrderAfterVerification() {
     go("confirmation");
     refreshTrackedCustomerOrder();
   } catch (error) {
-    toast(error.message || cartCopy("Could not place order. Try again.", "تعذر إرسال الطلب. حاول مرة أخرى."), 5000);
+    const rawMessage = String(error?.message || "");
+    if (/outside its available time/i.test(rawMessage)) {
+      const message = restaurantAcceptingOrders()
+        ? unavailableTimeMessage()
+        : restaurantClosedMessage();
+      go("checkout");
+      setTimeout(() => toast(message, 7000));
+    } else {
+      toast(rawMessage || cartCopy("Could not place order. Try again.", "تعذر إرسال الطلب. حاول مرة أخرى."), 5000);
+    }
   } finally {
     state.orderSubmitting = false;
   }
