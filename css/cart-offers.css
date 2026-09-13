@@ -29,3 +29,14 @@
   .cart-editable .cart-image-link img { width: 64px; height: 72px; object-fit: cover; }
   .cart-line-total { grid-column: 2; justify-self: end; }
 }
+.offer-spend-notice {
+  padding: 12px;
+  border: 1px solid #c58220;
+  border-radius: 10px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+.offer-add-blocked {
+  opacity: .48;
+  cursor: not-allowed;
+}

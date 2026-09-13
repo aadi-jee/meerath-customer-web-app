@@ -224,6 +224,7 @@ function setLang(lang) {
 }
 
 function go(screen, extra = {}) {
+  if (typeof captureCartOrigin === 'function') captureCartOrigin(screen);
   if (screen !== "detail") state.cartEditKey = null;
   if (screen === "checkout") {
     validateMenuCart().then(ok => { if (ok && checkOfferCartRules()) { Object.assign(state, extra, {screen}); render(); } });
@@ -767,6 +768,7 @@ function home() {
 </div>
 
 </div>
+      <div id="appAnnouncementSlot">${typeof announcementMarkup === 'function' ? announcementMarkup() : ''}</div>
       <div class="home-search-wrap">
 
   <div class="home-search-box">
@@ -815,6 +817,7 @@ function home() {
   ✓ ${t("deliveryScope")}
 </div>
       ${homeBannersMarkup()}
+      ${typeof cateringCardMarkup === 'function' ? cateringCardMarkup() : ''}
       <div class="h-row"><h3>${t("todaysSpecial")}</h3><button class="link" onclick="go('menu')">${t("seeAll")}</button></div>
       <div class="scroll">
         ${!specials.length && menuReady() ? `<p class="menu-hint">${menuText("noSpecials")}</p>` : ""}
@@ -960,12 +963,12 @@ function removeCartItem(index) {
 function cart() {
   if (!state.cart.length) {
     return `<section class="screen cart-screen">
-      <div class="topbar">${back("home")}<h2>${t("yourCart")}</h2>${langSwitch()}</div>
+      <div class="topbar">${typeof cartBackMarkup === 'function' ? cartBackMarkup() : back("home")}<h2>${t("yourCart")}</h2>${langSwitch()}</div>
       <div class="empty">${t("cartEmpty")}<br><button class="link" onclick="go('menu')">${t("browseTheMenu")}</button></div>
     </section>${nav("home")}`;
   }
   return `<section class="screen cart-screen">
-    <div class="topbar">${back("home")}<h2>${t("yourCart")}</h2>${langSwitch()}</div>
+    <div class="topbar">${typeof cartBackMarkup === 'function' ? cartBackMarkup() : back("home")}<h2>${t("yourCart")}</h2>${langSwitch()}</div>
     ${state.cart.map((l,idx) => {
       const item = itemById(l.id), name = item ? loc(item,"name") : "";
       const saved = roundMoney(Math.max(0, (l.basePrice ?? item?.basePrice ?? l.price) - l.price) * l.qty);
@@ -1862,6 +1865,7 @@ function more() {
       </div>
 
       <div class="more-list">
+        ${typeof cateringCardMarkup === 'function' ? cateringCardMarkup() : ''}
 
         <button class="more-item" onclick="go('offers')">
           <div class="more-item-icon">
@@ -3285,6 +3289,7 @@ function account() {
 function render() {
   applyDir();
   const map = {
+    ...(typeof cateringPage === 'function' ? {cateringPage} : {}),
     splash,
     home,
     menu,

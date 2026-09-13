@@ -337,3 +337,27 @@ test('home category rendering has no six-category cap',()=> {
   const source=fs.readFileSync(path.join(root,'js/app.js'),'utf8');
   assert.equal(source.includes('CATEGORIES.slice(0, 6)'),false);
 });
+
+test('customer menu follows category, subcategory, then item sort order',()=> {
+  const run=environment();
+  assert.equal(run(`
+    const subA='55555555-5555-5555-5555-555555555555';
+    const subB='66666666-6666-6666-6666-666666666666';
+    const item2='77777777-7777-7777-7777-777777777777';
+    const item3='88888888-8888-8888-8888-888888888888';
+    const item4='99999999-9999-9999-9999-999999999999';
+    payload.categories[0].sort_order=1;
+    payload.subcategories=[
+      {id:subA,category_id:cat,sort_order:2},
+      {id:subB,category_id:cat,sort_order:1}
+    ];
+    row.subcategory_id=subA;row.sort_order=2;
+    payload.items=[row,
+      {...row,id:item2,subcategory_id:subA,sort_order:1},
+      {...row,id:item3,subcategory_id:subB,sort_order:1},
+      {...row,id:item4,subcategory_id:null,sort_order:9}
+    ];
+    payload.branch_items=payload.items.map(x=>({branch_id:branch,menu_item_id:x.id,is_available:true}));
+    mapMenu(payload,now).items.map(x=>x.id).join(',')
+  `),'99999999-9999-9999-9999-999999999999,88888888-8888-8888-8888-888888888888,77777777-7777-7777-7777-777777777777,22222222-2222-2222-2222-222222222222');
+});
