@@ -40,6 +40,9 @@ orderHistory: [],
   loginMobile: "",
   otpCode: "",
   otpPurpose: "login",
+  authBusy: false,
+  authUserId: "",
+  otpSentAt: 0,
   savedAddresses: [],
   defaultAddressId: null,
 editingAddressId: null,
@@ -245,6 +248,7 @@ function go(screen, extra = {}) {
   }
   if (screen === "listing" && extra.categoryId !== undefined && extra.categoryId !== state.categoryId) state.subcategoryId = "";
   Object.assign(state, extra, { screen });
+  if (screen === 'track' && state.isLoggedIn && typeof loadAccountOrders === 'function') loadAccountOrders();
   render();
   $app().parentElement.scrollTop = 0;
 }
@@ -1542,6 +1546,7 @@ function reorderFromHistory(id) {
 }
 
 function track() {
+  if (state.isLoggedIn && typeof accountOrdersPage === 'function') return accountOrdersPage();
   const tab = state.orderTab || "active";
   const o = state.order;
 
@@ -2254,17 +2259,32 @@ function openSupportWhatsApp() {
 
   window.open(waLink(message), "_blank");
 }
-function startOtp() {
-  const raw = state.loginMobile.replace(/\D/g, "");
-  const mobile = raw.startsWith("0") ? raw.slice(1) : raw;
-
-  if (!/^5\d{8}$/.test(mobile)) {
+async function startOtp(isResend = false) {
+  if (state.authBusy) return;
+  const phone = normalizeSaudiMobile(state.loginMobile);
+  if (!phone) {
     toast(t("invalidMobile"));
     return;
   }
-
-  state.otpCode = "";
-  go("otpPage");
+  const remaining = Math.ceil((state.otpSentAt + APP_CONFIG.operations.otpResendSeconds * 1000 - Date.now()) / 1000);
+  if (isResend && remaining > 0) {
+    toast(authCopy(`Please wait ${remaining} seconds before requesting another code.`, `يرجى الانتظار ${remaining} ثانية قبل طلب رمز جديد.`));
+    return;
+  }
+  state.authBusy = true;
+  try {
+    await requestPhoneOtp(phone);
+    state.loginMobile = phone;
+    state.otpCode = "";
+    state.otpSentAt = Date.now();
+    go("otpPage");
+    if (isResend) toast(authCopy("A new verification code was sent.", "تم إرسال رمز تحقق جديد."));
+  } catch (error) {
+    toast(authMessage(error), 6000);
+  } finally {
+    state.authBusy = false;
+    if (["signInPage", "otpPage"].includes(state.screen)) renderKeepScroll();
+  }
 }
 
 function signInPage() {
@@ -2305,6 +2325,7 @@ function signInPage() {
       <button
         class="btn btn-primary signin-continue"
         onclick="startOtp()"
+        ${state.authBusy ? "disabled" : ""}
       >
         ${t("continue")}
       </button>
@@ -2318,26 +2339,41 @@ function signInPage() {
     </section>`;
 }
 
-function verifyOtp() {
-  if (!/^\d{4}$/.test(state.otpCode)) {
+async function verifyOtp() {
+  if (state.authBusy) return;
+  if (!/^\d{6}$/.test(state.otpCode)) {
     toast(t("invalidOtp"));
     return;
   }
-
-  // Guest checkout OTP
-  if (state.otpPurpose === "guestOrder") {
-    state.otpPurpose = "login";
-    createOrderAfterVerification();
+  const phone = normalizeSaudiMobile(state.loginMobile);
+  if (!phone) return toast(t("invalidMobile"));
+  state.authBusy = true;
+  try {
+    await verifyPhoneOtp(phone, state.otpCode);
+  } catch (error) {
+    toast(authMessage(error, "verify"), 6000);
+    state.authBusy = false;
+    renderKeepScroll();
     return;
   }
-
-  // Sign in / Create account OTP
-  go("profileSetupPage");
+  try {
+    const profile = await loadCustomerProfile();
+    if (profile?.full_name) go("account");
+    else go("profileSetupPage");
+  } catch (error) {
+    console.error("Customer account setup failed:", error);
+    toast(authCopy(
+      "Your number was verified, but we could not open your account. Please try again.",
+      "تم التحقق من رقمك، لكن تعذر فتح حسابك. يرجى المحاولة مرة أخرى."
+    ), 6000);
+  } finally {
+    state.authBusy = false;
+    if (["otpPage", "profileSetupPage", "account"].includes(state.screen)) renderKeepScroll();
+  }
 }
 
 function otpPage() {
-  const raw = state.loginMobile.replace(/\D/g, "");
-  const mobile = raw.startsWith("0") ? raw.slice(1) : raw;
+  const phone = normalizeSaudiMobile(state.loginMobile) || "";
 
   const guestOrderOtp = state.otpPurpose === "guestOrder";
   const otpBackScreen = guestOrderOtp ? "checkout" : "signInPage";
@@ -2353,9 +2389,9 @@ function otpPage() {
 
       <div class="otp-intro">
         <p>${t("otpSub")}</p>
-        <strong dir="ltr">+966 ${mobile}</strong>
+        <strong dir="ltr">${escapeHtml(phone)}</strong>
 
-        <button class="otp-change-number" onclick="go(otpBackScreen)">
+        <button class="otp-change-number" onclick="go('${otpBackScreen}')">
           ${t("changeNumber")}
         </button>
       </div>
@@ -2368,23 +2404,24 @@ function otpPage() {
         class="field otp-input"
         type="tel"
         inputmode="numeric"
-        maxlength="4"
+        maxlength="6"
         autocomplete="one-time-code"
-        placeholder="••••"
+        placeholder="••••••"
         value="${state.otpCode}"
-        oninput="state.otpCode=this.value.replace(/[^0-9]/g,'').slice(0,4)"
+        oninput="state.otpCode=this.value.replace(/[^0-9]/g,'').slice(0,6)"
       />
 
       <button
         class="btn btn-primary otp-verify-btn"
         onclick="verifyOtp()"
+        ${state.authBusy ? "disabled" : ""}
       >
         ${t("verifyContinue")}
       </button>
 
       <div class="otp-resend">
         <span>${t("didntReceiveCode")}</span>
-        <button onclick="toast(t('resendCode'))">
+        <button onclick="startOtp(true)" ${state.authBusy ? "disabled" : ""}>
           ${t("resendCode")}
         </button>
       </div>
@@ -2392,7 +2429,8 @@ function otpPage() {
     </section>`;
 }
 
-function completeProfile() {
+async function completeProfile() {
+  if (state.authBusy || !state.isLoggedIn) return;
   const name = state.customerName.trim();
 
   if (!name) {
@@ -2400,23 +2438,21 @@ function completeProfile() {
     return;
   }
 
-  const raw = state.loginMobile.replace(/\D/g, "");
-  const mobile = raw.startsWith("0") ? raw.slice(1) : raw;
-
-  state.customerName = name;
-  state.customerEmail = state.customerEmail.trim();
-  state.customerPhone = `+966 ${mobile}`;
-
-  // Keep old customer object synced too
-  state.customer = {
-    name: state.customerName,
-    mobile: state.customerPhone,
-    email: state.customerEmail,
-  };
-
-  state.isLoggedIn = true;
-
-  go("account");
+  const email = state.customerEmail.trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    toast(authCopy("Enter a valid email address or leave it blank.", "أدخل بريداً إلكترونياً صحيحاً أو اتركه فارغاً."));
+    return;
+  }
+  state.authBusy = true;
+  try {
+    await saveCustomerProfile(name, email);
+    go("account");
+  } catch (error) {
+    toast(authMessage(error), 6000);
+  } finally {
+    state.authBusy = false;
+    if (["profileSetupPage", "account"].includes(state.screen)) renderKeepScroll();
+  }
 }
 
 function profileSetupPage() {
@@ -2424,7 +2460,7 @@ function profileSetupPage() {
     <section class="screen profile-setup-screen">
 
       <div class="topbar profile-setup-topbar">
-        ${back("otpPage")}
+        ${back(state.customerName ? "account" : "otpPage")}
         <h2>${t("completeProfile")}</h2>
         ${langSwitch()}
       </div>
@@ -2460,6 +2496,7 @@ function profileSetupPage() {
       <button
         class="btn btn-primary profile-save-btn"
         onclick="completeProfile()"
+        ${state.authBusy ? "disabled" : ""}
       >
         ${t("saveContinue")}
       </button>
@@ -2811,11 +2848,11 @@ function signedInAccount() {
 
         <div class="signed-profile-copy">
           <span>${t("welcomeBack")}</span>
-          <h3>${state.customerName}</h3>
-          <p dir="ltr">${state.customerPhone}</p>
+          <h3>${escapeHtml(state.customerName)}</h3>
+          <p dir="ltr">${escapeHtml(state.customerPhone)}</p>
           ${
             state.customerEmail
-              ? `<small>${state.customerEmail}</small>`
+              ? `<small>${escapeHtml(state.customerEmail)}</small>`
               : ""
           }
         </div>
@@ -2833,21 +2870,21 @@ function signedInAccount() {
       <div class="signed-rewards-card">
 
         <div class="signed-reward-stat">
-          <strong>${state.points || 0}</strong>
+          <strong>—</strong>
           <span>${t("points")}</span>
         </div>
 
         <div class="signed-reward-divider"></div>
 
         <div class="signed-reward-stat">
-          <strong>${state.stamps || 0}</strong>
+          <strong>—</strong>
           <span>${t("stamps")}</span>
         </div>
 
         <div class="signed-reward-divider"></div>
 
         <div class="signed-reward-stat">
-          <strong>${state.rewardVouchers || 0}</strong>
+          <strong>—</strong>
           <span>${t("vouchers")}</span>
         </div>
 
@@ -2982,7 +3019,7 @@ function signedInAccount() {
       </div>
       <button
         class="account-signout-btn"
-        onclick="state.isLoggedIn=false; go('account')"
+        onclick="signOutCustomer()"
       >
         ${t("signOut")}
       </button>
@@ -3538,26 +3575,14 @@ async function placeOrder() {
     return toast(t("addNameMobile"));
   }
 
-  // Signed-in verified customer = no OTP again
-  if (state.isLoggedIn) {
-    createOrderAfterVerification();
-    return;
-  }
-
-  // Guest customer = mobile OTP required
-  const raw = state.customer.mobile.replace(/\D/g, "");
-  const mobile = raw.startsWith("0") ? raw.slice(1) : raw;
-
-  if (!/^5\d{8}$/.test(mobile)) {
+  const phone = normalizeSaudiMobile(state.customer.mobile);
+  if (!phone) {
     toast(t("invalidMobile"));
     return;
   }
-
-  state.loginMobile = state.customer.mobile;
-  state.otpCode = "";
-  state.otpPurpose = "guestOrder";
-
-  go("otpPage");
+  state.customer.mobile = phone;
+  // OTP is for signup/sign-in on a new device. Guest checkout remains available.
+  createOrderAfterVerification();
 }
 async function createOrderAfterVerification() {
   if (!(await validateMenuCart())) return;
@@ -3666,6 +3691,7 @@ window.openSupportWhatsApp = openSupportWhatsApp;
 window.startOtp = startOtp;
 window.verifyOtp = verifyOtp;
 window.completeProfile = completeProfile;
+window.signOutCustomer = signOutCustomer;
 window.saveAddress = saveAddress;
 window.startAddAddress = startAddAddress;
 window.editAddress = editAddress;
@@ -3683,6 +3709,8 @@ applyAppearance();
 restoreCustomerOrderHistory();
 restoreTrackedCustomerOrder();
 render();
+
+bootstrapCustomerAuth();
 
 startMenuSync();
 startCustomerOrderSync();
