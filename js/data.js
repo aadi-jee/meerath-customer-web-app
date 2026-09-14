@@ -1,17 +1,20 @@
 /* Live public menu. No Supabase SDK or package installation required. */
-const RESTAURANT = {
-  name: "Meerath Kabab", nameAr: "ميراث كباب", phoneDisplay: "0561663119",
-  phone: "+966561663119", whatsapp: "966561663119",
-  address: "Olaya Street, Riyadh, Saudi Arabia", addressAr: "شارع العليا، الرياض، المملكة العربية السعودية",
-  maps: "https://maps.app.goo.gl/wQeq8SabZ1GfgKUN7",
-};
+const RESTAURANT = Object.freeze({
+  name: APP_CONFIG.brand.name, nameAr: APP_CONFIG.brand.nameAr,
+  phoneDisplay: APP_CONFIG.contact.phoneDisplay, phone: APP_CONFIG.contact.phone,
+  whatsapp: APP_CONFIG.contact.whatsapp, address: APP_CONFIG.contact.address,
+  addressAr: APP_CONFIG.contact.addressAr, maps: APP_CONFIG.contact.maps,
+});
 const MENU_CONFIG = Object.freeze({
-  url: "https://skwburtcthxihpgqagmm.supabase.co",
-  publicKey: "sb_publishable_6f7rQ5e2pJ_rdUoBxaInoA_wJW5KtHW",
-  restaurantId: "11111111-1111-1111-1111-111111111111",
-  branchId: "", // Optional exact branch UUID. Auto-selects sole branch or unique Olaya branch.
-  testingAlwaysOpen: true, // Temporary end-to-end testing mode. Set false before launch.
-  timeZone: "Asia/Riyadh", refreshMs: 30000, maxAgeMs: 90000,
+  url: APP_CONFIG.backend.url,
+  publicKey: APP_CONFIG.backend.publicKey,
+  restaurantId: APP_CONFIG.tenant.restaurantId,
+  branchId: APP_CONFIG.branch.preferredId,
+  testingAlwaysOpen: APP_CONFIG.operations.testingAlwaysOpen,
+  timeZone: APP_CONFIG.operations.timeZone,
+  refreshMs: APP_CONFIG.operations.menuRefreshMs,
+  maxAgeMs: APP_CONFIG.operations.menuMaxAgeMs,
+  rpc: APP_CONFIG.backend.rpc,
 });
 let CATEGORIES = [], SUBCATEGORIES = [], ITEMS = [];
 // Offers are derived from the menu API. Modifiers/rewards remain unchanged.
@@ -40,7 +43,7 @@ function escapeHtml(value) {
 }
 function menuImage(value) {
   try { const u = new URL(value); if (["https:", "http:"].includes(u.protocol)) return escapeHtml(u.href); } catch (_) {}
-  return "assets/images/meerath-logo.png";
+  return APP_CONFIG.brand.logo;
 }
 const isMenuId = value => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 function riyadhClock(date = new Date()) {
@@ -82,9 +85,13 @@ function selectMenuBranch(branches) {
     return b.id;
   }
   if (branches.length === 1) return branches[0].id;
-  const olaya = branches.filter(b => /olaya|olayya|العليا/i.test(b.name || ""));
-  if (olaya.length === 1) return olaya[0].id;
-  throw new Error("Select one active branch in MENU_CONFIG.branchId; no unique Olaya branch was found.");
+  const configuredName = [APP_CONFIG.branch.name, APP_CONFIG.branch.nameAr].filter(Boolean)
+    .map(value => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const preferred = configuredName.length
+    ? branches.filter(branch => new RegExp(configuredName.join("|"), "i").test(branch.name || ""))
+    : [];
+  if (preferred.length === 1) return preferred[0].id;
+  throw new Error("A branch must be selected before loading a multi-branch menu.");
 }
 // Admin stores Saudi calendar dates in attributes. Never read legacy root columns.
 function offerDate(value) {
@@ -263,7 +270,7 @@ async function refreshMenu() {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 12000);
     const previous = menuConnection.status;
     try {
-      const response = await fetch(`${MENU_CONFIG.url}/rest/v1/rpc/meerath_customer_menu_v1`, {
+      const response = await fetch(`${MENU_CONFIG.url}/rest/v1/rpc/${MENU_CONFIG.rpc.menu}`, {
         method:"POST", headers:{apikey:MENU_CONFIG.publicKey, "Content-Type":"application/json"},
         body:"{}", signal:controller.signal, cache:"no-store", credentials:"omit",
       });
@@ -280,7 +287,7 @@ async function refreshMenu() {
       return {ok:true, cartChanged:result.cartChanged};
     } catch(error) {
       menuConnection.status = "error"; menuConnection.error = String(error.message || error);
-      console.warn("Meerath menu:", menuConnection.error);
+      console.warn(`${APP_CONFIG.brand.shortName} menu:`, menuConnection.error);
       if (previous !== "error") refreshMenuUI();
       return {ok:false, cartChanged:false};
     } finally { clearTimeout(timer); }
@@ -324,13 +331,15 @@ function startMenuSync() {
   document.addEventListener("error", event => {
     const img = event.target;
     if (img.tagName === "IMG" && !img.dataset.menuFallback) {
-      img.dataset.menuFallback = "1"; img.src = "assets/images/meerath-logo.png";
+      img.dataset.menuFallback = "1"; img.src = APP_CONFIG.brand.logo;
     }
   }, true);
 }
 
-const CUSTOMER_ORDER_STORAGE_KEY = "meerath-active-customer-order-v1";
-const CUSTOMER_ORDER_HISTORY_STORAGE_KEY = "meerath-customer-order-history-v1";
+const CUSTOMER_ORDER_STORAGE_KEY = appStorageKey("active-customer-order");
+const CUSTOMER_ORDER_HISTORY_STORAGE_KEY = appStorageKey("customer-order-history");
+const LEGACY_CUSTOMER_ORDER_STORAGE_KEY = "meerath-active-customer-order-v1";
+const LEGACY_CUSTOMER_ORDER_HISTORY_STORAGE_KEY = "meerath-customer-order-history-v1";
 const customerOrderConnection = { pending: null, timer: null };
 
 async function customerOrderRpc(name, params) {
@@ -357,7 +366,7 @@ async function customerOrderRpc(name, params) {
 
 async function submitCustomerOrder(order) {
   const branchId = selectMenuBranch(menuConnection.payload?.branches || []);
-  return customerOrderRpc("oracy_create_customer_order_v1", {
+  return customerOrderRpc(MENU_CONFIG.rpc.createOrder, {
     p_restaurant_id: MENU_CONFIG.restaurantId,
     p_branch_id: branchId,
     p_order: order,
@@ -376,7 +385,7 @@ function saveTrackedCustomerOrder() {
 
 function restoreTrackedCustomerOrder() {
   try {
-    const saved = JSON.parse(localStorage.getItem(CUSTOMER_ORDER_STORAGE_KEY) || "null");
+    const saved = JSON.parse(readAppStorage("active-customer-order", [LEGACY_CUSTOMER_ORDER_STORAGE_KEY]) || "null");
     if (saved && typeof saved === "object" && isMenuId(saved.backendId) && isMenuId(saved.trackingToken)) {
       state.order = saved;
       state.orderTab = "active";
@@ -398,7 +407,7 @@ function saveCustomerOrderHistory() {
 function restoreCustomerOrderHistory() {
   try {
     const saved = JSON.parse(
-      localStorage.getItem(CUSTOMER_ORDER_HISTORY_STORAGE_KEY) || "[]"
+      readAppStorage("customer-order-history", [LEGACY_CUSTOMER_ORDER_HISTORY_STORAGE_KEY]) || "[]"
     );
     state.orderHistory = Array.isArray(saved)
       ? saved.filter(order => order && typeof order.id === "string").slice(0, 20)
@@ -436,7 +445,7 @@ async function refreshTrackedCustomerOrder() {
   if (!order?.backendId || !order?.trackingToken || customerOrderConnection.pending) return;
   customerOrderConnection.pending = (async () => {
     try {
-      const remote = await customerOrderRpc("oracy_track_customer_order_v1", {
+      const remote = await customerOrderRpc(MENU_CONFIG.rpc.trackOrder, {
         p_order_id: order.backendId,
         p_tracking_token: order.trackingToken,
       });
@@ -458,7 +467,7 @@ async function refreshTrackedCustomerOrder() {
       }
       if (changed && ["confirmation", "track"].includes(state.screen)) renderKeepScroll();
     } catch (error) {
-      console.warn("Meerath order tracking:", error.message || error);
+      console.warn(`${APP_CONFIG.brand.shortName} order tracking:`, error.message || error);
     }
   })();
   try { await customerOrderConnection.pending; } finally { customerOrderConnection.pending = null; }

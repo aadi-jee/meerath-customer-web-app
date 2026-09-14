@@ -28,7 +28,7 @@ async function refreshCustomerContent() {
   // Independent timeout: content failure must not block menu loading or checkout.
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 6000);
   try {
-    const response = await fetch(`${MENU_CONFIG.url}/rest/v1/rpc/meerath_customer_content_v1`, {
+    const response = await fetch(`${MENU_CONFIG.url}/rest/v1/rpc/${MENU_CONFIG.rpc.content}`, {
       method:'POST', headers:{apikey:MENU_CONFIG.publicKey,'Content-Type':'application/json'},
       body:'{}', cache:'no-store', credentials:'omit', signal:controller.signal,
     });
@@ -37,7 +37,7 @@ async function refreshCustomerContent() {
   } catch (error) {
     const hadContent = CUSTOMER_CONTENT.banners.length || CUSTOMER_CONTENT.recommendations.length;
     CUSTOMER_CONTENT = {recommendations:[],banners:[]}; contentLastSuccess = 0;
-    console.warn('Meerath optional content:', error.message);
+    console.warn(`${APP_CONFIG.brand.shortName} optional content:`, error.message);
     if (hadContent) refreshMenuUI();
   } finally { clearTimeout(timer); }
 }

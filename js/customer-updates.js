@@ -22,12 +22,15 @@ function applyAnnouncements(data, branch) {
   announcementsLoadedAt = Date.now(); announcementsBranch = branch;
 }
 async function loadAppAnnouncements() {
+  if (!featureEnabled('announcements')) {
+    appAnnouncements = []; announcementsLoadedAt = 0; return;
+  }
   if (announcementsRequest) return announcementsRequest;
   const branch = announcementBranch();
   announcementsRequest = (async () => {
     const before = JSON.stringify(liveAnnouncements());
     try {
-      const data = await websiteRpc('meerath_app_announcements_v1', {p_branch_id:branch});
+      const data = await websiteRpc(MENU_CONFIG.rpc.announcements, {p_branch_id:branch});
       applyAnnouncements(data, branch);
     } catch (_) { appAnnouncements = []; announcementsLoadedAt = 0; }
     const box = document.getElementById('appAnnouncementSlot');
@@ -40,6 +43,7 @@ function liveAnnouncements() {
   return appAnnouncements.filter(a => a.ends_at === null || Date.parse(a.ends_at)>Date.now());
 }
 function updateCopy(en, ar) { return state.lang === 'ar' ? ar : en; }
+function configuredBranchName() { return branchDisplayName(state.lang); }
 function websiteText(key) {
   const other = state.lang === 'ar' ? 'en' : 'ar';
   return String(websiteContent[key + '_' + state.lang] || websiteContent[key + '_' + other] || '');
@@ -62,7 +66,7 @@ function loadWebsiteContent() {
   websiteRequest = (async () => {
     let next = {};
     try {
-      const data = await websiteRpc('meerath_website_content_v1', {});
+      const data = await websiteRpc(MENU_CONFIG.rpc.websiteContent, {});
       if (data?.version !== 1 || !data.content || typeof data.content !== 'object' || Array.isArray(data.content)) throw new Error('Invalid content');
       next = data.content;
     } catch (error) { console.warn('Website content unavailable'); }
@@ -74,6 +78,7 @@ function loadWebsiteContent() {
   return websiteRequest;
 }
 function announcementMarkup() {
+  if (!featureEnabled('announcements')) return '';
   const rows = liveAnnouncements();
   if (!rows.length) return '';
   const text = rows.map(a => {
@@ -86,10 +91,10 @@ function announcementMarkup() {
 function announcementAction(index) {
   const row = appAnnouncements[index];
   if (!row || !liveAnnouncements().includes(row)) return;
-  if (row.action === 'catering') go('cateringPage');
+  if (row.action === 'catering' && featureEnabled('catering')) go('cateringPage');
   if (row.action === 'menu' || row.action === 'offers') go(row.action);
   if (row.action === 'call') window.location.href = 'tel:' + RESTAURANT.phone;
-  if (row.action === 'whatsapp') window.open(waLink(updateCopy('Hello Meerath','مرحباً ميراث')), '_blank', 'noopener');
+  if (row.action === 'whatsapp') window.open(waLink(updateCopy(`Hello ${APP_CONFIG.brand.shortName}`,`مرحباً ${APP_CONFIG.brand.shortNameAr}`)), '_blank', 'noopener');
 }
 function toggleAnnouncement(button) {
   const paused = button.parentElement.classList.toggle('paused');
@@ -97,6 +102,7 @@ function toggleAnnouncement(button) {
   button.textContent = paused ? updateCopy('Play','تشغيل') : updateCopy('Pause','إيقاف');
 }
 function cateringCardMarkup() {
+  if (!featureEnabled('catering')) return '';
   return `<button class="catering-card" onclick="go('cateringPage')"><strong>${updateCopy('Events & Catering', 'المناسبات والتموين')} →</strong><span>${updateCopy('Family gatherings, office lunches and special occasions. Request a quote.', 'تجمعات عائلية وغداء العمل والمناسبات الخاصة. اطلب عرض سعر.')}</span></button>`;
 }
 function requiredLabel(en, ar) {
@@ -161,7 +167,7 @@ function selectCateringDate(value) {
 function cateringAreaMarkup() {
   const venue=cateringDraft.venue_type || '';
   const outside=venue==='outside', atMeerath=venue==='meerath';
-  return `<label id="cateringAreaLabel">${updateCopy('Event location','موقع المناسبة')} <span id="cateringAreaRequired" class="required-mark" ${outside?'':'hidden'} aria-hidden="true">*</span><input class="field" name="area" type="text" value="${escapeHtml(cateringDraft.area || '')}" maxlength="160" ${outside?'required':''} ${atMeerath?'disabled':''} placeholder="${atMeerath?updateCopy('Meerath Kabab · Olaya','ميراث كباب · العليا'):updateCopy('Area, street or venue name','الحي أو الشارع أو اسم القاعة')}"></label>`;
+  return `<label id="cateringAreaLabel">${updateCopy('Event location','موقع المناسبة')} <span id="cateringAreaRequired" class="required-mark" ${outside?'':'hidden'} aria-hidden="true">*</span><input class="field" name="area" type="text" value="${escapeHtml(cateringDraft.area || '')}" maxlength="160" ${outside?'required':''} ${atMeerath?'disabled':''} placeholder="${atMeerath?escapeHtml(configuredBranchName()):updateCopy('Area, street or venue name','الحي أو الشارع أو اسم القاعة')}"></label>`;
 }
 function updateCateringVenue(form) {
   saveCateringDraft(form);
@@ -169,7 +175,7 @@ function updateCateringVenue(form) {
   const outside=venue==='outside', atMeerath=venue==='meerath';
   if (atMeerath) { area.value=''; cateringDraft.area=''; }
   area.disabled=atMeerath; area.required=outside;
-  area.placeholder=atMeerath?updateCopy('Meerath Kabab · Olaya','ميراث كباب · العليا'):updateCopy('Area, street or venue name','الحي أو الشارع أو اسم القاعة');
+  area.placeholder=atMeerath?configuredBranchName():updateCopy('Area, street or venue name','الحي أو الشارع أو اسم القاعة');
   if (requiredMark) requiredMark.hidden=!outside;
 }
 function updateCateringService(form) {
@@ -250,13 +256,14 @@ function cateringConfirmationPage() {
       <div class="thanks-check" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6.5 12.5 3.4 3.4 7.8-8"></path></svg></div>
       <span class="thanks-kicker">${updateCopy('REQUEST RECEIVED','تم استلام الطلب')}</span>
       <h3>${escapeHtml(updateCopy(`Thank you, ${row.name}!`,`شكراً لك، ${row.name}!`))}</h3>
-      <p>${escapeHtml(updateCopy(`Thank you for considering Meerath Kabab for your ${service}. Your request has been received successfully.`,`شكراً لاختيارك ميراث كباب من أجل ${service}. تم استلام طلبك بنجاح.`))}</p>
+      <p>${escapeHtml(updateCopy(`Thank you for considering ${APP_CONFIG.brand.name} for your ${service}. Your request has been received successfully.`,`شكراً لاختيارك ${APP_CONFIG.brand.nameAr} من أجل ${service}. تم استلام طلبك بنجاح.`))}</p>
       <div class="thanks-summary"><div><small>${updateCopy('REQUEST','الطلب')}</small><strong>${escapeHtml(service)}</strong></div><div><small>${updateCopy('ESTIMATE','العدد التقريبي')}</small><strong>${escapeHtml(countText)}</strong></div><div><small>${updateCopy('PREFERRED DATE','التاريخ المفضل')}</small><strong>${escapeHtml(dateText)}</strong></div></div>
       <p class="thanks-next">${escapeHtml(updateCopy(`Our team will contact you on ${row.mobile} to understand the final details and prepare the best quotation for you. Submitting this request does not confirm a booking.`,`سيتواصل فريقنا معك على ${row.mobile} لفهم التفاصيل النهائية وإعداد أفضل عرض سعر لك. إرسال هذا الطلب لا يؤكد الحجز.`))}</p>
       <div class="thanks-actions"><button class="btn btn-primary" type="button" onclick="resetCateringConfirmation('home')">${updateCopy('Back to home','العودة للرئيسية')}</button><button class="btn thanks-secondary" type="button" onclick="resetCateringConfirmation()">${updateCopy('Submit another request','إرسال طلب آخر')}</button></div>
     </div></section>${nav('more')}`;
 }
 function cateringPage() {
+  if (!featureEnabled('catering')) return '';
   if (cateringConfirmation) return cateringConfirmationPage();
   seedCateringCustomer();
   return `<section class="screen"><div class="topbar">${back('home')}<h2>${updateCopy('Events & Catering','المناسبات والتموين')}</h2></div>
@@ -314,7 +321,7 @@ async function submitCatering(event) {
   cateringBusy = true; button.disabled = true;
   result.textContent = updateCopy('Sending…', 'جارٍ الإرسال…');
   try {
-    const id = await websiteRpc('submit_meerath_catering_enquiry_v2', {payload});
+    const id = await websiteRpc(MENU_CONFIG.rpc.catering, {payload});
     if (typeof id !== 'string' || !isMenuId(id)) throw new Error('Invalid confirmation');
     cateringConfirmation = {
       name: payload.name,

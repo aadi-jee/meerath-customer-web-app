@@ -6,8 +6,10 @@ const path = require('node:path');
 function env() {
   const context = vm.createContext({console, AbortController, setTimeout, clearTimeout, setInterval:()=>0,
     window:{addEventListener(){}}, requestAnimationFrame:fn=>fn()});
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../js/brand-config.js'),'utf8'),context);
   vm.runInContext(`const state={lang:'en', screen:'listing', categoryId:'bbq', subcategoryId:'chicken', extras:[], itemId:'tikka'};
     const MENU_CONFIG={url:'https://example.test',publicKey:'public'};
+    MENU_CONFIG.rpc=APP_CONFIG.backend.rpc;
     const element={scrollTop:650}; const parent={scrollTop:25};
     const document={querySelector:()=>element}; const $app=()=>({parentElement:parent});
     const render=()=>{element.scrollTop=0}; const renderKeepScroll=()=>{};

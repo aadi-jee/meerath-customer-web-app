@@ -7,7 +7,7 @@ const vm = require('node:vm');
 function environment() {
   const context = vm.createContext({console:{warn(){}},URL,Intl,Date,AbortController,setTimeout,clearTimeout,
     localStorage:{getItem:()=>null},window:{},document:{getElementById:()=>null}});
-  for (const file of ['data.js','content.js','app.js']) {
+  for (const file of ['brand-config.js','data.js','content.js','app.js']) {
     let source=fs.readFileSync(path.join(__dirname,'../js',file),'utf8');
     if(file==='app.js') source=source.slice(0,source.lastIndexOf('\napplyDir();'));
     vm.runInContext(source,context);

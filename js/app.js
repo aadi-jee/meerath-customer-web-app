@@ -7,11 +7,11 @@ const RESTAURANT_ORDER_WINDOW = Object.freeze({
 });
 
 const state = {
-  lang: localStorage.getItem("mk-lang") === "ar" ? "ar" : "en",
+  lang: readAppStorage("language", ["mk-lang"]) === "ar" ? "ar" : "en",
   appearance: ["dark", "light", "system"].includes(
-    localStorage.getItem("mk-appearance")
+    readAppStorage("appearance", ["mk-appearance"])
   )
-    ? localStorage.getItem("mk-appearance")
+    ? readAppStorage("appearance", ["mk-appearance"])
     : "dark",
   screen: "splash",
   categoryId: "",
@@ -74,8 +74,8 @@ function restaurantAcceptingOrders(date = new Date()) {
 }
 function restaurantClosedMessage() {
   return cartCopy(
-    "Meerath Kabab is currently closed. Please place your order during our working hours: 12:00 PM to 1:00 AM.",
-    "مطعم ميراث كباب مغلق حالياً. يرجى تقديم طلبكم خلال ساعات العمل: من 12:00 ظهراً إلى 1:00 صباحاً."
+    `${APP_CONFIG.brand.name} is currently closed. Please place your order during our working hours: 12:00 PM to 1:00 AM.`,
+    `${APP_CONFIG.brand.nameAr} مغلق حالياً. يرجى تقديم طلبكم خلال ساعات العمل: من 12:00 ظهراً إلى 1:00 صباحاً.`
   );
 }
 function unavailableTimeMessage() {
@@ -179,6 +179,18 @@ function t(key) {
   return (I18N[state.lang] && I18N[state.lang][key]) || I18N.en[key] || key;
 }
 
+function brandedRewardsLabel() {
+  return state.lang === "ar"
+    ? `${t("rewards")} ${brandShortName("ar")}`
+    : `${brandShortName("en")} ${t("rewards")}`;
+}
+
+function brandedWelcomeLabel() {
+  return state.lang === "ar"
+    ? `مرحباً بك في ${APP_CONFIG.brand.shortNameAr}`
+    : `Welcome to ${APP_CONFIG.brand.shortName}`;
+}
+
 function loc(obj, field) {
   if (!obj) return "";
   return escapeHtml(state.lang === "ar" ? obj[field + "Ar"] || obj[field] : obj[field]);
@@ -204,13 +216,14 @@ function applyAppearance() {
   document.body.classList.toggle("dark-theme", mode === "dark");
 
   document.documentElement.style.colorScheme = mode;
+  applyBrandShell(mode);
 }
 
 function setAppearance(mode) {
   if (!["dark", "light", "system"].includes(mode)) return;
 
   state.appearance = mode;
-  localStorage.setItem("mk-appearance", mode);
+  localStorage.setItem(appStorageKey("appearance"), mode);
 
   applyAppearance();
   render();
@@ -218,7 +231,7 @@ function setAppearance(mode) {
 
 function setLang(lang) {
   state.lang = lang;
-  localStorage.setItem("mk-lang", lang);
+  localStorage.setItem(appStorageKey("language"), lang);
   applyDir();
   render();
 }
@@ -412,8 +425,8 @@ function nav(active) {
 
   return `<nav class="nav">
     <div class="desktop-nav-brand">
-      <img src="assets/images/meerath-logo.png" alt="Meerath Kabab" />
-      <div><strong>${RESTAURANT.name}</strong><span>Olaya, Riyadh</span></div>
+      <img src="${APP_CONFIG.brand.logo}" alt="${escapeHtml(APP_CONFIG.brand.logoAlt)}" />
+      <div><strong>${RESTAURANT.name}</strong><span>${escapeHtml(APP_CONFIG.branch.name)}, ${escapeHtml(APP_CONFIG.branch.city)}</span></div>
     </div>
     ${items.map(([id, icon, key]) =>
       `<button class="${active === id ? "active" : ""}" onclick="go('${id}')">
@@ -508,8 +521,8 @@ function splash() {
       <div class="splash-lang">${langSwitch()}</div>
       <img
   class="splash-brand-logo"
-  src="assets/images/meerath-logo.png"
-  alt="Meerath Kabab & Roll"
+  src="${APP_CONFIG.brand.logo}"
+  alt="${escapeHtml(APP_CONFIG.brand.logoAlt)}"
 />
       <p>${t("tagline")}</p>
       <button class="btn btn-primary" onclick="go('home')">${t("startOrdering")}</button>
@@ -715,13 +728,13 @@ function setHomeOrderType(type, button) {
   if (location) {
     if (type === "delivery") {
       location.innerHTML =
-        `Deliver to <strong>Askaan & nearby</strong>`;
+        `Deliver to <strong>${escapeHtml(state.lang === "ar" ? APP_CONFIG.branch.deliveryAreaAr : APP_CONFIG.branch.deliveryArea)}</strong>`;
     } else if (type === "takeaway") {
       location.innerHTML =
-        `Pickup from <strong>Meerath Kabab · Olaya</strong>`;
+        `Pickup from <strong>${escapeHtml(branchDisplayName(state.lang))}</strong>`;
     } else {
       location.innerHTML =
-        `Dining at <strong>Meerath Kabab · Olaya</strong>`;
+        `Dining at <strong>${escapeHtml(branchDisplayName(state.lang))}</strong>`;
     }
   }
 
@@ -746,17 +759,17 @@ function home() {
 
     <img
       class="home-brand-logo"
-      src="assets/images/meerath-logo.png"
-      alt="Meerath"
+      src="${APP_CONFIG.brand.logo}"
+      alt="${escapeHtml(APP_CONFIG.brand.logoAlt)}"
     />
 
     <div class="loc" id="homeOrderLocation">
       ${
         state.orderType === "delivery"
-          ? `Deliver to <strong>Askaan & nearby</strong>`
+          ? `Deliver to <strong>${escapeHtml(state.lang === "ar" ? APP_CONFIG.branch.deliveryAreaAr : APP_CONFIG.branch.deliveryArea)}</strong>`
           : state.orderType === "takeaway"
-          ? `Pickup from <strong>Meerath Kabab · Olaya</strong>`
-          : `Dining at <strong>Meerath Kabab · Olaya</strong>`
+          ? `Pickup from <strong>${escapeHtml(branchDisplayName(state.lang))}</strong>`
+          : `Dining at <strong>${escapeHtml(branchDisplayName(state.lang))}</strong>`
       }
     </div>
 
@@ -1108,7 +1121,7 @@ function setCheckoutOrderType(type, button) {
         <h4>${t("pickupFrom")}</h4>
 
         <p>
-          Meerath Kabab · Olaya<br>
+          ${escapeHtml(branchDisplayName(state.lang))}<br>
           ${loc(RESTAURANT, "address")}
         </p>
 
@@ -1126,7 +1139,7 @@ function setCheckoutOrderType(type, button) {
         <h4>${t("diningAt")}</h4>
 
         <p>
-          Meerath Kabab · Olaya<br>
+          ${escapeHtml(branchDisplayName(state.lang))}<br>
           ${loc(RESTAURANT, "address")}
         </p>
 
@@ -1268,7 +1281,7 @@ function checkout() {
               <h4>${t("pickupFrom")}</h4>
 
               <p>
-                Meerath Kabab · Olaya<br>
+                ${escapeHtml(branchDisplayName(state.lang))}<br>
                 ${loc(RESTAURANT, "address")}
               </p>
 
@@ -1287,7 +1300,7 @@ function checkout() {
               <h4>${t("diningAt")}</h4>
 
               <p>
-                Meerath Kabab · Olaya<br>
+                ${escapeHtml(branchDisplayName(state.lang))}<br>
                 ${loc(RESTAURANT, "address")}
               </p>
 
@@ -1360,7 +1373,7 @@ function confirmation() {
 
   if (o.status === "rejected") {
     return `<section class="screen confirmation-screen"><div class="success">
-      <img class="confirmation-brand-logo" src="assets/images/meerath-logo.png" alt="Meerath" />
+      <img class="confirmation-brand-logo" src="${APP_CONFIG.brand.logo}" alt="${escapeHtml(APP_CONFIG.brand.logoAlt)}" />
       <h2>${cartCopy("Order could not be accepted", "تعذر قبول الطلب")}</h2>
       <p class="confirmation-message">${escapeHtml(o.rejectionReason || cartCopy("Please contact the restaurant for help.", "يرجى التواصل مع المطعم للمساعدة."))}</p>
       <p class="confirmation-order">${t("order")} <strong>${escapeHtml(o.id)}</strong></p>
@@ -1384,8 +1397,8 @@ function confirmation() {
 
           <img
             class="confirmation-brand-logo"
-            src="assets/images/meerath-logo.png"
-            alt="Meerath"
+            src="${APP_CONFIG.brand.logo}"
+            alt="${escapeHtml(APP_CONFIG.brand.logoAlt)}"
           />
 
           <h2>${t("orderReceived")}</h2>
@@ -1448,8 +1461,8 @@ function confirmation() {
 
         <img
           class="confirmation-brand-logo"
-          src="assets/images/meerath-logo.png"
-          alt="Meerath"
+          src="${APP_CONFIG.brand.logo}"
+          alt="${escapeHtml(APP_CONFIG.brand.logoAlt)}"
         />
 
         <div class="check">✓</div>
@@ -2814,7 +2827,7 @@ function signedInAccount() {
       </div>
 
       <div class="account-section-title">
-        ${t("meerathRewards")}
+        ${brandedRewardsLabel()}
       </div>
 
       <div class="signed-rewards-card">
@@ -3116,7 +3129,7 @@ function account() {
         </div>
 
         <div class="account-guest-copy">
-          <h3>${t("welcomeMeerath")}</h3>
+          <h3>${brandedWelcomeLabel()}</h3>
           <p>${t("accountGuestSub")}</p>
         </div>
 
@@ -3130,7 +3143,7 @@ function account() {
       </div>
 
       <div class="account-section-title">
-        ${t("meerathRewards")}
+        ${brandedRewardsLabel()}
       </div>
 
       <button
@@ -3144,7 +3157,7 @@ function account() {
         </div>
 
         <div class="account-reward-copy">
-          <strong>${t("meerathRewards")}</strong>
+          <strong>${brandedRewardsLabel()}</strong>
           <span>${t("rewardsGuestSub")}</span>
           <small>${t("signInToViewRewards")}</small>
         </div>

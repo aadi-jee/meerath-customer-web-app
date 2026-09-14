@@ -26,7 +26,7 @@ function environment() {
     window: {addEventListener: () => {}},
     document: {hidden:false, addEventListener:()=>{}, getElementById:()=>({parentElement:{scrollTop:0}})},
   });
-  for (const file of ['data.js', 'content.js']) {
+  for (const file of ['brand-config.js', 'data.js', 'content.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, 'js', file), 'utf8'), context);
   }
   const app = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');

@@ -8,6 +8,7 @@ const root = path.join(__dirname, '..');
 function environment() {
   const c = vm.createContext({console, URL, Intl, Date, setTimeout:()=>0,
     localStorage:{getItem:()=>null}, window:{}, document:{getElementById:()=>({parentElement:{scrollTop:0}})}});
+  vm.runInContext(fs.readFileSync(path.join(root,'js/brand-config.js'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(root,'js/data.js'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(root,'js/content.js'),'utf8'),c);
   const app = fs.readFileSync(path.join(root,'js/app.js'),'utf8');
