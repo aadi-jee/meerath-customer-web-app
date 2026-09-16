@@ -5672,3 +5672,7 @@ body.light-theme .orders-call-btn {
   border-color: rgba(240, 138, 26, .38);
   color: #a85608;
 }
+
+/* Explicit delivery destination selector, mobile and desktop. */
+#delivery-pin-map{height:340px;min-height:280px;width:100%;border-radius:18px;overflow:hidden;margin:14px 0;background:var(--bg-2,#eee)}
+.delivery-pin-form{display:grid;gap:12px}.delivery-pin-form button{min-height:48px}#delivery-pin-status{overflow-wrap:anywhere}#delivery-place-search>*{width:100%}

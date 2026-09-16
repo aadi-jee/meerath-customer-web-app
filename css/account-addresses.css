@@ -1,0 +1,39 @@
+/* Phase 4: saved-address loading, errors and server mutation states. */
+.address-load-state,
+.address-limit-note {
+  display: block;
+  margin: 0 0 14px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+.address-load-state {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #141414;
+}
+
+.address-load-state button {
+  margin-inline-start: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--orange);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.address-limit-note { margin-top: 10px; }
+
+.saved-address-actions button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+body.light-theme .address-load-state {
+  background: #ffffff;
+  border-color: #dedbd6;
+  color: #74706b;
+}

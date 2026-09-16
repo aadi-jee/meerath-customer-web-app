@@ -42,6 +42,7 @@ function saveAuthSession(session) {
 
 function clearAuthSession() {
   if (typeof resetAccountOrders === 'function') resetAccountOrders();
+  if (typeof resetAccountAddresses === 'function') resetAccountAddresses();
   customerAuthSession = null;
   try { localStorage.removeItem(authSessionKey()); } catch (_) {}
   if (typeof state !== "undefined") {
@@ -164,6 +165,7 @@ async function customerAuthRpc(name, params, retry = true) {
 
 function applyCustomerProfile(profile) {
   if (state.authUserId !== customerAuthSession?.user?.id && typeof resetAccountOrders === 'function') resetAccountOrders();
+  if (state.authUserId !== customerAuthSession?.user?.id && typeof resetAccountAddresses === 'function') resetAccountAddresses();
   const phone = String(profile?.phone || customerAuthSession?.user?.phone || "");
   state.authUserId = customerAuthSession?.user?.id || "";
   state.customerName = String(profile?.full_name || "");
@@ -191,6 +193,31 @@ async function saveCustomerProfile(fullName, email) {
   return profile;
 }
 
+async function resumeTrustedCustomerForPhone(phone) {
+  const expectedPhone = normalizeSaudiMobile(phone);
+  if (!expectedPhone) return false;
+
+  let session = customerAuthSession;
+  if (!validAuthSession(session)) {
+    try { session = JSON.parse(localStorage.getItem(authSessionKey()) || "null"); }
+    catch (_) { session = null; }
+  }
+  if (!validAuthSession(session) || normalizeSaudiMobile(session.user.phone) !== expectedPhone) return false;
+
+  customerAuthSession = session;
+  try {
+    await loadCustomerProfile();
+    if (typeof loadAccountAddresses === "function") await loadAccountAddresses();
+    return true;
+  } catch (error) {
+    if ([401, 403].includes(error?.status)) {
+      clearAuthSession();
+      return false;
+    }
+    throw error;
+  }
+}
+
 async function bootstrapCustomerAuth() {
   let stored = null;
   try { stored = JSON.parse(localStorage.getItem(authSessionKey()) || "null"); } catch (_) {}
@@ -199,6 +226,7 @@ async function bootstrapCustomerAuth() {
   try {
     await loadCustomerProfile();
     if (state.screen === 'track' && typeof loadAccountOrders === 'function') loadAccountOrders();
+    if (typeof loadAccountAddresses === 'function') await loadAccountAddresses();
     if (state.screen === "account") renderKeepScroll();
     return true;
   } catch (error) {

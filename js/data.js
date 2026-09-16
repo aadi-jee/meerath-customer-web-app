@@ -343,11 +343,16 @@ const LEGACY_CUSTOMER_ORDER_HISTORY_STORAGE_KEY = "meerath-customer-order-histor
 const customerOrderConnection = { pending: null, timer: null };
 
 async function customerOrderRpc(name, params) {
+  let accessToken = null;
+  try {
+    accessToken = typeof activeAccessToken === "function" ? await activeAccessToken() : null;
+  } catch (_) {}
   const response = await fetch(`${MENU_CONFIG.url}/rest/v1/rpc/${name}`, {
     method: "POST",
     headers: {
       apikey: MENU_CONFIG.publicKey,
       "Content-Type": "application/json",
+      ...(accessToken ? {Authorization: `Bearer ${accessToken}`} : {}),
     },
     body: JSON.stringify(params),
     cache: "no-store",
@@ -366,10 +371,21 @@ async function customerOrderRpc(name, params) {
 
 async function submitCustomerOrder(order) {
   const branchId = selectMenuBranch(menuConnection.payload?.branches || []);
-  return customerOrderRpc(MENU_CONFIG.rpc.createOrder, {
+  return customerOrderRpc(order.fulfillment_type === "delivery" ? "oracy_create_pin_delivery_order_v2" : MENU_CONFIG.rpc.createOrder, {
     p_restaurant_id: MENU_CONFIG.restaurantId,
     p_branch_id: branchId,
     p_order: order,
+  });
+}
+
+async function requestCustomerDeliveryQuote(address, foodSubtotal) {
+  const branchId = selectMenuBranch(menuConnection.payload?.branches || []);
+  return customerOrderRpc("oracy_customer_delivery_quote_v1", {
+    p_restaurant_id: MENU_CONFIG.restaurantId,
+    p_branch_id: branchId,
+    p_address_id: address.id,
+    p_address_version: address.updatedAt,
+    p_food_subtotal: foodSubtotal,
   });
 }
 

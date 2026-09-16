@@ -10,6 +10,7 @@ function environment() {
     localStorage:{getItem:()=>null}, window:{}, document:{getElementById:()=>({parentElement:{scrollTop:0}})}});
   vm.runInContext(fs.readFileSync(path.join(root,'js/brand-config.js'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(root,'js/data.js'),'utf8'),c);
+  vm.runInContext(fs.readFileSync(path.join(root,'js/auth.js'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(root,'js/content.js'),'utf8'),c);
   const app = fs.readFileSync(path.join(root,'js/app.js'),'utf8');
   vm.runInContext(app.slice(0, app.lastIndexOf('\napplyDir();')),c);

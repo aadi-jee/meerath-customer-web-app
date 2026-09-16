@@ -1,0 +1,96 @@
+/* Phase 5: mobile-first checkout identity and trusted-account summary. */
+.checkout-mobile-intro {
+  margin: 0 2px 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.checkout-mobile-field {
+  margin-bottom: 18px;
+}
+
+.checkout-mobile-field .mobile-input {
+  color: var(--text);
+}
+
+.checkout-account-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 15px 16px;
+  background: #141414;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.checkout-account-card div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.checkout-account-card span,
+.checkout-account-card small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.checkout-account-card strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checkout-account-card button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 7px 11px;
+  background: transparent;
+  border: 1px solid rgba(240, 138, 26, 0.35);
+  border-radius: 10px;
+  color: var(--orange);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+body.is-ar .checkout-mobile-intro,
+body.is-ar .checkout-account-card {
+  text-align: right;
+}
+
+body.is-ar .checkout-mobile-field .country-code {
+  border-right: 0;
+  border-left: 1px solid var(--line);
+}
+
+body.light-theme .checkout-mobile-field,
+body.light-theme .checkout-account-card {
+  background: #ffffff;
+  border-color: #dedbd6;
+}
+
+body.light-theme .checkout-mobile-field .country-code,
+body.light-theme .checkout-account-card strong {
+  color: #171717;
+}
+
+body.light-theme .checkout-mobile-field .mobile-input {
+  color: #171717;
+}
+
+body.light-theme .checkout-mobile-intro,
+body.light-theme .checkout-account-card span,
+body.light-theme .checkout-account-card small {
+  color: #74706b;
+}
+/* Server delivery quote below the confirmed location. */
+.delivery-quote-note { margin-top:12px; padding:12px; border:1px solid var(--line,#555); border-radius:12px; line-height:1.6; }
+.delivery-quote-error { color:var(--text,#eee); }
+.delivery-quote-note a,.delivery-quote-note button { margin-inline-start:8px; }

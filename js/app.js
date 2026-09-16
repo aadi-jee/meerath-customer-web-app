@@ -1,6 +1,4 @@
 const VAT = 0.15;
-const DELIVERY = 0;
-const MIN_DELIVERY_ORDER = 30;
 const RESTAURANT_ORDER_WINDOW = Object.freeze({
   openSeconds: 12 * 60 * 60,
   closeSeconds: 1 * 60 * 60,
@@ -45,6 +43,12 @@ orderHistory: [],
   otpSentAt: 0,
   savedAddresses: [],
   defaultAddressId: null,
+  checkoutAddressId: null,
+  deliveryQuote: null,
+  deliveryQuoteKey: "",
+  deliveryQuoteBusy: false,
+  deliveryQuoteError: "",
+  deliveryQuoteRequest: 0,
 editingAddressId: null,
   customerName: "",
   customerPhone: "",
@@ -55,6 +59,7 @@ editingAddressId: null,
   addressBuilding: "",
   addressUnit: "",
   addressDirections: "",
+  addressReturnScreen: "account",
   rewardPoints: 0,
   rewardStamps: 0,
   rewardVouchers: 0,
@@ -241,6 +246,9 @@ function setLang(lang) {
 
 function go(screen, extra = {}) {
   if (typeof captureCartOrigin === 'function') captureCartOrigin(screen);
+  if (screen === "savedAddressesPage" && state.screen !== "addAddressPage") {
+    state.addressReturnScreen = state.screen === "checkout" ? "checkout" : "account";
+  }
   if (screen !== "detail") state.cartEditKey = null;
   if (screen === "checkout") {
     validateMenuCart().then(ok => { if (ok && checkOfferCartRules()) { Object.assign(state, extra, {screen}); render(); } });
@@ -249,6 +257,7 @@ function go(screen, extra = {}) {
   if (screen === "listing" && extra.categoryId !== undefined && extra.categoryId !== state.categoryId) state.subcategoryId = "";
   Object.assign(state, extra, { screen });
   if (screen === 'track' && state.isLoggedIn && typeof loadAccountOrders === 'function') loadAccountOrders();
+  if (screen === 'savedAddressesPage' && state.isLoggedIn && typeof loadAccountAddresses === 'function') loadAccountAddresses();
   render();
   $app().parentElement.scrollTop = 0;
 }
@@ -271,12 +280,16 @@ function totals() {
   const itemsCents = state.cart.reduce((n,l) => n + cents(l.price) * l.qty, 0);
   const regularCents = state.cart.reduce((n,l) =>
     n + cents(l.basePrice ?? itemById(l.id)?.basePrice ?? l.price) * l.qty, 0);
-  const delivery = state.orderType === "delivery" ? DELIVERY : 0;
   const hasItemOffer = state.cart.some(l => itemById(l.id)?.offer);
   const discountCents = state.couponOn && !hasItemOffer ? Math.min(1000, itemsCents) : 0;
+  const foodTotal = Math.max(0, itemsCents - discountCents) / 100;
+  const address = typeof selectedDeliveryAddress === "function" ? selectedDeliveryAddress() : null;
+  const quoteKey = address ? deliveryQuoteFingerprint(address, foodTotal) : "";
+  const delivery = state.orderType === "delivery" && state.deliveryQuote?.eligible === true &&
+    state.deliveryQuoteKey === quoteKey ? Number(state.deliveryQuote.fee || 0) : 0;
   const total = Math.max(0, itemsCents - discountCents + cents(delivery)) / 100;
   const vat = roundMoney(total * VAT / (1 + VAT));
-  return {subtotal:roundMoney(total - vat), delivery, discount:discountCents / 100, vat, total,
+  return {subtotal:roundMoney(total - vat), foodTotal, delivery, discount:discountCents / 100, vat, total,
     regularItemsTotal:regularCents / 100, offerSavings:Math.max(0, regularCents - itemsCents) / 100};
 }
 function cartSummaryMarkup() {
@@ -284,7 +297,7 @@ function cartSummaryMarkup() {
   return `${offerSpendMarkup()}<div><span>${cartCopy("Items total (VAT included)", "إجمالي الأصناف (شامل الضريبة)")}</span><span>${money(tot.regularItemsTotal)}</span></div>
     ${tot.offerSavings ? `<div class="offer-saving"><span>${cartCopy("Offer savings", "توفير العروض")}</span><span>− ${money(tot.offerSavings)}</span></div>` : ""}
     ${tot.discount ? `<div><span>${t("coupon")}</span><span>− ${money(tot.discount)}</span></div>` : ""}
-    ${state.orderType === "delivery" ? `<div><span>${t("deliveryFee")}</span><span>${money(tot.delivery)}</span></div>` : ""}
+    ${state.orderType === "delivery" ? `<div><span>${t("deliveryFee")}</span><span>${currentDeliveryQuote()?.eligible ? money(tot.delivery) : cartCopy("Select location", "اختر الموقع")}</span></div>` : ""}
     <div class="total"><span>${t("total")}</span><span>${money(tot.total)}</span></div>
     <div class="included-vat"><span>${cartCopy("Includes VAT 15%", "يشمل ضريبة القيمة المضافة 15%")}</span><span>${money(tot.vat)}</span></div>`;
 }
@@ -1086,6 +1099,7 @@ function setCheckoutTiming(value, button) {
 function setCheckoutOrderType(type, button) {
   state.orderType = type;
   state.orderTiming = "asap";
+  clearDeliveryQuote();
 
   /* Order type active tab */
   const typeBox = button.closest(".checkout-order-types");
@@ -1116,8 +1130,7 @@ function setCheckoutOrderType(type, button) {
         </div>
 
         <p>
-          ${t("location")}<br>
-          ${t("addressLine")}
+          ${checkoutDeliveryAddressHtml()}
         </p>
       `;
     } else if (type === "takeaway") {
@@ -1182,11 +1195,126 @@ function setCheckoutOrderType(type, button) {
   if (note) {
     note.textContent = getCheckoutTimingSub();
   }
+  renderKeepScroll();
+}
+
+function selectedDeliveryAddress() {
+  const id = state.checkoutAddressId || state.lastDeliveryAddressId || state.defaultAddressId;
+  return state.savedAddresses.find(row => row.id === id) || null;
+}
+function deliveryAddressButton() {
+  return state.isLoggedIn ? `<button type="button" class="btn btn-ghost" onclick="go('savedAddressesPage')">${cartCopy("Choose / edit address", "اختيار / تعديل العنوان")}</button>` : `<small>${cartCopy("Choose your address after verifying your number.", "اختر عنوانك بعد التحقق من رقمك.")}</small>`;
+}
+function selectCheckoutAddress(id) {
+  if (!state.isLoggedIn || accountAddresses.busy || accountAddresses.mutating) return;
+  if (!state.savedAddresses.some(row => row.id === id)) return;
+  const selected=state.savedAddresses.find(row=>row.id===id);
+  if(!validDeliveryPin(selected))return editAddress(id);
+  state.checkoutAddressId = id;
+  state.checkoutPinConfirmedId = id;
+  state.checkoutPinConfirmedVersion=selected.updatedAt;
+  clearDeliveryQuote();
+  go("checkout");
+}
+
+function deliveryQuoteFingerprint(address, foodSubtotal) {
+  return address ? `${state.authUserId}|${JSON.stringify(menuConnection.payload?.branches || [])}|${address.id}|${address.updatedAt}|${Number(foodSubtotal).toFixed(2)}` : "";
+}
+function currentDeliveryQuote() {
+  const address=selectedDeliveryAddress();
+  return state.isLoggedIn && address && state.checkoutPinConfirmedId===address.id &&
+    state.checkoutPinConfirmedVersion===address.updatedAt &&
+    state.deliveryQuoteKey===deliveryQuoteFingerprint(address,totalsWithoutDelivery().foodTotal) ? state.deliveryQuote : null;
+}
+function clearDeliveryQuote() {
+  state.deliveryQuote = null; state.deliveryQuoteKey = ""; state.deliveryQuoteError = "";
+  state.deliveryQuoteRequest += 1; state.deliveryQuoteBusy = false;
+}
+async function refreshDeliveryQuote(force = false) {
+  if (state.orderType !== "delivery" || !state.isLoggedIn) return null;
+  const address = selectedDeliveryAddress();
+  if (!validDeliveryPin(address) || state.checkoutPinConfirmedId !== address.id ||
+      state.checkoutPinConfirmedVersion !== address.updatedAt) return null;
+  const foodSubtotal = totalsWithoutDelivery().foodTotal;
+  const key = deliveryQuoteFingerprint(address, foodSubtotal);
+  if (!force && state.deliveryQuoteKey === key && state.deliveryQuote) return state.deliveryQuote;
+  if (!force && state.deliveryQuoteBusy && state.deliveryQuoteKey === key) return null;
+  const request = ++state.deliveryQuoteRequest;
+  const user=state.authUserId;
+  state.deliveryQuoteBusy = true; state.deliveryQuoteKey = key; state.deliveryQuoteError = "";
+  state.deliveryQuote=null;
+  try {
+    const quote = await requestCustomerDeliveryQuote(address, foodSubtotal);
+    if (request !== state.deliveryQuoteRequest || !state.isLoggedIn || state.authUserId!==user || key!==deliveryQuoteFingerprint(selectedDeliveryAddress(),totalsWithoutDelivery().foodTotal)) return null;
+    if (typeof quote?.eligible !== 'boolean' || (quote.eligible && (!Number.isFinite(Number(quote.fee)) || Number(quote.fee)<0))) throw new Error('Invalid delivery quote');
+    state.deliveryQuote = quote;
+    if (!quote?.eligible) state.deliveryQuoteError = quote?.reason || cartCopy("Delivery is unavailable for this location.", "التوصيل غير متاح لهذا الموقع.");
+    return quote;
+  } catch (error) {
+    if (request !== state.deliveryQuoteRequest) return null;
+    state.deliveryQuote = null; state.deliveryQuoteError = String(error?.message || error);
+    return null;
+  } finally {
+    if (request === state.deliveryQuoteRequest) {
+      state.deliveryQuoteBusy = false;
+      if (state.screen === "checkout") renderKeepScroll();
+    }
+  }
+}
+function totalsWithoutDelivery() {
+  const cents = n => Math.round(Number(n) * 100);
+  const itemsCents = state.cart.reduce((n,l) => n + cents(l.price) * l.qty, 0);
+  const hasItemOffer = state.cart.some(l => itemById(l.id)?.offer);
+  const discountCents = state.couponOn && !hasItemOffer ? Math.min(1000, itemsCents) : 0;
+  return {foodTotal: Math.max(0, itemsCents - discountCents) / 100};
+}
+function deliveryQuoteMarkup() {
+  if (state.deliveryQuoteBusy) return `<div class="delivery-quote-note">${cartCopy("Checking delivery area and fee…", "جارٍ التحقق من منطقة ورسوم التوصيل…")}</div>`;
+  if (state.deliveryQuoteError) return `<div class="delivery-quote-note delivery-quote-error">${escapeHtml(state.deliveryQuoteError)} <a href="tel:${escapeHtml(RESTAURANT.phone)}">${cartCopy("Call restaurant","اتصل بالمطعم")}</a> <button type="button" class="link" onclick="refreshDeliveryQuote(true)">${cartCopy("Retry","إعادة المحاولة")}</button></div>`;
+  const q=currentDeliveryQuote();
+  if (!q?.eligible) return `<div class="delivery-quote-note">${cartCopy("Confirm the map location to calculate delivery.", "أكد الموقع على الخريطة لحساب التوصيل.")}</div>`;
+  return `<div class="delivery-quote-note"><strong>${escapeHtml(q.zone || cartCopy("Delivery area","منطقة التوصيل"))}</strong> · ${Number(q.fee)===0?cartCopy("Free delivery","توصيل مجاني"):money(Number(q.fee))} · ${Number(q.distance_km).toFixed(2)} km</div>`;
+}
+function deliveryConfirmationMarkup(o) {
+  return o.orderType === "delivery" && o.address ? `<p class="confirmation-message"><strong>${cartCopy("Delivery address", "عنوان التوصيل")}</strong><br>${escapeHtml(o.address)}</p>` : "";
+}
+function checkoutDeliveryAddressHtml() {
+  const address = selectedDeliveryAddress();
+  if (!address) return `${t("noDeliveryAddressSelected")}<br><small>${t("addDeliveryAddressPrompt")}</small><br>${deliveryAddressButton()}`;
+  const previous=address.id===state.lastDeliveryAddressId;
+  return `<strong>${previous?cartCopy("Your last delivery location","موقع توصيل طلبك السابق"):cartCopy("Delivery location","موقع التوصيل")}</strong>
+    <p>${escapeHtml(pinAddressText(address))}</p>
+    ${validDeliveryPin(address)?`<a href="${deliveryPinLink(address)}" target="_blank" rel="noopener">${cartCopy("View on map","عرض على الخريطة")}</a>`:""}
+    <button type="button" class="btn btn-ghost" onclick="selectCheckoutAddress('${escapeHtml(address.id)}')">${state.checkoutPinConfirmedId===address.id?cartCopy("Location confirmed ✓","تم تأكيد الموقع ✓"):cartCopy("Deliver here","التوصيل هنا")}</button>${deliveryAddressButton()}`;
+}
+
+function checkoutCustomerMarkup() {
+  if (state.isLoggedIn) {
+    return `<div class="checkout-account-card">
+      <div>
+        <span>${t("welcomeBack")}</span>
+        <strong>${escapeHtml(state.customerName || state.customer.name)}</strong>
+        <small dir="ltr">${escapeHtml(state.customerPhone || state.customer.mobile)}</small>
+      </div>
+      <button type="button" onclick="go('account')">${t("viewAccount")}</button>
+    </div>`;
+  }
+  const rawMobile = String(state.customer.mobile || "").replace(/\D/g, "");
+  const mobile = rawMobile.startsWith("966") ? `0${rawMobile.slice(3)}` : rawMobile;
+  return `<p class="checkout-mobile-intro">${t("checkoutMobileIntro")}</p>
+    <div class="mobile-field-wrap checkout-mobile-field">
+      <span class="country-code">+966</span>
+      <input class="field mobile-input" type="tel" inputmode="numeric" maxlength="10"
+        autocomplete="tel" placeholder="${t("mobilePlaceholder")}" value="${escapeHtml(mobile)}"
+        oninput="state.customer.mobile=this.value.replace(/[^0-9]/g,'')" />
+    </div>`;
 }
 
 function checkout() {
   const timingOptions = checkoutTimingOptions();
   const acceptingOrders = restaurantAcceptingOrders();
+  const checkoutBusy = state.authBusy || state.orderSubmitting;
+  if (state.orderType === "delivery" && state.isLoggedIn && !state.deliveryQuoteError) setTimeout(() => refreshDeliveryQuote(), 0);
 
   const timingSub =
     state.orderTiming === "asap"
@@ -1212,26 +1340,7 @@ function checkout() {
         ${t("customerDetails")}
       </h3>
 
-      <input
-        class="field"
-        placeholder="${t("name")}"
-        value="${state.customer.name}"
-        oninput="state.customer.name=this.value"
-      />
-
-      <input
-        class="field"
-        placeholder="${t("mobile")}"
-        value="${state.customer.mobile}"
-        oninput="state.customer.mobile=this.value"
-      />
-
-      <input
-        class="field"
-        placeholder="${t("email")}"
-        value="${state.customer.email}"
-        oninput="state.customer.email=this.value"
-      />
+      ${checkoutCustomerMarkup()}
 
       <h3 class="checkout-section-title">
         ${t("orderType")}
@@ -1274,9 +1383,9 @@ function checkout() {
               </div>
 
               <p>
-                ${t("location")}<br>
-                ${t("addressLine")}
+                ${checkoutDeliveryAddressHtml()}
               </p>
+              ${deliveryQuoteMarkup()}
             </div>
           `
           : state.orderType === "takeaway"
@@ -1360,9 +1469,9 @@ function checkout() {
       <button
         class="btn btn-primary checkout-place-order"
         onclick="placeOrder()"
-        ${acceptingOrders ? "" : "disabled aria-disabled=\"true\""}
+        ${acceptingOrders && !checkoutBusy && (state.orderType !== "delivery" || !state.isLoggedIn || !state.checkoutPinConfirmedId || (currentDeliveryQuote()?.eligible === true && !state.deliveryQuoteBusy)) ? "" : "disabled aria-disabled=\"true\""}
       >
-        ${acceptingOrders ? t("placeOrder") : cartCopy("Ordering is closed", "الطلبات مغلقة")}
+        ${!acceptingOrders ? cartCopy("Ordering is closed", "الطلبات مغلقة") : checkoutBusy ? t("processingOrder") : t("placeOrder")}
       </button>
 
     </section>`;
@@ -1414,6 +1523,7 @@ function confirmation() {
           <span class="confirmation-type">
             ${t(typeKey)}
           </span>
+          ${deliveryConfirmationMarkup(o)}
 
           <p class="confirmation-order">
             ${t("order")}
@@ -1480,6 +1590,7 @@ function confirmation() {
         <span class="confirmation-type">
           ${t(typeKey)}
         </span>
+        ${deliveryConfirmationMarkup(o)}
 
         <p class="confirmation-order">
           ${t("order")}
@@ -2358,7 +2469,16 @@ async function verifyOtp() {
   }
   try {
     const profile = await loadCustomerProfile();
-    if (profile?.full_name) go("account");
+    if (profile?.full_name && typeof loadAccountAddresses === "function") await loadAccountAddresses();
+    if (state.otpPurpose === "guestOrder") {
+      if (profile?.full_name) {
+        toast(authCopy(`Welcome back, ${profile.full_name}`, `مرحباً بعودتك، ${profile.full_name}`));
+        state.otpPurpose = "login";
+        await createOrderAfterVerification();
+      } else {
+        go("profileSetupPage");
+      }
+    } else if (profile?.full_name) go("account");
     else go("profileSetupPage");
   } catch (error) {
     console.error("Customer account setup failed:", error);
@@ -2368,7 +2488,7 @@ async function verifyOtp() {
     ), 6000);
   } finally {
     state.authBusy = false;
-    if (["otpPage", "profileSetupPage", "account"].includes(state.screen)) renderKeepScroll();
+    if (["otpPage", "profileSetupPage", "account", "checkout"].includes(state.screen)) renderKeepScroll();
   }
 }
 
@@ -2446,12 +2566,17 @@ async function completeProfile() {
   state.authBusy = true;
   try {
     await saveCustomerProfile(name, email);
-    go("account");
+    if (state.otpPurpose === "guestOrder") {
+      state.otpPurpose = "login";
+      await createOrderAfterVerification();
+    } else {
+      go("account");
+    }
   } catch (error) {
     toast(authMessage(error), 6000);
   } finally {
     state.authBusy = false;
-    if (["profileSetupPage", "account"].includes(state.screen)) renderKeepScroll();
+    if (["profileSetupPage", "account", "checkout"].includes(state.screen)) renderKeepScroll();
   }
 }
 
@@ -2507,17 +2632,22 @@ function profileSetupPage() {
 
 
 function savedAddressesPage() {
+  const addressBusy = typeof accountAddresses !== "undefined" && (accountAddresses.busy || accountAddresses.mutating);
+  const addressError = typeof accountAddresses !== "undefined" && accountAddresses.error;
   return `
     <section class="screen saved-addresses-screen">
 
       <div class="topbar saved-addresses-topbar">
-        ${back("account")}
+        ${back(state.addressReturnScreen || "account")}
         <h2>${t("savedAddresses")}</h2>
         ${langSwitch()}
       </div>
 
+      ${addressBusy && !state.savedAddresses.length ? `<div class="address-load-state">${t("loadingAddresses")}</div>` : ""}
+      ${addressError ? `<div class="address-load-state address-load-error">${t("addressesUnavailable")} <button onclick="loadAccountAddresses(true)">${t("retry")}</button></div>` : ""}
+
       ${
-        state.savedAddresses.length === 0
+        state.savedAddresses.length === 0 && !addressBusy
           ? `
             <div class="address-empty-state">
               <div class="address-empty-icon">
@@ -2578,34 +2708,30 @@ function savedAddressesPage() {
                         }
                       </div>
 
-                      <span>
-                        ${address.area}, ${address.street}
-                      </span>
-
-                      <small>
-                        ${t("buildingNumber")}: ${address.building}
-                        ${address.unit ? ` · ${address.unit}` : ""}
-                      </small>
+                      <span>${escapeHtml(pinAddressText(address))}</span>
+                      ${validDeliveryPin(address)?`<a href="${deliveryPinLink(address)}" target="_blank" rel="noopener">${cartCopy("View on map","عرض على الخريطة")}</a>`:`<small>${cartCopy("Add a map pin before delivery","أضف موقعاً على الخريطة قبل التوصيل")}</small>`}
 
                       <div class="saved-address-actions">
+                        ${state.addressReturnScreen === "checkout" ? `<button onclick="selectCheckoutAddress('${escapeHtml(address.id)}')" ${addressBusy ? "disabled" : ""}>${cartCopy("Deliver here", "التوصيل هنا")}${state.checkoutAddressId === address.id ? " ✓" : ""}</button>` : ""}
 
                         ${
                           !isDefault
                             ? `
-                              <button onclick="setDefaultAddress(${address.id})">
+                              <button onclick="setDefaultAddress('${escapeHtml(address.id)}')" ${addressBusy ? "disabled" : ""}>
                                 ${t("setDefault")}
                               </button>
                             `
                             : ""
                         }
 
-                        <button onclick="editAddress(${address.id})">
+                        <button onclick="editAddress('${escapeHtml(address.id)}')" ${addressBusy ? "disabled" : ""}>
                           ${t("edit")}
                         </button>
 
                         <button
                           class="address-delete-btn"
-                          onclick="deleteAddress(${address.id})"
+                          onclick="deleteAddress('${escapeHtml(address.id)}')"
+                          ${addressBusy ? "disabled" : ""}
                         >
                           ${t("delete")}
                         </button>
@@ -2625,53 +2751,38 @@ function savedAddressesPage() {
       <button
         class="btn btn-primary add-address-btn"
         onclick="startAddAddress()"
+        ${addressBusy || state.savedAddresses.length >= 10 ? "disabled" : ""}
       >
         + ${t("addNewAddress")}
       </button>
 
+      ${state.savedAddresses.length >= 10 ? `<small class="address-limit-note">${t("addressLimitReached")}</small>` : ""}
+
     </section>`;
 }
 
-function saveAddress() {
-  const area = state.addressArea.trim();
-  const street = state.addressStreet.trim();
-  const building = state.addressBuilding.trim();
-
-  if (!area || !street || !building) {
-    toast(t("addressRequired"));
-    return;
+async function saveAddress() {
+  if (!state.isLoggedIn || accountAddresses.mutating) return;
+  if(!validDeliveryPin(deliveryLocation.draft)||!deliveryLocation.confirmed){
+    toast(cartCopy("Confirm your location pin first.","أكد موقعك على الخريطة أولاً."));return;
   }
-
-  const addressData = {
-    type: state.addressType,
-    area,
-    street,
-    building,
-    unit: state.addressUnit.trim(),
-    directions: state.addressDirections.trim(),
-  };
-
-  if (state.editingAddressId) {
-    state.savedAddresses = state.savedAddresses.map((address) =>
-      address.id === state.editingAddressId
-        ? { ...address, ...addressData }
-        : address
-    );
-
-    toast(t("addressUpdated"));
-  } else {
-    const newAddress = {
-      id: Date.now(),
-      ...addressData,
-    };
-
-    state.savedAddresses.push(newAddress);
-
-    if (!state.defaultAddressId) {
-      state.defaultAddressId = newAddress.id;
-    }
-
-    toast(t("addressSaved"));
+  if(state.addressDirections.trim().length>300)return;
+  const addressData={type:state.addressType,...deliveryLocation.draft,directions:state.addressDirections.trim()};
+  const saveUser=state.authUserId;
+  const wasEditing = Boolean(state.editingAddressId);
+  accountAddresses.mutating = true;
+  renderKeepScroll();
+  try {
+    const saved = await persistAccountAddress(addressData);
+    if(!state.isLoggedIn||state.authUserId!==saveUser)return;
+    if (state.addressReturnScreen === "checkout") {state.checkoutAddressId = saved.id;state.checkoutPinConfirmedId=saved.id;state.checkoutPinConfirmedVersion=state.savedAddresses.find(a=>a.id===saved.id)?.updatedAt;}
+    toast(t(wasEditing ? "addressUpdated" : "addressSaved"));
+  } catch (_) {
+    toast(t("addressSaveFailed"));
+    return;
+  } finally {
+    accountAddresses.mutating = false;
+    if (state.screen === "addAddressPage") renderKeepScroll();
   }
 
   state.editingAddressId = null;
@@ -2682,9 +2793,10 @@ function saveAddress() {
   state.addressUnit = "";
   state.addressDirections = "";
 
-  go("savedAddressesPage");
+  go(state.addressReturnScreen === "checkout" ? "checkout" : "savedAddressesPage");
 }
 function startAddAddress() {
+  resetDeliveryLocation();
   state.editingAddressId = null;
   state.addressType = "home";
   state.addressArea = "";
@@ -2701,6 +2813,7 @@ function editAddress(id) {
 
   if (!address) return;
 
+  resetDeliveryLocation(address);
   state.editingAddressId = id;
   state.addressType = address.type;
   state.addressArea = address.area;
@@ -2712,26 +2825,20 @@ function editAddress(id) {
   go("addAddressPage");
 }
 
-function deleteAddress(id) {
-  state.savedAddresses = state.savedAddresses.filter(
-    (address) => address.id !== id
-  );
-
-  if (state.defaultAddressId === id) {
-    state.defaultAddressId =
-      state.savedAddresses.length > 0
-        ? state.savedAddresses[0].id
-        : null;
-  }
-
-  render();
-  toast(t("addressDeleted"));
+async function deleteAddress(id) {
+  if (!isMenuId(id) || accountAddresses.mutating) return;
+  accountAddresses.mutating = true; renderKeepScroll();
+  try { await removeAccountAddress(id); toast(t("addressDeleted")); }
+  catch (_) { toast(t("addressDeleteFailed")); }
+  finally { accountAddresses.mutating = false; renderKeepScroll(); }
 }
 
-function setDefaultAddress(id) {
-  state.defaultAddressId = id;
-  render();
-  toast(t("defaultAddressSet"));
+async function setDefaultAddress(id) {
+  if (!isMenuId(id) || accountAddresses.mutating) return;
+  accountAddresses.mutating = true; renderKeepScroll();
+  try { await makeDefaultAccountAddress(id); toast(t("defaultAddressSet")); }
+  catch (_) { toast(t("addressDefaultFailed")); }
+  finally { accountAddresses.mutating = false; renderKeepScroll(); }
 }
 
 
@@ -2774,53 +2881,12 @@ function addAddressPage() {
 
       </div>
 
-      <label class="address-form-label">${t("areaDistrict")}</label>
-      <input
-        class="field"
-        type="text"
-        placeholder="${t("areaPlaceholder")}"
-        value="${state.addressArea}"
-        oninput="state.addressArea=this.value"
-      />
-
-      <label class="address-form-label">${t("street")}</label>
-      <input
-        class="field"
-        type="text"
-        placeholder="${t("streetPlaceholder")}"
-        value="${state.addressStreet}"
-        oninput="state.addressStreet=this.value"
-      />
-
-      <label class="address-form-label">${t("buildingNumber")}</label>
-      <input
-        class="field"
-        type="text"
-        placeholder="${t("buildingPlaceholder")}"
-        value="${state.addressBuilding}"
-        oninput="state.addressBuilding=this.value"
-      />
-
-      <label class="address-form-label">${t("unitOptional")}</label>
-      <input
-        class="field"
-        type="text"
-        placeholder="${t("unitPlaceholder")}"
-        value="${state.addressUnit}"
-        oninput="state.addressUnit=this.value"
-      />
-
-      <label class="address-form-label">${t("directionsOptional")}</label>
-      <textarea
-        class="field"
-        rows="3"
-        placeholder="${t("directionsPlaceholder")}"
-        oninput="state.addressDirections=this.value"
-      >${state.addressDirections}</textarea>
+      ${pinFormMarkup()}
 
       <button
         class="btn btn-primary save-address-btn"
         onclick="saveAddress()"
+        ${typeof accountAddresses !== "undefined" && accountAddresses.mutating ? "disabled" : ""}
       >
       ${state.editingAddressId ? t("updateAddress") : t("saveAddress")}
       </button>
@@ -3366,6 +3432,7 @@ function render() {
     account,
   };
   $app().innerHTML = (map[state.screen] || home)();
+  if(state.screen==="addAddressPage")mountDeliveryMap();
   if (["home","menu","listing","detail","cart","checkout","offers"].includes(state.screen)) {
     const screen = $app().querySelector(".screen");
     if (screen) screen.insertAdjacentHTML("afterbegin", menuStatusMarkup());
@@ -3561,6 +3628,7 @@ function getScheduledFor() {
 }
 
 async function placeOrder() {
+  if (state.authBusy || state.orderSubmitting) return;
   if (!restaurantAcceptingOrders()) {
     render();
     return toast(restaurantClosedMessage(), 7000);
@@ -3571,30 +3639,87 @@ async function placeOrder() {
     return toast(t("cartIsEmpty"));
   }
 
-  if (!state.customer.name || !state.customer.mobile) {
-    return toast(t("addNameMobile"));
-  }
-
-  const phone = normalizeSaudiMobile(state.customer.mobile);
+  const phone = normalizeSaudiMobile(state.isLoggedIn ? state.customerPhone || state.customer.mobile : state.customer.mobile);
   if (!phone) {
     toast(t("invalidMobile"));
     return;
   }
   state.customer.mobile = phone;
-  // OTP is for signup/sign-in on a new device. Guest checkout remains available.
-  createOrderAfterVerification();
+  if (state.isLoggedIn) {
+    if (!state.customer.name) return toast(t("nameRequired"));
+    return createOrderAfterVerification();
+  }
+
+  state.authBusy = true;
+  renderKeepScroll();
+  try {
+    const resumed = await resumeTrustedCustomerForPhone(phone);
+    if (resumed) {
+      if (!state.customerName) {
+        state.otpPurpose = "guestOrder";
+        go("profileSetupPage");
+        return;
+      }
+      toast(authCopy(`Welcome back, ${state.customerName}`, `مرحباً بعودتك، ${state.customerName}`));
+      return await createOrderAfterVerification();
+    }
+  } catch (error) {
+    toast(authMessage(error), 6000);
+    return;
+  } finally {
+    state.authBusy = false;
+    if (state.screen === "checkout") renderKeepScroll();
+  }
+
+  state.loginMobile = phone;
+  state.otpPurpose = "guestOrder";
+  await startOtp();
 }
 async function createOrderAfterVerification() {
   if (!(await validateMenuCart())) return;
   if (!checkOfferCartRules()) return;
   if (state.orderSubmitting) return;
+  if (state.orderType === "delivery") {
+    if (!state.isLoggedIn) return toast(t("signInRequired"));
+    if (accountAddresses.busy || accountAddresses.mutating) return toast(t("loadingAddresses"));
+    const user = state.authUserId;
+    const loaded = await loadAccountAddresses(true);
+    if (!loaded || !state.isLoggedIn || state.authUserId !== user) {
+      go("checkout");
+      return toast(t("addressesUnavailable"));
+    }
+    const selected = selectedDeliveryAddress();
+    if (!validDeliveryPin(selected) || state.checkoutPinConfirmedId!==selected.id || state.checkoutPinConfirmedVersion!==selected.updatedAt) {
+      state.addressReturnScreen = "checkout";
+      go("savedAddressesPage", {addressReturnScreen: "checkout"});
+      toast(t("addDeliveryAddressPrompt"));
+      return;
+    }
+    const reviewedQuote=currentDeliveryQuote();
+    const quote = await refreshDeliveryQuote(true);
+    if (!quote?.eligible) {
+      go("checkout");
+      return toast(state.deliveryQuoteError || quote?.reason || cartCopy("Delivery is unavailable for this location.", "التوصيل غير متاح لهذا الموقع."), 6000);
+    }
+    if (reviewedQuote?.eligible && Number(reviewedQuote.fee)!==Number(quote.fee)) {
+      go("checkout");
+      return toast(cartCopy("Delivery fee changed. Please review the total and place your order again.","تغيرت رسوم التوصيل. راجع الإجمالي وأكد الطلب مجدداً."),6000);
+    }
+  }
+  if (state.orderSubmitting || !state.cart.length) return;
   state.orderSubmitting = true;
+  if (state.screen === "checkout") renderKeepScroll();
   const cart = state.cart.map((line) => ({ ...line, extras:[...(line.extras || [])] }));
   const suggestedEta = calculateSuggestedEta(state.orderType, cart);
-  const defaultAddress = state.savedAddresses.find(row => row.id === state.defaultAddressId);
+  const defaultAddress = selectedDeliveryAddress();
   const address = state.orderType === "delivery" && defaultAddress
-    ? [defaultAddress.area, defaultAddress.street, defaultAddress.building, defaultAddress.unit, defaultAddress.directions].filter(Boolean).join(", ")
+    ? pinAddressText(defaultAddress)
     : "";
+  if (address.length > 500) {
+    state.orderSubmitting = false;
+    go("checkout");
+    return toast(cartCopy("Please shorten the delivery address to 500 characters.", "يرجى اختصار عنوان التوصيل إلى 500 حرف."));
+  }
   const clientOrderId = crypto.randomUUID();
   try {
     const result = await submitCustomerOrder({
@@ -3610,6 +3735,9 @@ async function createOrderAfterVerification() {
       suggested_eta: suggestedEta,
       coupon_code: state.couponOn ? state.coupon.trim().toUpperCase() : "",
       address,
+      delivery_address_id: state.orderType==="delivery" ? defaultAddress?.id : null,
+      delivery_address_version: state.orderType==="delivery" ? defaultAddress?.updatedAt : null,
+      expected_delivery_fee: state.orderType==="delivery" ? Number(currentDeliveryQuote()?.fee) : null,
       items: cart.map(line => {
         const item = itemById(line.id);
         return {
@@ -3631,6 +3759,7 @@ async function createOrderAfterVerification() {
       customer: {...state.customer},
       customerType: state.isLoggedIn ? "registered" : "guest",
       orderType: state.orderType,
+      address,
       status: result.status,
       suggestedEta,
       confirmedEta: null,
@@ -3638,9 +3767,12 @@ async function createOrderAfterVerification() {
       orderTiming: state.orderTiming,
       scheduledFor: getScheduledFor(),
       total: Number(result.total),
+      deliveryFee: Number(result.delivery_fee || 0),
+      deliveryQuote: result.delivery_quote || null,
       createdAt: Date.parse(result.created_at),
       step: 0,
     };
+    if(state.orderType==="delivery"){state.lastDeliveryAddressId=defaultAddress.id;state.checkoutPinConfirmedId=null;}
     state.cart = [];
     state.couponOn = false;
     saveTrackedCustomerOrder();
@@ -3659,6 +3791,7 @@ async function createOrderAfterVerification() {
     }
   } finally {
     state.orderSubmitting = false;
+    if (state.screen === "checkout") renderKeepScroll();
   }
 }
 

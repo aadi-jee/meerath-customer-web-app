@@ -7,6 +7,16 @@
  */
 const APP_CONFIG = Object.freeze({
   schemaVersion: 1,
+  maps: Object.freeze({
+    // Paste the HTTP-referrer-restricted Web key locally before testing.
+    // Never put the Routes key in this browser file.
+    browserKey: "AIzaSyBrTPosOs4TTrwR887l8RlUffiu7D2IVhg",
+    mapId: "6548a17d5d643367bdb8c58f",
+    restaurant: Object.freeze({
+      latitude: 24.676036401969355,
+      longitude: 46.697863299188526,
+    }),
+  }),
   tenant: Object.freeze({
     slug: "meerath-kabab",
     restaurantId: "11111111-1111-1111-1111-111111111111",
@@ -54,6 +64,8 @@ const APP_CONFIG = Object.freeze({
       catering: "submit_meerath_catering_enquiry_v2",
       createOrder: "oracy_create_customer_order_v1",
       trackOrder: "oracy_track_customer_order_v1",
+      customerProfile: "oracy_customer_profile_v1",
+      saveCustomerProfile: "oracy_save_customer_profile_v1",
     }),
   }),
   features: Object.freeze({
@@ -70,6 +82,7 @@ const APP_CONFIG = Object.freeze({
     testingAlwaysOpen: true,
     menuRefreshMs: 30000,
     menuMaxAgeMs: 90000,
+    otpResendSeconds: 60,
   }),
 });
 
