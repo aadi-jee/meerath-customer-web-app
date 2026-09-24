@@ -86,7 +86,7 @@ function announcementMarkup() {
     const index = appAnnouncements.indexOf(a);
     return a.action === 'none' ? `<span>${copy}</span>` : `<button class="announcement-action" onclick="announcementAction(${index})">${copy}</button>`;
   }).join('<span aria-hidden="true">　 •　 </span>');
-  return `<div class="home-announcement" tabindex="0" aria-label="${updateCopy('Announcements','إعلانات')}"><p style="animation-duration:${Math.max(24, rows.length*20)}s">${text}</p><button class="link" onclick="toggleAnnouncement(this)" aria-pressed="false">${updateCopy('Pause','إيقاف')}</button></div>`;
+  return `<div class="home-announcement" tabindex="0" aria-label="${updateCopy('Announcements','إعلانات')}"><div class="announcement-viewport"><p style="animation-duration:${Math.max(24, rows.length*20)}s">${text}</p></div><button type="button" class="link announcement-toggle" onclick="toggleAnnouncement(this)" aria-label="${updateCopy('Pause announcements','إيقاف الإعلانات')}" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14" fill="none" stroke="currentColor" stroke-width="3"/></svg></button></div>`;
 }
 function announcementAction(index) {
   const row = appAnnouncements[index];
@@ -99,11 +99,14 @@ function announcementAction(index) {
 function toggleAnnouncement(button) {
   const paused = button.parentElement.classList.toggle('paused');
   button.setAttribute('aria-pressed', String(paused));
-  button.textContent = paused ? updateCopy('Play','تشغيل') : updateCopy('Pause','إيقاف');
+  button.setAttribute('aria-label', paused ? updateCopy('Play announcements','تشغيل الإعلانات') : updateCopy('Pause announcements','إيقاف الإعلانات'));
+  button.innerHTML = paused
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4l12 8-12 8z" fill="currentColor"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14" fill="none" stroke="currentColor" stroke-width="3"/></svg>';
 }
 function cateringCardMarkup() {
   if (!featureEnabled('catering')) return '';
-  return `<button class="catering-card" onclick="go('cateringPage')"><strong>${updateCopy('Events & Catering', 'المناسبات والتموين')} →</strong><span>${updateCopy('Family gatherings, office lunches and special occasions. Request a quote.', 'تجمعات عائلية وغداء العمل والمناسبات الخاصة. اطلب عرض سعر.')}</span></button>`;
+  return `<button class="catering-card" onclick="go('cateringPage')"><strong>${updateCopy('Events & Catering', 'المناسبات والتموين')} →</strong><span>${updateCopy('Family gatherings, office lunches and special occasions.', 'تجمعات عائلية وغداء العمل والمناسبات الخاصة.')} <span class="catering-quote-callout">${updateCopy('Request a quote.', 'اطلب عرض سعر.')}</span></span></button>`;
 }
 function requiredLabel(en, ar) {
   return `${updateCopy(en, ar)} <span class="required-mark" aria-hidden="true">*</span>`;

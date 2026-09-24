@@ -43,6 +43,69 @@ function spendEnvironment() {
     }`);
   return run;
 }
+
+test('cart quantity patches totals without replacing the screen or losing notes',()=> {
+  const run=environment();
+  run(`ready();addToCart(ITEMS[0]);state.notes='Keep these notes';
+    renderKeepScroll=()=>{throw Error('Unexpected screen replacement');};
+    const quantity={textContent:''},total={textContent:''},saving={textContent:''};
+    const rowElement={querySelector:selector=>({'.qty span':quantity,'.cart-line-total':total,'.offer-saving':saving})[selector]};
+    const button={closest:()=>rowElement};
+    document.querySelectorAll=()=>[];
+    let summaries=0;updateCartBreakdown=()=>{summaries++;};
+    chgQty(0,1,button);`);
+  assert.equal(run('state.cart[0].qty'),2);
+  assert.equal(run('total.textContent'),'SAR 28.80');
+  assert.equal(run('quantity.textContent'),2);
+  assert.equal(run('state.notes'),'Keep these notes');
+  run('chgQty(0,-1,button)');
+  assert.equal(run('total.textContent'),'SAR 14.40');
+  assert.equal(run('summaries'),2);
+});
+
+test('coupon updates only summary for accepted, rejected and offer-blocked coupons',()=> {
+  const run=environment();
+  run(`row.offer=null;ready();addToCart(ITEMS[0]);
+    render=()=>{throw Error('Unexpected screen replacement');};
+    let summaries=0;updateCartBreakdown=()=>{summaries++;};
+    state.coupon='MEERATH10';applyCoupon();`);
+  assert.equal(run('state.couponOn'),true);
+  run(`state.coupon='invalid';applyCoupon();`);
+  assert.equal(run('state.couponOn'),false);
+  run(`ITEMS[0].offer={};state.coupon='MEERATH10';applyCoupon();`);
+  assert.equal(run('state.couponOn'),false);
+  assert.equal(run('summaries'),3);
+});
+
+test('subcategory changes replace only results and preserve the category controls',()=> {
+  const run=environment();
+  run(`state.categoryId=cat;SUBCATEGORIES=[{id:'sub',category:cat}];
+    render=()=>{throw Error('Unexpected screen replacement');};
+    const flags=[];const tab={classList:{toggle:(name,on)=>flags.push(on)}};
+    tab.closest=()=>({querySelectorAll:()=>[tab]});
+    let replaced=0;document.querySelector=()=>({replaceChildren:()=>{replaced++;}});
+    document.createElement=()=>({content:{querySelector:()=>({childNodes:[]})}});
+    listing=()=>'<div></div>';selectSubcategory('sub',tab);`);
+  assert.equal(run('state.subcategoryId'),'sub');
+  assert.equal(run('flags[0]'),true);
+  assert.equal(run('replaced'),1);
+  run(`selectSubcategory('unknown',tab)`);
+  assert.equal(run('replaced'),1);
+});
+
+test('checkout summary refresh preserves the form and updates submit availability',()=> {
+  const run=environment();
+  run(`state.screen='checkout';render=()=>{throw Error('Unexpected screen replacement');};
+    let patches=0;const card={replaceChildren:()=>{patches++;}};
+    const submit={disabled:false,textContent:'old',setAttribute:()=>{},removeAttribute:()=>{}};
+    const nextSubmit={disabled:true,textContent:'Review delivery',hasAttribute:()=>true};
+    document.querySelector=selector=>selector==='.checkout-place-order'?submit:card;
+    document.createElement=()=>({content:{querySelector:selector=>selector==='.checkout-place-order'?nextSubmit:{childNodes:[]}}});
+    checkout=()=>'<div></div>';updateCheckoutSummary();`);
+  assert.equal(run('patches'),2);
+  assert.equal(run('submit.disabled'),true);
+  assert.equal(run('submit.textContent'),'Review delivery');
+});
 test('cart cap has clickable plus, no permanent cap sentence, and popup on excess',()=> {
   const run=environment();
   run(`row.offer.offer_max_qty=1;ready();addToCart(ITEMS[0]);let message='';toast=m=>{message=m;};`);
@@ -312,6 +375,25 @@ test('variant and add-on prices reach cart while item offer only discounts base 
   ];ready();openItem(id);state.extras=[ITEMS[0].options[1].id];addToCart(ITEMS[0]);totals().total`),20.4);
   assert.equal(run(`state.cart[0].basePrice`),24);
   assert.equal(run(`totals().offerSavings`),3.6);
+});
+
+test('detail choices update selection without replacing the screen',()=> {
+  const run=environment();
+  run(`row.options=[
+    {name:'Small',type:'Variant',price:0,enabled:true,required:false},
+    {name:'Large',type:'Variant',price:4,enabled:true,required:false},
+    {name:'Sauce',type:'Option',price:1,enabled:true,required:false},
+    {name:'Cheese',type:'Add-on',price:2,enabled:true,required:false}
+  ];ready();openItem(id);
+  renderKeepScroll=()=>{throw Error('Selection must preserve the detail screen');};
+  render=()=>{throw Error('Selection must preserve the detail screen');};
+  const choices=ITEMS[0].options;
+  selectVariant(choices[1].id);selectChoice(choices[2].id);toggleExtra(choices[3].id);`);
+  assert.equal(run('state.size===choices[1].id && state.choice===choices[2].id && state.extras.includes(choices[3].id)'),true);
+  run('clearChoice();toggleExtra(choices[3].id)');
+  assert.equal(run('state.choice===null && state.extras.length===0'),true);
+  run("selectVariant('invalid');selectChoice('invalid');toggleExtra('invalid')");
+  assert.equal(run('state.size===choices[1].id && state.choice===null && state.extras.length===0'),true);
 });
 
 test('required add-ons are selected automatically and cannot be removed',()=> {

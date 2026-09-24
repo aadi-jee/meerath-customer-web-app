@@ -847,7 +847,6 @@ function home() {
   ✓ ${t("deliveryScope")}
 </div>
       ${homeBannersMarkup()}
-      ${typeof cateringCardMarkup === 'function' ? cateringCardMarkup() : ''}
       <div class="h-row"><h3>${t("todaysSpecial")}</h3><button class="link" onclick="go('menu')">${t("seeAll")}</button></div>
       <div class="scroll">
         ${!specials.length && menuReady() ? `<p class="menu-hint">${menuText("noSpecials")}</p>` : ""}
@@ -877,6 +876,7 @@ function home() {
           )
           .join("")}
       </div>
+      ${typeof cateringCardMarkup === 'function' ? cateringCardMarkup() : ''}
     </section>
     ${nav("home")}`;
 }
@@ -906,11 +906,11 @@ function listing() {
     <section class="screen listing-screen">
       <div class="topbar">${back("menu")}<h2>${cat ? loc(cat, "name") : t("items")}</h2>${cartButton()}</div>
       ${subs.length ? `<div class="menu-subcategories" aria-label="${t("categories")}">
-        <button class="${!state.subcategoryId ? "on" : ""}" onclick="state.subcategoryId='';render()">${menuText("all")}</button>
-        ${subs.map(s => `<button class="${state.subcategoryId === s.id ? "on" : ""}" onclick="state.subcategoryId='${s.id}';render()">${loc(s,"name")}</button>`).join("")}
+        <button class="${!state.subcategoryId ? "on" : ""}" onclick="selectSubcategory('',this)">${menuText("all")}</button>
+        ${subs.map(s => `<button class="${state.subcategoryId === s.id ? "on" : ""}" onclick="selectSubcategory('${s.id}',this)">${loc(s,"name")}</button>`).join("")}
       </div>` : ""}
-      ${!items.length && menuReady() ? `<p class="menu-hint">${menuText("noItems")}</p>` : ""}
       <div class="menu-items-grid">
+      ${!items.length && menuReady() ? `<p class="menu-hint">${menuText("noItems")}</p>` : ""}
       ${items.map(i => `
         <article class="item ${canOrderItem(i) ? "" : "menu-unavailable"}">
           <img src="${i.image}" alt="${loc(i, "name")}" onclick="openItem('${i.id}')" />
@@ -926,6 +926,16 @@ function listing() {
         </article>`).join("")}
       </div>
     </section>${nav("menu")}`;
+}
+
+function selectSubcategory(id, button) {
+  if (id && !SUBCATEGORIES.some(row => row.id === id && row.category === state.categoryId)) return;
+  state.subcategoryId = id;
+  button.closest('.menu-subcategories').querySelectorAll('button')
+    .forEach(row => row.classList.toggle('on', row === button));
+  const template = document.createElement('template');
+  template.innerHTML = listing();
+  document.querySelector('.menu-items-grid').replaceChildren(...template.content.querySelector('.menu-items-grid').childNodes);
 }
 
 function detail() {
@@ -1002,7 +1012,7 @@ function cart() {
     ${state.cart.map((l,idx) => {
       const item = itemById(l.id), name = item ? loc(item,"name") : "";
       const saved = roundMoney(Math.max(0, (l.basePrice ?? item?.basePrice ?? l.price) - l.price) * l.qty);
-      return `<div class="cart-line cart-editable" onclick="cartRowClick(event,${idx})">
+      return `<div class="cart-line cart-editable" data-cart-key="${escapeHtml(l.cartKey)}" onclick="cartRowClick(event,${idx})">
         <button class="cart-image-link" onclick="openCartItem(${idx})" aria-label="${cartCopy("Edit", "تعديل")} ${name}">
           <img src="${l.image}" alt="" />
         </button>
@@ -1195,7 +1205,26 @@ function setCheckoutOrderType(type, button) {
   if (note) {
     note.textContent = getCheckoutTimingSub();
   }
-  renderKeepScroll();
+  updateCheckoutSummary();
+}
+
+function updateCheckoutSummary() {
+  if (state.screen !== 'checkout') return;
+  const template = document.createElement('template');
+  template.innerHTML = checkout();
+  for (const selector of ['.checkout-location-card', '.checkout-total-card']) {
+    const current = document.querySelector(selector);
+    const next = template.content.querySelector(selector);
+    if (current && next) current.replaceChildren(...next.childNodes);
+  }
+  const current = document.querySelector('.checkout-place-order');
+  const next = template.content.querySelector('.checkout-place-order');
+  if (current && next) {
+    current.disabled = next.disabled;
+    current.textContent = next.textContent;
+    if (next.hasAttribute('aria-disabled')) current.setAttribute('aria-disabled', 'true');
+    else current.removeAttribute('aria-disabled');
+  }
 }
 
 function selectedDeliveryAddress() {
@@ -1257,7 +1286,7 @@ async function refreshDeliveryQuote(force = false) {
   } finally {
     if (request === state.deliveryQuoteRequest) {
       state.deliveryQuoteBusy = false;
-      if (state.screen === "checkout") renderKeepScroll();
+      if (state.screen === "checkout") updateCheckoutSummary();
     }
   }
 }
@@ -2842,6 +2871,13 @@ async function setDefaultAddress(id) {
 }
 
 
+function setAddressType(type, button) {
+  if (!['home','work','other'].includes(type)) return;
+  state.addressType = type;
+  button.closest('.address-type-toggle').querySelectorAll('button')
+    .forEach(row => row.classList.toggle('active', row === button));
+}
+
 function addAddressPage() {
   return `
     <section class="screen add-address-screen">
@@ -2860,21 +2896,21 @@ function addAddressPage() {
 
         <button
           class="${state.addressType === "home" ? "active" : ""}"
-          onclick="state.addressType='home'; render()"
+          onclick="setAddressType('home',this)"
         >
           ${t("home")}
         </button>
 
         <button
           class="${state.addressType === "work" ? "active" : ""}"
-          onclick="state.addressType='work'; render()"
+          onclick="setAddressType('work',this)"
         >
           ${t("work")}
         </button>
 
         <button
           class="${state.addressType === "other" ? "active" : ""}"
-          onclick="state.addressType='other'; render()"
+          onclick="setAddressType('other',this)"
         >
           ${t("other")}
         </button>
@@ -3462,16 +3498,31 @@ function openItem(id) {
 function renderKeepScroll() {
   const currentScreen = document.querySelector("#app > .screen");
   const currentScroll = currentScreen ? currentScreen.scrollTop : 0;
+  const horizontal = currentScreen ? [...currentScreen.querySelectorAll('.menu-subcategories,.banner-track,.scroll')].map(el => el.scrollLeft) : [];
+  const focused = document.activeElement;
+  const controls = currentScreen ? [...currentScreen.querySelectorAll('input,textarea,select,button,a')] : [];
+  const focusIndex = controls.indexOf(focused);
+  const start = focused?.selectionStart, end = focused?.selectionEnd;
 
   render();
 
-  requestAnimationFrame(() => {
-    const newScreen = document.querySelector("#app > .screen");
-
-    if (newScreen) {
-      newScreen.scrollTop = currentScroll;
+  // Restore before the next paint, avoiding a visible jump to the top.
+  const newScreen = document.querySelector("#app > .screen");
+  if (newScreen) {
+    newScreen.scrollTop = currentScroll;
+    newScreen.querySelectorAll('.menu-subcategories,.banner-track,.scroll')
+      .forEach((el,index) => { el.scrollLeft = horizontal[index] || 0; });
+    const next = [...newScreen.querySelectorAll('input,textarea,select,button,a')][focusIndex];
+    // A removed cart row may shift indices; never move focus to a different action.
+    if (next && focused && next.tagName === focused.tagName && next.id === focused.id &&
+        next.closest('.cart-line')?.dataset.cartKey === focused.closest('.cart-line')?.dataset.cartKey &&
+        next.getAttribute('onclick') === focused.getAttribute('onclick') &&
+        next.getAttribute('name') === focused.getAttribute('name') &&
+        next.textContent === focused.textContent) {
+      next.focus({preventScroll:true});
+      if (typeof start === 'number' && typeof next.setSelectionRange === 'function') next.setSelectionRange(start,end);
     }
-  });
+  }
 }
 
 function toggleExtra(id) {
@@ -3483,22 +3534,19 @@ function toggleExtra(id) {
   } else {
     state.extras.push(id);
   }
-  renderKeepScroll();
+  // The native checkbox already reflects the change; keep the detail DOM intact.
 }
 function selectVariant(id) {
   if (!enabledChoices(itemById(state.itemId), "Variant").some(x => x.id === id)) return;
   state.size = id;
-  renderKeepScroll();
 }
 function selectChoice(id) {
   if (!enabledChoices(itemById(state.itemId), "Option").some(x => x.id === id)) return;
   state.choice = id;
-  renderKeepScroll();
 }
 function clearChoice() {
   if (enabledChoices(itemById(state.itemId), "Option").some(x => x.required)) return;
   state.choice = null;
-  renderKeepScroll();
 }
 function setSpiceLevel(button, spice) {
   state.spice = spice;
@@ -3570,20 +3618,34 @@ function chgQty(idx, d, button) {
   if (d > 0 && !canAddItem(item)) return toast(limitMessage(item));
   line.qty += d;
   if (line.qty <= 0) state.cart.splice(idx,1);
-  // Rebuild handlers after removal so old indices cannot change the wrong item.
-  renderKeepScroll();
+  if (line.qty <= 0 || !button?.closest) {
+    // Rebuild handlers after removal so old indices cannot change the wrong item.
+    renderKeepScroll();
+    return;
+  }
+  const row = button.closest('.cart-line');
+  row.querySelector('.qty span').textContent = line.qty;
+  row.querySelector('.cart-line-total').textContent = money(linePrice(line));
+  const saving = row.querySelector('.offer-saving');
+  if (saving) saving.textContent = `${cartCopy('You saved','وفّرت')} ${money(roundMoney(Math.max(0,(line.basePrice ?? item.basePrice)-line.price)*line.qty))}`;
+  document.querySelectorAll('.cart-line').forEach((element,index) => {
+    const currentItem = itemById(state.cart[index].id);
+    element.querySelector('.qty button:last-child').classList.toggle('offer-add-blocked', canOrderItem(currentItem) && !canAddItem(currentItem));
+  });
+  updateCartBreakdown();
+  updateCartButtons();
 }
 
 function applyCoupon() {
   if (state.cart.some(l => itemById(l.id)?.offer)) {
     state.couponOn = false;
     toast(state.lang === "ar" ? "لا يمكن جمع الكوبون مع عروض الأصناف." : "Coupons cannot be combined with item offers.");
-    render();
+    updateCartBreakdown();
     return;
   }
   state.couponOn = state.coupon.trim().toUpperCase() === "MEERATH10";
   toast(state.couponOn ? t("couponOk") : t("couponBad"));
-  render();
+  updateCartBreakdown();
 }
 
 function calculateSuggestedEta(orderType, items) {

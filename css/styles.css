@@ -157,7 +157,8 @@ a {
 
 .screen {
   padding: var(--screen-y) var(--screen-x) 28px;
-  animation: rise 0.28s ease;
+  /* In-place updates must never fade the entire screen out and back in. */
+  animation: none;
 }
 
 @keyframes rise {

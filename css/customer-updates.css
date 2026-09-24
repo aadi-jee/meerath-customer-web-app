@@ -1,4 +1,8 @@
-.home-announcement { color: var(--text); background: transparent; overflow: hidden; margin: 8px 0 18px; }
+.home-announcement { display: flex; align-items: center; color: var(--text); background: transparent; overflow: hidden; margin: 8px 0 12px; }
+.announcement-viewport { flex: 1; min-width: 0; overflow: hidden; }
+.home-announcement .announcement-toggle { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; padding: 10px; }
+.announcement-toggle svg { width: 16px; height: 16px; }
+.announcement-toggle:focus-visible { outline: 2px solid var(--orange); outline-offset: -3px; border-radius: 8px; }
 .home-announcement p { margin: 0; padding: 4px 0; padding-inline-start: 100%; width: max-content; min-width: 100%; animation: announcement-slide 24s linear infinite; line-height: 1.6; white-space: nowrap; }
 .home-announcement:hover p, .home-announcement:focus-within p, .home-announcement.paused p { animation-play-state: paused; }
 .home-announcement .link { color: var(--muted); font-size: 12px; }
@@ -10,6 +14,8 @@ body.light-theme #homeOrderNote { color: #00656b; }
 .catering-card { display: block; width: 100%; text-align: start; background: var(--card); border: 1px solid var(--line); color: var(--text); border-radius: 16px; padding: 18px; margin: 16px 0; font: inherit; cursor: pointer; }
 .catering-card strong, .catering-card span { display: block; }
 .catering-card span { color: var(--muted); margin-top: 6px; }
+.catering-card .catering-quote-callout { display: inline; color: var(--orange); font-weight: 400; }
+.catering-form button[type="submit"] { font-weight: 400; }
 .catering-form { display: grid; gap: 16px; }
 .catering-form label { display: grid; gap: 7px; }
 .catering-form .field { width: 100%; min-width: 0; margin: 0; }
