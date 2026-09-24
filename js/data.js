@@ -195,7 +195,7 @@ function mapMenu(payload, date = new Date()) {
     prepTime:Number(r.prep_time) || 25, options:mapItemChoices(r.options), sortOrder:safeOrder(r.sort_order),
     available:r.is_available === true && payload.branch_items.some(b => b.branch_id === branchId &&
       b.menu_item_id === r.id && b.is_available === true) &&
-      scheduleAllows(payload.schedules.filter(s => s.menu_item_id === r.id), date),
+      (!restaurantAcceptingOrders(date) || scheduleAllows(payload.schedules.filter(s => s.menu_item_id === r.id), date)),
   }));
   items.forEach(item => {
     const row = payload.items.find(r => r.id === item.id);
@@ -217,7 +217,7 @@ function menuReady() {
 }
 function canOrderItem(item) {
   return !!item && item.available === true && item.offer?.maxQty !== 0 && menuReady() &&
-    scheduleAllows((menuConnection.payload?.schedules || []).filter(s => s.menu_item_id === item.id));
+    (!restaurantAcceptingOrders() || scheduleAllows((menuConnection.payload?.schedules || []).filter(s => s.menu_item_id === item.id)));
 }
 function reconcileMenuCart() {
   if (!state.cart.length) return false;
@@ -239,6 +239,7 @@ function reconcileMenuCart() {
   });
   const changed = before !== JSON.stringify(state.cart);
   if (changed) toast(menuText("changed"));
+  saveCartDraft();
   return changed;
 }
 function applyMenuPayload(payload) {
@@ -247,6 +248,7 @@ function applyMenuPayload(payload) {
   const changed = fingerprint !== menuConnection.fingerprint;
   CATEGORIES = mapped.categories; SUBCATEGORIES = mapped.subcategories; ITEMS = mapped.items;
   OFFERS = mapped.offers;
+  restoreCartDraft();
   menuConnection.fingerprint = fingerprint;
   if (!CATEGORIES.some(c => c.id === state.categoryId)) {
     state.categoryId = CATEGORIES[0]?.id || ""; state.subcategoryId = "";
@@ -256,7 +258,9 @@ function applyMenuPayload(payload) {
     state.screen = state.cartEditKey ? "cart" : "listing";
     state.cartEditKey = null;
   }
-  return {changed, cartChanged:reconcileMenuCart()};
+  const cartChanged = reconcileMenuCart();
+  saveCartDraft();
+  return {changed, cartChanged};
 }
 function refreshMenuUI() {
   if (!["home","menu","listing","detail","cart","checkout","offers"].includes(state.screen)) return;
@@ -310,17 +314,21 @@ async function validateMenuCart() {
 function startMenuSync() {
   if (menuConnection.started) return;
   menuConnection.started = true;
+  let acceptingOrders = restaurantAcceptingOrders();
   refreshMenu();
   setInterval(() => { if (!document.hidden) refreshMenu(); }, MENU_CONFIG.refreshMs);
   // Schedule transitions are recalculated in Riyadh time, including overnight windows.
   setInterval(() => {
     if (document.hidden || !menuConnection.payload) return;
+    const nowAccepting = restaurantAcceptingOrders();
+    const hoursChanged = nowAccepting !== acceptingOrders;
+    acceptingOrders = nowAccepting;
     if (!menuReady()) {
       if (menuConnection.status === "ready") { menuConnection.status = "error"; refreshMenuUI(); }
       return;
     }
     const result = applyMenuPayload(menuConnection.payload);
-    if (result.changed || result.cartChanged) refreshMenuUI();
+    if (result.changed || result.cartChanged || hoursChanged) refreshMenuUI();
   }, 10000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshMenu(); });
   window.addEventListener("online", () => refreshMenu());

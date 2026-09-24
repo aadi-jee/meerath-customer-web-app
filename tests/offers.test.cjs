@@ -44,6 +44,44 @@ function spendEnvironment() {
   return run;
 }
 
+test('saved cart restores selections and quantities using current menu prices, without personal data',()=>{
+  const run=environment();
+  run(`const storage=new Map();localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
+    ready();restoreCartDraft();state.customer.mobile='private';state.notes='private note';
+    state.spice='mild';addToCart(ITEMS[0],2);`);
+  assert.equal(run(`storage.get(appStorageKey('cart')).includes('private')`),false);
+  run(`state.cart=[];cartDraftRestored=false;row.base_price=20;ready();restoreCartDraft();reconcileMenuCart();`);
+  assert.equal(run('state.cart.length'),1);
+  assert.equal(run('state.cart[0].qty'),2);
+  assert.equal(run('state.cart[0].spice'),'mild');
+  assert.equal(run('state.cart[0].price'),16);
+  run(`state.cart=[];saveCartDraft()`);
+  assert.equal(run(`storage.has(appStorageKey('cart'))`),false);
+});
+
+test('cart storage rejects corrupt and other-branch drafts and tolerates unavailable storage',()=>{
+  const run=environment();
+  run(`ready();localStorage={getItem:()=>'{broken'};restoreCartDraft();`);
+  assert.equal(run('state.cart.length'),0);
+  run(`cartDraftRestored=false;localStorage.getItem=()=>JSON.stringify({version:1,restaurantId:MENU_CONFIG.restaurantId,branchId:'other',items:[{id,qty:2}]});restoreCartDraft();`);
+  assert.equal(run('state.cart.length'),0);
+  assert.doesNotThrow(()=>run(`localStorage.setItem=()=>{throw Error('Storage blocked');};addToCart(ITEMS[0]);saveCartDraft();`));
+});
+
+test('closed restaurant permits cart building but blocks both order submission entry points',async()=>{
+  const run=environment();
+  assert.equal(run(`restaurantAcceptingOrders(new Date('2026-09-25T08:59:59Z'))`),false);
+  assert.equal(run(`restaurantAcceptingOrders(new Date('2026-09-25T09:00:00Z'))`),true);
+  assert.equal(run(`restaurantAcceptingOrders(new Date('2026-09-25T21:59:59Z'))`),true);
+  assert.equal(run(`restaurantAcceptingOrders(new Date('2026-09-25T22:00:00Z'))`),false);
+  run(`restaurantAcceptingOrders=()=>false;ready();addToCart(ITEMS[0]);
+    validateMenuCart=()=>{throw Error('Must stop before checkout network requests');};`);
+  assert.equal(run('state.cart.length'),1);
+  await run('placeOrder()');
+  await run('createOrderAfterVerification()');
+  assert.equal(run('state.cart.length'),1);
+});
+
 test('cart quantity patches totals without replacing the screen or losing notes',()=> {
   const run=environment();
   run(`ready();addToCart(ITEMS[0]);state.notes='Keep these notes';

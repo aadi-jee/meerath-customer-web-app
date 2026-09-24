@@ -75,10 +75,45 @@ let cartLineSequence = 0;
 function newCartKey() { return "line-" + (++cartLineSequence); }
 function cartCopy(en, ar) { return state.lang === "ar" ? ar : en; }
 function restaurantAcceptingOrders(date = new Date()) {
-  if (testingAlwaysOpenActive()) return true;
   const { seconds } = riyadhClock(date);
   return seconds >= RESTAURANT_ORDER_WINDOW.openSeconds ||
     seconds < RESTAURANT_ORDER_WINDOW.closeSeconds;
+}
+let cartDraftRestored = false;
+function saveCartDraft() {
+  if (!cartDraftRestored) return;
+  try {
+    const key = appStorageKey('cart');
+    if (!state.cart.length) { localStorage.removeItem(key); return; }
+    localStorage.setItem(key, JSON.stringify({version:1, restaurantId:MENU_CONFIG.restaurantId,
+      branchId:MENU_CONFIG.branchId, orderType:state.orderType,
+      items:state.cart.map(({id,qty,size,choice,extras,spice}) => ({id,qty,size,choice,extras,spice}))}));
+  } catch (_) { /* Browsing remains usable when device storage is unavailable. */ }
+}
+function restoreCartDraft() {
+  if (cartDraftRestored) return;
+  cartDraftRestored = true;
+  if (state.cart.length) return;
+  try {
+    const draft = JSON.parse(localStorage.getItem(appStorageKey('cart')) || 'null');
+    if (!draft || draft.version !== 1 || draft.restaurantId !== MENU_CONFIG.restaurantId ||
+        draft.branchId !== MENU_CONFIG.branchId || !Array.isArray(draft.items)) return;
+    state.cart = draft.items.slice(0,100).flatMap(line => {
+      if (!line || !isMenuId(line.id) || !Number.isSafeInteger(line.qty) || line.qty < 1 || line.qty > 999) return [];
+      const item = itemById(line.id);
+      if (!item) return [];
+      const choices = normalizeItemChoices(item, line);
+      return [{id:item.id,cartKey:newCartKey(),qty:line.qty,size:choices.size,choice:choices.choice,
+        extras:choices.extras,spice:['mild','medium','spicy'].includes(line.spice)?line.spice:'medium',
+        price:roundMoney(item.price+choices.extraPrice),basePrice:roundMoney(item.basePrice+choices.extraPrice),image:item.image}];
+    });
+    if (['delivery','takeaway','dinein'].includes(draft.orderType)) state.orderType=draft.orderType;
+  } catch (_) { /* Ignore malformed drafts; never trust stored prices or HTML. */ }
+}
+function closedCartNotice() {
+  return restaurantAcceptingOrders() ? '' : `<p class="menu-status" role="status">${cartCopy(
+    'We are closed. You can add items to your cart now and place your order during working hours: 12:00 PM–1:00 AM (Riyadh). Prices and availability will be checked again.',
+    'المطعم مغلق. يمكنك إضافة الأصناف إلى السلة الآن وإرسال الطلب خلال ساعات العمل: 12 ظهراً–1 صباحاً (الرياض). سيتم التحقق من الأسعار والتوفر مجدداً.')}</p>`;
 }
 function restaurantClosedMessage() {
   return cartCopy(
@@ -344,6 +379,7 @@ function addToCart(item, qty = 1) {
       extras,
     });
   toast(t("added"));
+  saveCartDraft();
   updateCartButtons();
   if (["listing","detail","offers"].includes(state.screen)) renderKeepScroll();
   return true;
@@ -727,6 +763,7 @@ function updateHomeSearch(value) {
 }
 function setHomeOrderType(type, button) {
   state.orderType = type;
+  saveCartDraft();
   state.orderTiming = "asap";
 
   const toggle = button.closest(".home-order-toggle");
@@ -998,6 +1035,7 @@ function cartRowClick(event, index) {
 function removeCartItem(index) {
   if (!state.cart[index]) return;
   state.cart.splice(index, 1);
+  saveCartDraft();
   renderKeepScroll();
 }
 function cart() {
@@ -1108,6 +1146,7 @@ function setCheckoutTiming(value, button) {
 
 function setCheckoutOrderType(type, button) {
   state.orderType = type;
+  saveCartDraft();
   state.orderTiming = "asap";
   clearDeliveryQuote();
 
@@ -3439,6 +3478,7 @@ function account() {
 
 
 function render() {
+  saveCartDraft();
   applyDir();
   const map = {
     ...(typeof cateringPage === 'function' ? {cateringPage} : {}),
@@ -3472,6 +3512,7 @@ function render() {
   if (["home","menu","listing","detail","cart","checkout","offers"].includes(state.screen)) {
     const screen = $app().querySelector(".screen");
     if (screen) screen.insertAdjacentHTML("afterbegin", menuStatusMarkup());
+    if (screen && state.screen !== 'checkout') screen.insertAdjacentHTML('afterbegin', closedCartNotice());
   }
   $app().style.paddingBottom =
     state.screen === "splash" ||
@@ -3618,6 +3659,7 @@ function chgQty(idx, d, button) {
   if (d > 0 && !canAddItem(item)) return toast(limitMessage(item));
   line.qty += d;
   if (line.qty <= 0) state.cart.splice(idx,1);
+  saveCartDraft();
   if (line.qty <= 0 || !button?.closest) {
     // Rebuild handlers after removal so old indices cannot change the wrong item.
     renderKeepScroll();
@@ -3738,6 +3780,7 @@ async function placeOrder() {
   await startOtp();
 }
 async function createOrderAfterVerification() {
+  if (!restaurantAcceptingOrders()) { toast(restaurantClosedMessage(),7000); return; }
   if (!(await validateMenuCart())) return;
   if (!checkOfferCartRules()) return;
   if (state.orderSubmitting) return;
@@ -3769,6 +3812,7 @@ async function createOrderAfterVerification() {
     }
   }
   if (state.orderSubmitting || !state.cart.length) return;
+  if (!restaurantAcceptingOrders()) { toast(restaurantClosedMessage(),7000); return; }
   state.orderSubmitting = true;
   if (state.screen === "checkout") renderKeepScroll();
   const cart = state.cart.map((line) => ({ ...line, extras:[...(line.extras || [])] }));
@@ -3836,6 +3880,7 @@ async function createOrderAfterVerification() {
     };
     if(state.orderType==="delivery"){state.lastDeliveryAddressId=defaultAddress.id;state.checkoutPinConfirmedId=null;}
     state.cart = [];
+    saveCartDraft();
     state.couponOn = false;
     saveTrackedCustomerOrder();
     go("confirmation");
