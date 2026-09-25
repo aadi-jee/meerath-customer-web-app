@@ -4,8 +4,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const RealDate = Date;
+const FIXED_NOW = '2026-09-25T12:00:00Z';
+class TestDate extends RealDate {
+  constructor(value) { super(arguments.length ? value : FIXED_NOW); }
+  static now() { return new RealDate(FIXED_NOW).getTime(); }
+}
 function environment() {
-  const context = vm.createContext({console:{warn(){}},URL,Intl,Date,AbortController,setTimeout,clearTimeout,
+  const context = vm.createContext({console:{warn(){}},URL,Intl,Date:TestDate,AbortController,setTimeout,clearTimeout,
     localStorage:{getItem:()=>null},window:{},document:{getElementById:()=>null}});
   for (const file of ['brand-config.js','data.js','auth.js','content.js','app.js']) {
     let source=fs.readFileSync(path.join(__dirname,'../js',file),'utf8');
