@@ -5,8 +5,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const root = path.join(__dirname, '..');
+class TestDate extends Date {
+  constructor(...args) { super(...(args.length ? args : ['2026-09-08T12:00:00Z'])); }
+  static now() { return Date.parse('2026-09-08T12:00:00Z'); }
+}
 function environment() {
-  const c = vm.createContext({console, URL, Intl, Date, setTimeout:()=>0,
+  const c = vm.createContext({console, URL, Intl, Date: TestDate, setTimeout:()=>0,
     localStorage:{getItem:()=>null}, window:{}, document:{getElementById:()=>({parentElement:{scrollTop:0}})}});
   vm.runInContext(fs.readFileSync(path.join(root,'js/brand-config.js'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(root,'js/data.js'),'utf8'),c);

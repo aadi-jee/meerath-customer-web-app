@@ -43,7 +43,9 @@ test('Saudi mobile normalization accepts local and international formats', () =>
 test('OTP request uses Supabase Auth and never sends a secret key', async () => {
   const {run, requests} = environment();
   await run(`requestPhoneOtp('+966501234567')`);
-  assert.match(requests[0].url, /\/auth\/v1\/otp$/);
+  const endpoint = new URL(requests[0].url);
+  assert.equal(endpoint.pathname, '/auth/v1/otp');
+  assert.equal(endpoint.searchParams.get('apikey'), requests[0].options.headers.apikey);
   const body = JSON.parse(requests[0].options.body);
   assert.equal(body.phone, '+966501234567');
   assert.equal(body.create_user, true);

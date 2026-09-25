@@ -5,6 +5,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.join(__dirname, '..');
+// Order-flow fixtures run during Riyadh opening hours, independent of wall time.
+class TestDate extends Date {
+  constructor(...args) { super(...(args.length ? args : ['2026-09-08T12:00:00Z'])); }
+  static now() { return Date.parse('2026-09-08T12:00:00Z'); }
+}
 
 function environment() {
   const storage = new Map();
@@ -12,7 +17,7 @@ function environment() {
     console,
     URL,
     Intl,
-    Date,
+    Date: TestDate,
     AbortController,
     crypto: {randomUUID: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'},
     setTimeout: () => 0,

@@ -59,7 +59,11 @@ async function authHttp(path, {method = "POST", body, token} = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
-    const response = await fetch(`${MENU_CONFIG.url}/auth/v1/${path}`, {
+    const endpoint = new URL(`${MENU_CONFIG.url}/auth/v1/${path}`);
+    // Supabase accepts the publishable key in either location. Keep the URL
+    // fallback because some browser/privacy setups strip custom request headers.
+    endpoint.searchParams.set("apikey", MENU_CONFIG.publicKey);
+    const response = await fetch(endpoint.href, {
       method,
       headers: {
         apikey: MENU_CONFIG.publicKey,

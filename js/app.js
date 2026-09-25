@@ -110,11 +110,6 @@ function restoreCartDraft() {
     if (['delivery','takeaway','dinein'].includes(draft.orderType)) state.orderType=draft.orderType;
   } catch (_) { /* Ignore malformed drafts; never trust stored prices or HTML. */ }
 }
-function closedCartNotice() {
-  return restaurantAcceptingOrders() ? '' : `<p class="menu-status" role="status">${cartCopy(
-    'We are closed. You can add items to your cart now and place your order during working hours: 12:00 PM–1:00 AM (Riyadh). Prices and availability will be checked again.',
-    'المطعم مغلق. يمكنك إضافة الأصناف إلى السلة الآن وإرسال الطلب خلال ساعات العمل: 12 ظهراً–1 صباحاً (الرياض). سيتم التحقق من الأسعار والتوفر مجدداً.')}</p>`;
-}
 function restaurantClosedMessage() {
   return cartCopy(
     `${APP_CONFIG.brand.name} is currently closed. Please place your order during our working hours: 12:00 PM to 1:00 AM.`,
@@ -3512,7 +3507,6 @@ function render() {
   if (["home","menu","listing","detail","cart","checkout","offers"].includes(state.screen)) {
     const screen = $app().querySelector(".screen");
     if (screen) screen.insertAdjacentHTML("afterbegin", menuStatusMarkup());
-    if (screen && state.screen !== 'checkout') screen.insertAdjacentHTML('afterbegin', closedCartNotice());
   }
   $app().style.paddingBottom =
     state.screen === "splash" ||
