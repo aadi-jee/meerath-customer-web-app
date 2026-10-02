@@ -298,6 +298,8 @@ function go(screen, extra = {}) {
   }
   if (screen !== "detail") state.cartEditKey = null;
   if (["rewards", "account"].includes(screen) && typeof rewardsTouch === "function") rewardsTouch();
+  // Batch H: opening the cart or checkout asks the server again, so a pause shows before the customer presses Place Order.
+  if (["cart", "checkout"].includes(screen) && typeof loadOrderingHours === "function") loadOrderingHours();
   // Batch A: while adding to an order there is no checkout; the cart sends the items.
   if (screen === "checkout" && typeof addonTarget === "function" && addonTarget()) screen = "cart";
   if (screen === "checkout") {
@@ -4139,10 +4141,13 @@ async function createOrderAfterVerification() {
     } else if (orderingRefusal(rawMessage)) {
       // Batch H: the server refused because of the hours. The cart stays; show the notice.
       go("checkout");
-      loadOrderingHours().then(() => { if (state.screen === "checkout") renderKeepScroll(); });
-      setTimeout(() => toast(/within opening hours/i.test(rawMessage)
-        ? cartCopy("Please choose a time within opening hours.", "يرجى اختيار وقت ضمن ساعات العمل.")
-        : (orderingClosedTitle() ? orderingClosedTitle() + ". " + restaurantClosedMessage() : rawMessage), 7000));
+      // Read the server's answer first, so the notice and the words match what it just refused.
+      loadOrderingHours().then(() => {
+        if (state.screen === "checkout") renderKeepScroll();
+        toast(/within opening hours/i.test(rawMessage)
+          ? cartCopy("Please choose a time within opening hours.", "يرجى اختيار وقت ضمن ساعات العمل.")
+          : (orderingClosedTitle() ? orderingClosedTitle() + ". " + restaurantClosedMessage() : rawMessage), 7000);
+      });
     } else {
       if (/points/i.test(rawMessage) && typeof loadRewardsSummary === "function") {
         // Balance changed elsewhere (or expired): refresh and let the customer choose again.

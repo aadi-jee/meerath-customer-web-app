@@ -87,4 +87,5 @@ test('app wiring: old fixed window is gone, script order is right', () => {
   assert.ok(html.indexOf('js/data.js') < html.indexOf('js/ordering-hours.js') && html.indexOf('js/ordering-hours.js') < html.indexOf('js/app.js'));
   assert.match(app, /orderingNoticeMarkup\(\)/);
   assert.match(app, /orderingRefusal\(rawMessage\)/);
+  assert.match(app, /\["cart", "checkout"\]\.includes\(screen\) && typeof loadOrderingHours === "function"\) loadOrderingHours\(\)/);
 });
