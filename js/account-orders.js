@@ -31,6 +31,31 @@ async function loadAccountOrders(append = false) {
     }
   }
 }
+/* Live status on the Orders screen: while an order is open, the first page is
+ * read again every few seconds and the screen redrawn only when something changed. */
+async function refreshAccountOrdersQuietly() {
+  if (!state.isLoggedIn || state.screen !== 'track' || accountOrders.busy || accountOrders.quiet ||
+      (typeof document !== 'undefined' && document.hidden)) return;
+  if (!accountOrders.rows.some(o => !['completed','cancelled','rejected'].includes(o.status))) return;
+  const generation = accountOrders.generation, user = state.authUserId;
+  accountOrders.quiet = true;
+  try {
+    const rows = await customerAuthRpc('oracy_customer_orders_v1', {p_restaurant_id: MENU_CONFIG.restaurantId, p_offset: 0});
+    if (generation !== accountOrders.generation || user !== state.authUserId || accountOrders.busy || !Array.isArray(rows)) return;
+    const fresh = new Map(rows.slice(0,20).map(row => [row.id, row]));
+    let changed = false;
+    accountOrders.rows = accountOrders.rows.map(row => {
+      const next = fresh.get(row.id);
+      if (!next) return row;
+      fresh.delete(row.id);
+      if (JSON.stringify(next) !== JSON.stringify(row)) changed = true;
+      return next;
+    });
+    if (fresh.size) { accountOrders.rows.unshift(...fresh.values()); changed = true; }
+    if (changed && state.screen === 'track') renderKeepScroll();
+  } catch (_) { /* the next round tries again */ } finally { accountOrders.quiet = false; }
+}
+if (typeof setInterval === 'function') setInterval(refreshAccountOrdersQuietly, 5000);
 function accountOrderStatus(status) {
   const names = {
     pending_confirmation:['Awaiting confirmation','بانتظار التأكيد'], accepted:['Accepted','مقبول'],
@@ -81,6 +106,7 @@ function accountOrdersPage() {
     <div class="history-order-top"><div><strong>#${h(order.order_number)}</strong><span>${h(date(order.created_at))}</span></div>
     <span class="history-status ${order.status==='rejected'||order.status==='cancelled'?'account-status-negative':''}">${h(accountOrderStatus(order.status))}</span></div>
     <div class="history-order-meta"><span>${h(accountOrderType(order.fulfillment_type))}</span><span>${(Array.isArray(order.items)?order.items:[]).reduce((n,line)=>n+(Number(line.quantity)||0),0)} ${t('items')}</span><strong>${money(Number(order.total)||0)}</strong></div>
+    ${typeof rewardsOrderLine === 'function' ? rewardsOrderLine(order.order_number) : ''}
     <details class="account-order-details"><summary>${t('orderDetails')}</summary>
     ${(Array.isArray(order.items)?order.items:[]).map(line=>`<div class="active-order-item">${h(line.quantity)} × ${h(line.name)}</div>`).join('')}
     ${order.rejection_reason?`<p>${h(order.rejection_reason)}</p>`:''}</details></article>`).join('');

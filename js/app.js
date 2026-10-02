@@ -25,6 +25,8 @@ const state = {
   notes: "",
   coupon: "",
   couponOn: false,
+  voucher: null,   // Batch D: the checked voucher (server answer)
+  redeemPoints: 0,   // Batch R: points chosen at checkout (the server re-checks them)
   customer: { name: "", mobile: "", email: "" },
   order: null,
   orderSubmitting: false,
@@ -60,14 +62,9 @@ editingAddressId: null,
   addressUnit: "",
   addressDirections: "",
   addressReturnScreen: "account",
-  rewardPoints: 0,
-  rewardStamps: 0,
-  rewardVouchers: 0,
   supportType: "",
   supportOrder: "",
   supportDetails: "",
-  points: 120,
-  stamps: 3,
   orderTiming: "asap",
 };
 
@@ -105,7 +102,7 @@ function restoreCartDraft() {
       const choices = normalizeItemChoices(item, line);
       return [{id:item.id,cartKey:newCartKey(),qty:line.qty,size:choices.size,choice:choices.choice,
         extras:choices.extras,spice:['mild','medium','spicy'].includes(line.spice)?line.spice:'medium',
-        price:roundMoney(item.price+choices.extraPrice),basePrice:roundMoney(item.basePrice+choices.extraPrice),image:item.image}];
+        price:roundMoney(item.price+choices.extraPrice),basePrice:roundMoney(item.basePrice+choices.baseExtraPrice),image:item.image}];
     });
     if (['delivery','takeaway','dinein'].includes(draft.orderType)) state.orderType=draft.orderType;
   } catch (_) { /* Ignore malformed drafts; never trust stored prices or HTML. */ }
@@ -151,7 +148,40 @@ function choicesValid(item, selection = state) {
   return !rows.some(x => x.required) || rows.some(x => x.id === selection.choice);
 }
 function choicePriceText(choice) {
+  // Batch V (238): a full-price size shows its own price, not "+".
+  if (choice.final) return ` <small>${money(choice.price)}</small>`;
   return choice.price > 0 ? ` <small>+ ${money(choice.price)}</small>` : "";
+}
+function choiceName(choice) {
+  return escapeHtml(state.lang === "ar" && choice.nameAr ? choice.nameAr : choice.name);
+}
+// Batch V (238): the big price on the item screen follows the chosen size,
+// choice and extras straight away (no full re-render).
+function detailPriceMarkup(item) {
+  const n = normalizeItemChoices(item, state);
+  const price = roundMoney(item.price + n.extraPrice), base = roundMoney(item.basePrice + n.baseExtraPrice);
+  const old = item.offer && base > price ? `<del style="color:var(--muted);font-size:0.85em;margin-inline-end:8px">${money(base)}</del>` : "";
+  return `${old}<span>${money(price)}</span>`;
+}
+function refreshDetailPrice() {
+  const item = itemById(state.itemId);
+  const el = typeof document !== "undefined" && document.getElementById("detail-price");
+  if (item && el) el.innerHTML = detailPriceMarkup(item);
+}
+// Batch V2 (247): the restaurant's own title for the choices, with "Required" once.
+function optionGroupTitle(options) {
+  const named = options.find(x => x.group);
+  const title = named ? escapeHtml(state.lang === "ar" && named.groupAr ? named.groupAr : named.group)
+    : cartCopy("Choose an option", "اختر خياراً");
+  return `${title}${options.some(x => x.required) ? ` <small class="choice-required">${cartCopy("Required", "مطلوب")}</small>` : ""}`;
+}
+function choiceBadge(row) {
+  if (row.type !== "Option" || !row.badge) return "";
+  return ` <em class="choice-badge">${escapeHtml(state.lang === "ar" && row.badgeAr ? row.badgeAr : row.badge)}</em>`;
+}
+function choiceNote(row) {
+  if (row.type !== "Option" || !row.note) return "";
+  return `<small class="choice-note">${escapeHtml(state.lang === "ar" && row.noteAr ? row.noteAr : row.note)}</small>`;
 }
 function itemChoiceMarkup(item) {
   const variants = enabledChoices(item, "Variant");
@@ -159,17 +189,18 @@ function itemChoiceMarkup(item) {
   const addons = enabledChoices(item, "Add-on");
   const group = (title, rows, mode, allowNone = false) => !rows.length ? "" : `<div class="item-choice-group"><h4>${title}</h4>
     ${allowNone ? `<label class="item-choice-row"><input type="radio" name="choice-Option" ${state.choice == null ? "checked" : ""} onchange="clearChoice()"><span>${cartCopy("No option", "بدون خيار")}</span></label>` : ""}
-    ${rows.map(row => `<label class="item-choice-row"><input type="${mode}" name="${mode === "radio" ? `choice-${row.type}` : row.id}"
+    ${rows.map(row => { const closed = !choiceOpen(row); return `<label class="item-choice-row${closed ? " is-closed" : ""}"${closed ? ' style="opacity:.55"' : ""}><input type="${mode}" name="${mode === "radio" ? `choice-${row.type}` : row.id}"
       ${row.type === "Variant" ? (state.size === row.id ? "checked" : "") : row.type === "Option" ? (state.choice === row.id ? "checked" : "") : (state.extras.includes(row.id) ? "checked" : "")}
-      ${row.type === "Add-on" && row.required ? "disabled" : ""}
+      ${(row.type === "Add-on" && row.required) || closed ? "disabled" : ""}
       onchange="${row.type === "Variant" ? `selectVariant('${row.id}')` : row.type === "Option" ? `selectChoice('${row.id}')` : `toggleExtra('${row.id}')`}">
-      <span>${escapeHtml(row.name)}${row.required ? ` <small>${cartCopy("Required", "مطلوب")}</small>` : ""}</span><strong>${choicePriceText(row)}</strong></label>`).join("")}</div>`;
-  return `${group(cartCopy("Choose a variant", "اختر النوع"), variants, "radio")}
-    ${group(cartCopy("Choose an option", "اختر خياراً"), options, "radio", !options.some(x => x.required))}
+      <span>${choiceName(row)}${row.type !== "Option" && row.required ? ` <small>${cartCopy("Required", "مطلوب")}</small>` : ""}${choiceBadge(row)}${choiceNote(row)}${row.windows?.length ? ` <small>${closed ? cartCopy("Not available now", "غير متاح الآن") + " · " : ""}${cartCopy("Available", "متاح")} ${choiceHoursText(row)}</small>` : ""}</span><strong>${choicePriceText(row)}</strong></label>`; }).join("")}</div>`;
+  const sized = variants.some(x => x.final);
+  return `${group(sized ? cartCopy("Choose a size", "اختر الحجم") : cartCopy("Choose a variant", "اختر النوع"), variants, "radio")}
+    ${group(optionGroupTitle(options), options, "radio", !options.some(x => x.required || x.isDefault))}
     ${group(cartCopy("Add-ons", "إضافات"), addons, "checkbox")}`;
 }
 function cartChoiceText(item, line) {
-  const labels = selectedChoices(item, line).map(row => row.name);
+  const labels = selectedChoices(item, line).map(row => state.lang === "ar" && row.nameAr ? row.nameAr : row.name);
   labels.push(t(line.spice));
   return escapeHtml(labels.join(" · "));
 }
@@ -286,6 +317,8 @@ function go(screen, extra = {}) {
   }
   if (screen === "listing" && extra.categoryId !== undefined && extra.categoryId !== state.categoryId) state.subcategoryId = "";
   Object.assign(state, extra, { screen });
+  // A returning customer goes straight to Home next time (the welcome screen is shown once).
+  if (screen !== "splash") { try { localStorage.setItem(appStorageKey("welcomed"), "1"); } catch (_) {} }
   if (screen === 'track' && state.isLoggedIn && typeof loadAccountOrders === 'function') loadAccountOrders();
   if (screen === 'savedAddressesPage' && state.isLoggedIn && typeof loadAccountAddresses === 'function') loadAccountAddresses();
   render();
@@ -304,6 +337,35 @@ function linePrice(line) {
   return Number(line.price) * line.qty;
 }
 
+// Batch D (253): the restaurant's own voucher codes. The server checks the
+// code (oracy_voucher_check_v1) and prices it again at checkout; this is the
+// same sum for the cart on screen.
+function voucherDiscountCents(itemsCents, hasItemOffer) {
+  const v = state.couponOn ? state.voucher : null;
+  if (!v || itemsCents <= 0) return 0;
+  if (hasItemOffer && !v.allow_with_offers) return 0;
+  if (itemsCents < Math.round(Number(v.min_food || 0) * 100)) return 0;
+  const value = Number(v.value) || 0;
+  if (v.kind === "percent") {
+    const top = v.max_discount == null ? itemsCents : Math.round(Number(v.max_discount) * 100);
+    return Math.max(0, Math.min(itemsCents, top, Math.round(itemsCents * value / 100)));
+  }
+  return Math.max(0, Math.min(itemsCents, Math.round(value * 100)));
+}
+const VOUCHER_MESSAGES_AR = {
+  "This code is not valid": "هذا الكود غير صالح",
+  "This code has expired": "انتهت صلاحية هذا الكود",
+  "Sign in to use this code": "سجّل الدخول لاستخدام هذا الكود",
+  "This code cannot be used together with an item offer": "لا يمكن استخدام هذا الكود مع عروض الأصناف",
+  "You have already used this code": "لقد استخدمت هذا الكود من قبل",
+  "This code has been fully used": "تم استخدام هذا الكود بالكامل",
+};
+function voucherMessage(message) {
+  if (state.lang !== "ar") return message;
+  if (VOUCHER_MESSAGES_AR[message]) return VOUCHER_MESSAGES_AR[message];
+  const min = /^This code needs at least ([0-9.]+) of food$/.exec(message || "");
+  return min ? `هذا الكود يتطلب طعاماً بقيمة ${money(Number(min[1]))} على الأقل` : t("couponBad");
+}
 function totals() {
   // Sum integer halalas; the line prices already include VAT and item offers.
   const cents = n => Math.round(Number(n) * 100);
@@ -311,7 +373,11 @@ function totals() {
   const regularCents = state.cart.reduce((n,l) =>
     n + cents(l.basePrice ?? itemById(l.id)?.basePrice ?? l.price) * l.qty, 0);
   const hasItemOffer = state.cart.some(l => itemById(l.id)?.offer);
-  const discountCents = state.couponOn && !hasItemOffer ? Math.min(1000, itemsCents) : 0;
+  const couponCents = voucherDiscountCents(itemsCents, hasItemOffer);
+  // Batch R: points work like the server: on the food after the coupon.
+  const pointsCents = typeof rewardsDiscountFor === "function"
+    ? Math.round(rewardsDiscountFor((itemsCents - couponCents) / 100, couponCents > 0) * 100) : 0;
+  const discountCents = couponCents + pointsCents;
   const foodTotal = Math.max(0, itemsCents - discountCents) / 100;
   const address = typeof selectedDeliveryAddress === "function" ? selectedDeliveryAddress() : null;
   const quoteKey = address ? deliveryQuoteFingerprint(address, foodTotal) : "";
@@ -319,14 +385,15 @@ function totals() {
     state.deliveryQuoteKey === quoteKey ? Number(state.deliveryQuote.fee || 0) : 0;
   const total = Math.max(0, itemsCents - discountCents + cents(delivery)) / 100;
   const vat = roundMoney(total * VAT / (1 + VAT));
-  return {subtotal:roundMoney(total - vat), foodTotal, delivery, discount:discountCents / 100, vat, total,
+  return {subtotal:roundMoney(total - vat), foodTotal, delivery, discount:couponCents / 100, points:pointsCents / 100, vat, total,
     regularItemsTotal:regularCents / 100, offerSavings:Math.max(0, regularCents - itemsCents) / 100};
 }
 function cartSummaryMarkup() {
   const tot = totals();
   return `${offerSpendMarkup()}<div><span>${cartCopy("Items total (VAT included)", "إجمالي الأصناف (شامل الضريبة)")}</span><span>${money(tot.regularItemsTotal)}</span></div>
     ${tot.offerSavings ? `<div class="offer-saving"><span>${cartCopy("Offer savings", "توفير العروض")}</span><span>− ${money(tot.offerSavings)}</span></div>` : ""}
-    ${tot.discount ? `<div><span>${t("coupon")}</span><span>− ${money(tot.discount)}</span></div>` : ""}
+    ${tot.discount ? `<div><span>${t("coupon")}${state.voucher?.code ? ` <b dir="ltr">${escapeHtml(state.voucher.code)}</b>` : ""}</span><span>− ${money(tot.discount)}</span></div>` : ""}
+    ${tot.points ? `<div class="rewards-line"><span>${cartCopy(`Points (${state.redeemPoints})`, `النقاط (${state.redeemPoints})`)}</span><span>− ${money(tot.points)}</span></div>` : ""}
     ${state.orderType === "delivery" ? `<div><span>${t("deliveryFee")}</span><span>${currentDeliveryQuote()?.eligible ? money(tot.delivery) : cartCopy("Select location", "اختر الموقع")}</span></div>` : ""}
     <div class="total"><span>${t("total")}</span><span>${money(tot.total)}</span></div>
     <div class="included-vat"><span>${cartCopy("Includes VAT 15%", "يشمل ضريبة القيمة المضافة 15%")}</span><span>${money(tot.vat)}</span></div>`;
@@ -364,7 +431,7 @@ function addToCart(item, qty = 1) {
     state.cart.push({
       id: item.id,
       cartKey: newCartKey(),
-      basePrice: roundMoney(item.basePrice + normalized.extraPrice),
+      basePrice: roundMoney(item.basePrice + normalized.baseExtraPrice),
       price: roundMoney(item.price + normalized.extraPrice),
       image: item.image,
       qty,
@@ -483,6 +550,80 @@ function nav(active) {
   </nav>`;
 }
 
+// ---------------------------------------------------------------------
+// Batch N: navigation on every screen, and the browser / phone Back
+// button works as the app's Back.
+// ---------------------------------------------------------------------
+const NAV_WIDE_ONLY = ["detail", "checkout", "signInPage", "otpPage", "profileSetupPage", "addAddressPage", "supportRequest", "cateringPage"];
+function navTabFor(screen) {
+  if (["listing", "detail", "cart", "checkout", "menu"].includes(screen)) return "menu";
+  if (["confirmation", "track"].includes(screen)) return "track";
+  if (["account", "rewards", "signInPage", "otpPage", "profileSetupPage", "savedAddressesPage", "addAddressPage",
+       "languageSettingsPage", "appearanceSettingsPage"].includes(screen)) return "account";
+  return screen === "home" ? "home" : "more";
+}
+const NAV_STEP_SCREENS = ["splash", "signInPage", "otpPage", "profileSetupPage"];   // never stay in the Back trail
+const navTrail = [];     // screens this visit put into the browser history
+let navOwnBack = 0;      // history.back() calls made by the app itself
+let navPopping = false;  // drawing a screen the Back / Forward button asked for
+function navContext() {
+  return {screen: state.screen, categoryId: state.categoryId, subcategoryId: state.subcategoryId,
+    itemId: state.itemId, orderTab: state.orderTab, itemFrom: state.itemFrom};
+}
+/** The screen a history entry may open now (a finished step is never reopened). */
+function navTarget(ctx) {
+  const screen = ctx && typeof ctx.screen === "string" ? ctx.screen : "home";
+  if (screen === "checkout") return state.cart.length ? ctx : {screen: "cart"};
+  if (screen === "confirmation") return state.order ? ctx : {screen: "home"};
+  if (screen === "detail") return itemById(ctx.itemId) ? ctx : {...ctx, screen: "listing"};
+  if (["otpPage", "profileSetupPage"].includes(screen)) return {screen: state.isLoggedIn ? "account" : "signInPage"};
+  if (screen === "signInPage") return state.isLoggedIn ? {screen: "account"} : ctx;
+  if (["savedAddressesPage", "addAddressPage"].includes(screen)) return state.isLoggedIn ? {...ctx, screen: "savedAddressesPage"} : {screen: "account"};
+  if (screen === "splash") return {screen: "home"};
+  return ctx;
+}
+/** Called after every draw: keeps the browser history in step with the screen. */
+function navSync() {
+  if (typeof history === "undefined" || typeof history.pushState !== "function") return;
+  const now = state.screen, last = navTrail[navTrail.length - 1], entry = {oracy: navContext()};
+  try {
+    if (last === undefined) { navTrail.push(now); history.replaceState(entry, ""); return; }
+    if (navPopping || now === last) { navTrail[navTrail.length - 1] = now; history.replaceState(entry, ""); return; }
+    if (navTrail.length > 1 && navTrail[navTrail.length - 2] === now) {   // the app's own Back
+      navTrail.pop(); navOwnBack++; history.back(); return;
+    }
+    // A step that is over is replaced, so Back never returns into it.
+    if (NAV_STEP_SCREENS.includes(last) || (last === "checkout" && now === "confirmation")) {
+      navTrail[navTrail.length - 1] = now; history.replaceState(entry, ""); return;
+    }
+    navTrail.push(now); history.pushState(entry, "");
+  } catch (_) { /* history not available (private mode, file://): the app's own Back still works */ }
+}
+function navOnPop(event) {
+  if (navOwnBack > 0) { navOwnBack--; return; }
+  const ctx = event && event.state && event.state.oracy;
+  if (!ctx) return;
+  if (navTrail.length > 1 && navTrail[navTrail.length - 2] === ctx.screen) navTrail.pop();
+  else navTrail.push(ctx.screen);                                           // the Forward button
+  const target = navTarget(ctx);
+  navPopping = true;
+  try {
+    Object.assign(state, target, {cartEditKey: null});
+    if (state.screen === "track" && state.isLoggedIn && typeof loadAccountOrders === "function") loadAccountOrders();
+    if (state.screen === "savedAddressesPage" && state.isLoggedIn && typeof loadAccountAddresses === "function") loadAccountAddresses();
+    render();
+    $app().parentElement.scrollTop = 0;
+  } finally { navPopping = false; }
+}
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") window.addEventListener("popstate", navOnPop);
+
+const ITEM_BACK_SCREENS = ["cart", "home", "listing", "offers", "confirmation"];
+function itemBackScreen() {
+  const from = state.itemFrom;
+  if (!ITEM_BACK_SCREENS.includes(from)) return "listing";
+  if (from === "confirmation" && !state.order) return "listing";
+  return from;
+}
 function back(to = "home") {
   return `
     <button
@@ -790,8 +931,7 @@ function setHomeOrderType(type, button) {
   if (note) {
     if (type === "delivery") {
       note.style.display = "";
-      note.textContent =
-      note.textContent = `✓ ${t("deliveryScope")}`;
+      note.textContent = t("deliveryScope");
     } else {
       note.style.display = "none";
     }
@@ -876,7 +1016,7 @@ function home() {
   class="mode-note"
   style="${state.orderType === "delivery" ? "" : "display:none"}"
 >
-  ✓ ${t("deliveryScope")}
+  ${t("deliveryScope")}
 </div>
       ${homeBannersMarkup()}
       <div class="h-row"><h3>${t("todaysSpecial")}</h3><button class="link" onclick="go('menu')">${t("seeAll")}</button></div>
@@ -885,13 +1025,15 @@ function home() {
         ${specials
           .map(
             (i) => `
-          <article class="special-card" onclick="openItem('${i.id}')">
-            <img src="${i.image}" alt="${loc(i, "name")}" />
-            <div>
+          <article class="special-card">
+            <button class="special-open" onclick="openItem('${i.id}')" aria-label="${loc(i, "name")}">
+              <img class="${i.image === APP_CONFIG.brand.logo ? "no-photo" : ""}" src="${i.image}" alt="" loading="lazy" />
               ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
               <h4>${loc(i, "name")}</h4>
-              <p class="price">${itemPriceMarkup(i)}</p>
-            </div>
+            </button>
+            <button class="special-add" onclick="quickAdd('${i.id}')" aria-label="${t("add")} ${loc(i, "name")}">
+              <span>${money(i.price)}</span><b aria-hidden="true">+</b>
+            </button>
           </article>`
           )
           .join("")}
@@ -981,14 +1123,14 @@ function detail() {
     <section class="screen detail-screen">
       <img class="hero-img" src="${i.image}" alt="${dish}" />
       <div class="topbar" style="margin-top:-48px;position:relative">
-        ${back(editing ? "cart" : "listing")}
+        ${back(editing ? "cart" : itemBackScreen())}
         ${cartButton()}
       </div>
       ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
       <h2>${dish}</h2>
       <div class="stars">${t("kitchen")}</div>
       <p style="color:var(--muted);font-size:14px">${loc(i, "desc")}</p>
-      <p class="price" style="margin:12px 0;font-size:20px">${itemPriceMarkup(i)}</p>
+      <p class="price" id="detail-price" style="margin:12px 0;font-size:20px">${detailPriceMarkup(i)}</p>
       ${offerLimitMarkup(i)}
       ${itemChoiceMarkup(i)}
       ${editing && !editLine ? `<p role="status">${cartCopy("This cart item was removed after a menu update. Return to your cart.", "تمت إزالة هذا الصنف بعد تحديث القائمة. ارجع إلى السلة.")}</p>` : ""}
@@ -1003,6 +1145,7 @@ function detail() {
             .join("")}
         </div>
       </div>
+      ${typeof itemRecommendationsMarkup === "function" ? itemRecommendationsMarkup(i) : ""}
       <div class="sticky-actions single-action">
   <button class="btn btn-primary" ${allowed ? "" : "disabled"} onclick="addFromDetail()">
     ${editing ? cartCopy("Update cart", "تحديث السلة") : canOrderItem(i) ? (allowed ? t("addToCart") : cartCopy("Offer limit reached", "تم بلوغ حد العرض")) : menuText("unavailable")}
@@ -1038,7 +1181,7 @@ function cart() {
     return `<section class="screen cart-screen">
       <div class="topbar">${typeof cartBackMarkup === 'function' ? cartBackMarkup() : back("home")}<h2>${t("yourCart")}</h2>${langSwitch()}</div>
       <div class="empty">${t("cartEmpty")}<br><button class="link" onclick="go('menu')">${t("browseTheMenu")}</button></div>
-    </section>${nav("home")}`;
+    </section>${nav("menu")}`;
   }
   return `<section class="screen cart-screen">
     <div class="topbar">${typeof cartBackMarkup === 'function' ? cartBackMarkup() : back("home")}<h2>${t("yourCart")}</h2>${langSwitch()}</div>
@@ -1070,8 +1213,7 @@ function cart() {
     }).join("")}
     ${cartRecommendationsMarkup()}
     <textarea class="field" rows="2" placeholder="${t("cookingNotes")}" oninput="state.notes=this.value">${escapeHtml(state.notes)}</textarea>
-    <input class="field" placeholder="${t("coupon")}" value="${escapeHtml(state.coupon)}" oninput="state.coupon=this.value" />
-    <button class="link" onclick="applyCoupon()">${t("applyCoupon")}</button>
+    <div id="couponBox">${couponBoxMarkup()}</div>
     <div class="breakdown" id="cartBreakdown" style="margin-top:14px">${cartSummaryMarkup()}</div>
     <button class="btn btn-primary" style="margin-top:16px" onclick="go('checkout')">${t("proceed")}</button>
   </section>`;
@@ -1328,8 +1470,10 @@ function totalsWithoutDelivery() {
   const cents = n => Math.round(Number(n) * 100);
   const itemsCents = state.cart.reduce((n,l) => n + cents(l.price) * l.qty, 0);
   const hasItemOffer = state.cart.some(l => itemById(l.id)?.offer);
-  const discountCents = state.couponOn && !hasItemOffer ? Math.min(1000, itemsCents) : 0;
-  return {foodTotal: Math.max(0, itemsCents - discountCents) / 100};
+  const couponCents = voucherDiscountCents(itemsCents, hasItemOffer);
+  const pointsCents = typeof rewardsDiscountFor === "function"
+    ? Math.round(rewardsDiscountFor((itemsCents - couponCents) / 100, couponCents > 0) * 100) : 0;
+  return {foodTotal: Math.max(0, itemsCents - couponCents - pointsCents) / 100};
 }
 function deliveryQuoteMarkup() {
   if (state.deliveryQuoteBusy) return `<div class="delivery-quote-note">${cartCopy("Checking delivery area and fee…", "جارٍ التحقق من منطقة ورسوم التوصيل…")}</div>`;
@@ -1378,6 +1522,7 @@ function checkout() {
   const acceptingOrders = restaurantAcceptingOrders();
   const checkoutBusy = state.authBusy || state.orderSubmitting;
   if (state.orderType === "delivery" && state.isLoggedIn && !state.deliveryQuoteError) setTimeout(() => refreshDeliveryQuote(), 0);
+  if (typeof rewardsEnsureLoaded === "function") rewardsEnsureLoaded(() => { if (state.screen === "checkout") renderKeepScroll(); });
 
   const timingSub =
     state.orderTiming === "asap"
@@ -1527,6 +1672,8 @@ function checkout() {
         </div>
       `}
 
+      ${typeof rewardsCheckoutMarkup === "function" ? rewardsCheckoutMarkup() : ""}
+
       <div class="breakdown checkout-total-card">${cartSummaryMarkup()}</div>
 
       <button
@@ -1602,6 +1749,7 @@ function confirmation() {
           </p>
 
         </div>
+        ${typeof nextTimeRecommendationsMarkup === "function" ? nextTimeRecommendationsMarkup(o) : ""}
 
         <button
           class="btn btn-primary"
@@ -2021,6 +2169,11 @@ function offers() {
 }
 
 function rewards() {
+  // Batch R: the real points screen (the old placeholder below is never shown).
+  if (typeof rewardsScreenMarkup === "function") {
+    if (typeof rewardsEnsureLoaded === "function") rewardsEnsureLoaded(() => { if (state.screen === "rewards") render(); });
+    return rewardsScreenMarkup();
+  }
   return `
     <section class="screen">
       <div class="topbar"><h2>${t("rewards")}</h2>${langSwitch()}</div>
@@ -2965,6 +3118,7 @@ function addAddressPage() {
 }
 
 function signedInAccount() {
+  if (typeof rewardsEnsureLoaded === "function") rewardsEnsureLoaded(() => { if (state.screen === "account") renderKeepScroll(); });
   return `
     <section class="screen new-account-screen signed-account-screen">
 
@@ -2999,33 +3153,7 @@ function signedInAccount() {
 
       </div>
 
-      <div class="account-section-title">
-        ${brandedRewardsLabel()}
-      </div>
-
-      <div class="signed-rewards-card">
-
-        <div class="signed-reward-stat">
-          <strong>—</strong>
-          <span>${t("points")}</span>
-        </div>
-
-        <div class="signed-reward-divider"></div>
-
-        <div class="signed-reward-stat">
-          <strong>—</strong>
-          <span>${t("stamps")}</span>
-        </div>
-
-        <div class="signed-reward-divider"></div>
-
-        <div class="signed-reward-stat">
-          <strong>—</strong>
-          <span>${t("vouchers")}</span>
-        </div>
-
-      </div>
-
+${typeof rewardsAccountCardMarkup === "function" ? rewardsAccountCardMarkup() : ""}
       <div class="account-section-title account-settings-title">
         ${t("myAccount")}
       </div>
@@ -3284,6 +3412,7 @@ function account() {
   if (state.isLoggedIn) {
     return signedInAccount();
   }
+  if (typeof rewardsEnsureLoaded === "function") rewardsEnsureLoaded(() => { if (state.screen === "account") renderKeepScroll(); });
   return `
     <section class="screen new-account-screen">
 
@@ -3315,13 +3444,14 @@ function account() {
 
       </div>
 
+${typeof rewardsOn === "function" && rewardsOn() ? `
       <div class="account-section-title">
         ${brandedRewardsLabel()}
       </div>
 
       <button
         class="account-rewards-card"
-        onclick="toast(t('signInRequired'))"
+        onclick="go('signInPage')"
       >
         <div class="account-reward-icon">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -3338,6 +3468,7 @@ function account() {
         <span class="account-arrow">›</span>
       </button>
 
+` : ""}
       <div class="account-section-title account-settings-title">
       ${t("myAccount")}
      </div>
@@ -3503,6 +3634,13 @@ function render() {
     account,
   };
   $app().innerHTML = (map[state.screen] || home)();
+  // Batch N: every screen keeps the navigation. On a phone the focused steps
+  // (item, checkout, sign-in, new address) show it only on a wide screen.
+  if (state.screen !== "splash" && typeof $app().querySelector === "function" && !$app().querySelector(".nav")) {
+    $app().insertAdjacentHTML("beforeend", nav(navTabFor(state.screen))
+      .replace('class="nav"', `class="nav${NAV_WIDE_ONLY.includes(state.screen) ? " nav-wide-only" : ""}"`));
+  }
+  navSync();
   if(state.screen==="addAddressPage")mountDeliveryMap();
   if (["home","menu","listing","detail","cart","checkout","offers"].includes(state.screen)) {
     const screen = $app().querySelector(".screen");
@@ -3510,10 +3648,7 @@ function render() {
   }
   $app().style.paddingBottom =
     state.screen === "splash" ||
-    state.screen === "detail" ||
-    state.screen === "cart" ||
-    state.screen === "checkout" ||
-    state.screen === "confirmation"
+    NAV_WIDE_ONLY.includes(state.screen)
       ? "20px"
       : "";
 }
@@ -3524,9 +3659,12 @@ function openItem(id) {
   if (!item) { toast(menuText("unavailableItem")); return; }
   if (state.categoryId !== item.category) state.subcategoryId = "";
   state.categoryId = item.category;
+  // Back on the item page returns to the screen the customer opened it from.
+  if (state.screen !== "detail") state.itemFrom = state.screen;
   state.itemId = id;
   state.choice = null;
-  prepareChoices(item, {size:"regular", choice:null, extras:[]});
+  // Batch V2: the restaurant's default choice starts selected.
+  prepareChoices(item, {size:"regular", choice:defaultChoiceId(item), extras:[]});
   state.spice = "medium";
   go("detail");
 }
@@ -3570,18 +3708,23 @@ function toggleExtra(id) {
     state.extras.push(id);
   }
   // The native checkbox already reflects the change; keep the detail DOM intact.
+  refreshDetailPrice();
 }
 function selectVariant(id) {
-  if (!enabledChoices(itemById(state.itemId), "Variant").some(x => x.id === id)) return;
+  // Batch V (238): a size outside its own hours cannot be chosen.
+  if (!enabledChoices(itemById(state.itemId), "Variant").some(x => x.id === id && choiceOpen(x))) return;
   state.size = id;
+  refreshDetailPrice();
 }
 function selectChoice(id) {
   if (!enabledChoices(itemById(state.itemId), "Option").some(x => x.id === id)) return;
   state.choice = id;
+  refreshDetailPrice();
 }
 function clearChoice() {
   if (enabledChoices(itemById(state.itemId), "Option").some(x => x.required)) return;
   state.choice = null;
+  refreshDetailPrice();
 }
 function setSpiceLevel(button, spice) {
   state.spice = spice;
@@ -3615,7 +3758,7 @@ function addFromDetail() {
     line.choice = normalized.choice;
     line.extras = [...normalized.extras];
     line.price = roundMoney(item.price + normalized.extraPrice);
-    line.basePrice = roundMoney(item.basePrice + normalized.extraPrice);
+    line.basePrice = roundMoney(item.basePrice + normalized.baseExtraPrice);
     const match = state.cart.find(l => l.cartKey !== line.cartKey && l.id === line.id &&
       l.spice === line.spice && l.size === line.size && l.choice === line.choice &&
       l.extras.join() === line.extras.join());
@@ -3624,7 +3767,11 @@ function addFromDetail() {
     go("cart");
     return;
   }
-  if (addToCart(itemById(state.itemId))) go("cart");
+  if (addToCart(itemById(state.itemId))) {
+    // Batch C: a suggestion opened to choose options counts once it reaches the cart.
+    if (typeof recoAddedFromDetail === "function") recoAddedFromDetail(state.itemId);
+    go("cart");
+  }
 }
 
 function quickAdd(id) {
@@ -3637,8 +3784,7 @@ function quickAdd(id) {
   state.choice = null;
   state.extras = [];
   state.spice = "medium";
-  addToCart(item);
-  
+  if (addToCart(item) && state.screen === "home") renderKeepScroll();
 }
 
 function updateCartBreakdown() {
@@ -3672,15 +3818,56 @@ function chgQty(idx, d, button) {
   updateCartButtons();
 }
 
-function applyCoupon() {
-  if (state.cart.some(l => itemById(l.id)?.offer)) {
-    state.couponOn = false;
-    toast(state.lang === "ar" ? "لا يمكن جمع الكوبون مع عروض الأصناف." : "Coupons cannot be combined with item offers.");
-    updateCartBreakdown();
-    return;
+// Batch D: the code box in the cart. Not applied: the field and "Apply code".
+// Applied: "Coupon applied" with the code, and "Remove coupon" beside it.
+function couponBoxMarkup() {
+  if (state.couponOn && state.voucher?.code) {
+    return `<div class="coupon-applied" role="status">
+      <span class="coupon-applied-text">✓ ${cartCopy("Coupon applied", "تم تطبيق الكوبون")} <b dir="ltr">${escapeHtml(state.voucher.code)}</b></span>
+      <button class="link" onclick="removeCoupon()">${cartCopy("Remove coupon", "إزالة الكوبون")}</button>
+    </div>`;
   }
-  state.couponOn = state.coupon.trim().toUpperCase() === "MEERATH10";
-  toast(state.couponOn ? t("couponOk") : t("couponBad"));
+  return `<input class="field" id="couponInput" placeholder="${t("coupon")}" value="${escapeHtml(state.coupon)}" oninput="state.coupon=this.value" />
+    <button class="link" onclick="applyCoupon()">${t("applyCoupon")}</button>`;
+}
+function refreshCouponBox() {
+  const box = typeof document !== "undefined" ? document.getElementById("couponBox") : null;
+  if (box && "innerHTML" in box) box.innerHTML = couponBoxMarkup();
+}
+// Take the code off again (the customer can type another one).
+function removeCoupon() {
+  state.couponOn = false;
+  state.voucher = null;
+  state.coupon = "";
+  refreshCouponBox();
+  updateCartBreakdown();
+}
+async function applyCoupon() {
+  const code = state.coupon.trim().toUpperCase();
+  state.couponOn = false;
+  state.voucher = null;
+  if (!code) { updateCartBreakdown(); return; }
+  const cents = n => Math.round(Number(n) * 100);
+  const itemsCents = state.cart.reduce((n,l) => n + cents(l.price) * l.qty, 0);
+  try {
+    const answer = await customerOrderRpc("oracy_voucher_check_v1", {
+      p_restaurant_id: MENU_CONFIG.restaurantId, p_code: code, p_food: itemsCents / 100,
+      p_has_offer: state.cart.some(l => itemById(l.id)?.offer),
+      p_phone: state.isLoggedIn ? state.customerPhone || state.customer.mobile || "" : state.customer.mobile || "",
+    });
+    if (answer?.ok === true && answer.code === code) {
+      state.voucher = answer;
+      state.couponOn = true;
+      toast(t("couponOk"));
+    } else {
+      toast(voucherMessage(answer?.message || ""));
+    }
+  } catch (_) {
+    toast(state.lang === "ar" ? "تعذر التحقق من الكود. حاول مرة أخرى." : "Could not check the code. Please try again.");
+  }
+  // points may not be allowed together with a code
+  if (typeof rewardsValidSelection === "function" && state.redeemPoints > 0 && totals().points <= 0) state.redeemPoints = 0;
+  refreshCouponBox();
   updateCartBreakdown();
 }
 
@@ -3833,7 +4020,10 @@ async function createOrderAfterVerification() {
       order_timing: state.orderTiming,
       scheduled_for: getScheduledFor() ? new Date(getScheduledFor()).toISOString() : null,
       suggested_eta: suggestedEta,
-      coupon_code: state.couponOn ? state.coupon.trim().toUpperCase() : "",
+      // Batch D (253): only a code that takes something off this cart is sent.
+      coupon_code: state.couponOn && state.voucher && totals().discount > 0 ? state.voucher.code : "",
+      // Batch R (241): points to use; the server prices and checks them.
+      ...(state.redeemPoints > 0 ? {redeem_points: state.redeemPoints} : {}),
       address,
       delivery_address_id: state.orderType==="delivery" ? defaultAddress?.id : null,
       delivery_address_version: state.orderType==="delivery" ? defaultAddress?.updatedAt : null,
@@ -3847,6 +4037,8 @@ async function createOrderAfterVerification() {
           choices: selectedChoices(item, line).map(choice => ({
             name: choice.name,
             type: choice.type,
+            // Batch V (238): the permanent id, so the server knows the exact row.
+            ...(choice.rowId ? {id: choice.rowId} : {}),
           })),
         };
       }),
@@ -3876,6 +4068,10 @@ async function createOrderAfterVerification() {
     state.cart = [];
     saveCartDraft();
     state.couponOn = false;
+    state.voucher = null;
+    state.coupon = "";
+    state.redeemPoints = 0;
+    if (typeof loadRewardsSummary === "function") loadRewardsSummary(true);
     saveTrackedCustomerOrder();
     go("confirmation");
     refreshTrackedCustomerOrder();
@@ -3888,19 +4084,25 @@ async function createOrderAfterVerification() {
       go("checkout");
       setTimeout(() => toast(message, 7000));
     } else {
-      toast(rawMessage || cartCopy("Could not place order. Try again.", "تعذر إرسال الطلب. حاول مرة أخرى."), 5000);
+      if (/points/i.test(rawMessage) && typeof loadRewardsSummary === "function") {
+        // Balance changed elsewhere (or expired): refresh and let the customer choose again.
+        state.redeemPoints = 0;
+        loadRewardsSummary(true).then(() => { if (state.screen === "checkout") renderKeepScroll(); });
+      }
+      if (/\bcode\b/i.test(rawMessage) && state.couponOn) {
+        // Batch D: the code can no longer be used (switched off, used up, signed out…):
+        // take it off so the customer sees the real total and can order.
+        state.couponOn = false;
+        state.voucher = null;
+        toast(voucherMessage(rawMessage), 7000);
+      } else {
+        toast(rawMessage || cartCopy("Could not place order. Try again.", "تعذر إرسال الطلب. حاول مرة أخرى."), 5000);
+      }
     }
   } finally {
     state.orderSubmitting = false;
     if (state.screen === "checkout") renderKeepScroll();
   }
-}
-
-function redeem(cost) {
-  if (state.points < cost) return toast(t("notEnough"));
-  state.points -= cost;
-  toast(t("voucherOk"));
-  render();
 }
 
 window.go = go;
@@ -3914,9 +4116,9 @@ window.addFromDetail = addFromDetail;
 window.quickAdd = quickAdd;
 window.chgQty = chgQty;
 window.applyCoupon = applyCoupon;
+window.removeCoupon = removeCoupon;
 window.placeOrder = placeOrder;
 window.createOrderAfterVerification = createOrderAfterVerification;
-window.redeem = redeem;
 window.setLang = setLang;
 window.t = t;
 window.state = state;
@@ -3942,6 +4144,16 @@ applyDir();
 applyAppearance();
 restoreCustomerOrderHistory();
 restoreTrackedCustomerOrder();
+try { if (localStorage.getItem(appStorageKey("welcomed")) === "1") state.screen = "home"; } catch (_) {}
+// Batch N: a reload stays on the same browsing screen (not inside a form or the checkout).
+try {
+  const kept = typeof history !== "undefined" && history.state && history.state.oracy;
+  if (kept && ["home", "menu", "listing", "detail", "cart", "track", "more", "offers", "account", "rewards"].includes(kept.screen)) {
+    Object.assign(state, {screen: kept.screen, categoryId: kept.categoryId ?? state.categoryId,
+      subcategoryId: kept.subcategoryId ?? state.subcategoryId, itemId: kept.itemId ?? state.itemId,
+      orderTab: kept.orderTab ?? state.orderTab, itemFrom: kept.itemFrom});
+  }
+} catch (_) {}
 render();
 
 bootstrapCustomerAuth();

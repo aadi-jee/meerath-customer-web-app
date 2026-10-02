@@ -112,6 +112,14 @@ function choiceKey(value) {
   for (const character of value) { hash ^= character.codePointAt(0); hash = Math.imul(hash, 16777619); }
   return (hash >>> 0).toString(36);
 }
+function choiceText(value, max) {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text && text.length <= max ? text : "";
+}
+/** Batch V2: the choice picked for the customer when the item opens (or null). */
+function defaultChoiceId(item) {
+  return enabledChoices(item, "Option").find(x => x.isDefault)?.id || null;
+}
 function mapItemChoices(value) {
   if (!Array.isArray(value)) return [];
   const seen = new Map();
@@ -126,26 +134,94 @@ function mapItemChoices(value) {
     const base = `choice-${choiceKey(`${type}\u0000${name.toLocaleLowerCase('en')}`)}`;
     const duplicate = seen.get(base) || 0;
     seen.set(base, duplicate + 1);
+    // Batch V (238): permanent id, Arabic name, full-price size, default size, size hours.
+    const rowId = typeof row.id === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(row.id) ? row.id : null;
+    const nameAr = typeof row.name_ar === "string" && row.name_ar.trim().length <= 60 ? row.name_ar.trim() : "";
     return [{id:duplicate ? `${base}-${duplicate}` : base, name, type, price:roundMoney(price),
-      enabled:row.enabled, required:row.required}];
+      enabled:row.enabled, required:row.required, rowId, nameAr,
+      final:type === "Variant" && row.price_mode === "final",
+      // Batch V2 (247): a choice can be the default too, with a badge, a note and a group title.
+      isDefault:(type === "Variant" || type === "Option") && row.is_default === true,
+      ...(type === "Option" ? {badge:choiceText(row.badge, 24), badgeAr:choiceText(row.badge_ar, 24),
+        note:choiceText(row.note, 120), noteAr:choiceText(row.note_ar, 120),
+        group:choiceText(row.group, 40), groupAr:choiceText(row.group_ar, 40)} : {}),
+      windows:mapChoiceWindows(row.windows)}];
   });
+}
+// Batch V (238): a size's own hours, e.g. lunch only. Same rule as the server
+// (_oracy_choice_open_v1): days 1 = Monday ... 7 = Sunday, start included, end
+// not; a window past midnight belongs to the day it starts. Branch clock.
+function mapChoiceWindows(value) {
+  if (!Array.isArray(value)) return [];
+  const minutes = text => {
+    const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(typeof text === "string" ? text : "");
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  return value.slice(0, 7).flatMap(w => {
+    if (!w || typeof w !== "object" || !Array.isArray(w.days)) return [];
+    const start = minutes(w.start), end = minutes(w.end);
+    const days = [...new Set(w.days.filter(d => Number.isInteger(d) && d >= 1 && d <= 7))];
+    if (start == null || end == null || start === end || !days.length) return [];
+    return [{days, start, end}];
+  });
+}
+function choiceOpen(choice, date = new Date()) {
+  if (!choice?.windows?.length) return true;
+  const {day, seconds} = riyadhClock(date);
+  const t = Math.floor(seconds / 60), prev = day === 1 ? 7 : day - 1;
+  return choice.windows.some(w => w.start < w.end
+    ? w.days.includes(day) && t >= w.start && t < w.end
+    : (w.days.includes(day) && t >= w.start) || (w.days.includes(prev) && t < w.end));
+}
+function choiceHoursText(choice) {
+  const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  return (choice?.windows || []).map(w => `${hhmm(w.start)}–${hhmm(w.end)}`).join(", ");
+}
+// Batch V (238): the item offer on a full-price size (same rounding as the server).
+function offerOnPrice(offer, price) {
+  if (!offer) return roundMoney(price);
+  return offer.type === "percentage"
+    ? roundMoney(price * (1 - offer.amount / 100))
+    : roundMoney(Math.max(0, price - offer.amount));
 }
 function enabledChoices(item, type) {
   return (item?.options || []).filter(choice => choice.enabled && choice.type === type);
 }
-function normalizeItemChoices(item, selection = {}) {
+function normalizeItemChoices(item, selection = {}, date = new Date()) {
   const variants = enabledChoices(item, "Variant");
   const options = enabledChoices(item, "Option");
   const addons = enabledChoices(item, "Add-on");
-  const variant = variants.some(x => x.id === selection.size) ? selection.size : (variants[0]?.id || "regular");
+  // Batch V (238): a size already chosen is kept (a cart line is never
+  // switched to another size behind the customer's back; checkout refuses it
+  // if its hours have passed). With none chosen: the default size on sale now,
+  // else the first size on sale.
+  const openSizes = variants.filter(x => choiceOpen(x, date));
+  const variant = variants.some(x => x.id === selection.size) ? selection.size
+    : (openSizes.find(x => x.isDefault)?.id || openSizes[0]?.id || (variants.length ? null : "regular"));
   let choice = options.some(x => x.id === selection.choice) ? selection.choice : null;
-  if (!choice && options.some(x => x.required)) choice = options[0]?.id || null;
+  if (!choice && options.some(x => x.required)) choice = options.find(x => x.isDefault)?.id || options[0]?.id || null;
   const extras = [...new Set(Array.isArray(selection.extras) ? selection.extras : [])]
     .filter(id => addons.some(x => x.id === id));
   for (const row of addons.filter(x => x.required)) if (!extras.includes(row.id)) extras.push(row.id);
-  const selected = [...variants.filter(x => x.id === variant), ...options.filter(x => x.id === choice),
-    ...addons.filter(x => extras.includes(x.id))];
-  return {size:variant, choice, extras, extraPrice:roundMoney(selected.reduce((n,x) => n + x.price, 0))};
+  const size = variants.find(x => x.id === variant);
+  const others = [...options.filter(x => x.id === choice), ...addons.filter(x => extras.includes(x.id))]
+    .reduce((n,x) => n + x.price, 0);
+  // Batch V (238): a full-price size replaces the item price (the offer applies
+  // to that size). extraPrice is added to item.price and baseExtraPrice to
+  // item.basePrice, so every existing "item price + extra" stays correct.
+  if (size?.final) {
+    return {size:variant, choice, extras,
+      extraPrice:roundMoney(offerOnPrice(item.offer, size.price) + others - item.price),
+      baseExtraPrice:roundMoney(size.price + others - item.basePrice)};
+  }
+  const extraPrice = roundMoney((size?.price || 0) + others);
+  return {size:variant, choice, extras, extraPrice, baseExtraPrice:extraPrice};
+}
+// Batch V (238): sold by size, but no size on sale right now (e.g. lunch only).
+function noSizeOnSale(item, date = new Date()) {
+  const variants = enabledChoices(item, "Variant");
+  return variants.length > 0 && !variants.some(x => choiceOpen(x, date));
 }
 function activeItemOffer(row, date = new Date()) {
   const o = row.offer;
@@ -199,9 +275,12 @@ function mapMenu(payload, date = new Date()) {
   }));
   items.forEach(item => {
     const row = payload.items.find(r => r.id === item.id);
-    item.basePrice = roundMoney(item.price);
+    // Batch V (238): an item sold by full-price size shows its default size.
+    const sizes = item.options.filter(x => x.enabled && x.final);
+    const shown = sizes.find(x => x.isDefault) || sizes[0];
+    item.basePrice = roundMoney(shown ? shown.price : item.price);
     item.offer = item.available ? activeItemOffer(row, date) : null;
-    item.price = item.offer ? item.offer.price : item.basePrice;
+    item.price = item.offer ? (shown ? offerOnPrice(item.offer, item.basePrice) : item.offer.price) : item.basePrice;
   });
   const categoryPosition=new Map(cats.map((row,index)=>[row.id,index]));
   const subcategoryPosition=new Map(subs.map((row,index)=>[row.id,index]));
@@ -216,7 +295,7 @@ function menuReady() {
   return menuConnection.status === "ready" && Date.now() - menuConnection.lastSuccess <= MENU_CONFIG.maxAgeMs;
 }
 function canOrderItem(item) {
-  return !!item && item.available === true && item.offer?.maxQty !== 0 && menuReady() &&
+  return !!item && item.available === true && item.offer?.maxQty !== 0 && menuReady() && !noSizeOnSale(item) &&
     (!restaurantAcceptingOrders() || scheduleAllows((menuConnection.payload?.schedules || []).filter(s => s.menu_item_id === item.id)));
 }
 function reconcileMenuCart() {
@@ -234,7 +313,7 @@ function reconcileMenuCart() {
     const choices = normalizeItemChoices(item, line);
     return [{...line, cartKey:line.cartKey || newCartKey(), qty,
       price:roundMoney(item.price + choices.extraPrice),
-      basePrice:roundMoney(item.basePrice + choices.extraPrice), image:item.image,
+      basePrice:roundMoney(item.basePrice + choices.baseExtraPrice), image:item.image,
       size:choices.size, choice:choices.choice, extras:choices.extras}];
   });
   const changed = before !== JSON.stringify(state.cart);

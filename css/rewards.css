@@ -1,0 +1,18 @@
+/* Batch R (241): loyalty points */
+.rewards-checkout{display:grid;gap:6px;margin:14px 0;padding:14px;border:1px solid var(--line, #2a2a2a);border-radius:14px;background:var(--card, #121212)}
+.rewards-checkout strong{color:var(--gold, #c9a45c)}
+.rewards-checkout span,.rewards-checkout small{color:var(--muted, #a3a3a3);font-size:13px}
+.rewards-use{display:grid;gap:8px;margin-top:4px}
+.rewards-chips{display:flex;flex-wrap:wrap;gap:8px}
+.rewards-chip{border:1px solid var(--line, #2a2a2a);background:transparent;color:inherit;border-radius:999px;padding:8px 12px;font:inherit;font-size:13px;cursor:pointer}
+.rewards-chip.active{border-color:var(--gold, #c9a45c);background:rgba(201,164,92,.14);color:var(--gold, #c9a45c)}
+.rewards-line span:last-child{color:var(--gold, #c9a45c)}
+.rewards-how{margin:0;padding-inline-start:18px;display:grid;gap:6px;color:var(--muted, #a3a3a3);font-size:14px}
+.rewards-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line, #2a2a2a)}
+.rewards-row div{display:grid;gap:2px}
+.rewards-row span{color:var(--muted, #a3a3a3);font-size:12px}
+.rewards-row b.plus{color:#4ade80}
+.rewards-row b.minus{color:#f87171}
+.rewards-expiring{color:#fbbf24;font-weight:600}
+
+.order-points{color:var(--gold,#c9a45c);font-size:13px;font-weight:600;margin:6px 0 2px}

@@ -246,6 +246,8 @@ async function signOutCustomer() {
   clearAuthSession();
   state.order = null;
   state.orderHistory = [];
+  state.couponOn = false;   // Batch D: a code checked for this account is not kept for a guest
+  state.voucher = null;
   try {
     for (const key of [CUSTOMER_ORDER_STORAGE_KEY, CUSTOMER_ORDER_HISTORY_STORAGE_KEY,
       LEGACY_CUSTOMER_ORDER_STORAGE_KEY, LEGACY_CUSTOMER_ORDER_HISTORY_STORAGE_KEY]) localStorage.removeItem(key);

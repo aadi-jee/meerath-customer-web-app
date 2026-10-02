@@ -6,7 +6,7 @@ function applyContentPayload(payload) {
       !Array.isArray(payload.recommendations) || !Array.isArray(payload.banners)) throw new Error('Invalid content response');
   const recommendations = payload.recommendations.filter(r => r && isMenuId(r.source_item_id) &&
     isMenuId(r.recommended_item_id) && r.source_item_id !== r.recommended_item_id &&
-    Number.isInteger(r.priority) && r.priority >= 1 && r.priority <= 3)
+    Number.isInteger(r.priority) && r.priority >= 1 && r.priority <= 5)  // Batch C (244): up to 5
     .map(r => ({source_item_id:r.source_item_id, recommended_item_id:r.recommended_item_id, priority:r.priority}));
   const seen = new Set();
   const banners = payload.banners.filter(b => {
@@ -105,11 +105,11 @@ function homeBannersMarkup() {
   const banners = visibleHomeBanners();
   if (!banners.length) return '';
   return `<section class="home-banners" aria-label="${cartCopy('Restaurant highlights','مختارات المطعم')}">
-    <div class="banner-track" onscroll="updateBannerDots(this)">${banners.map((b,n) => `<article class="managed-banner" id="home-banner-${b.slot}" aria-label="${n+1} / ${banners.length}">
+    <div class="banner-track" onscroll="updateBannerDots(this)">${banners.map((b,n) => `<article class="managed-banner" id="home-banner-${b.slot}" aria-label="${n+1} / ${banners.length}" onclick="openHomeBanner(${b.slot})">
       ${b.image_url ? `<img class="managed-banner-image" src="${menuImage(b.image_url)}" alt="">` : ''}
       <div class="managed-banner-body"><h2>${contentText(b,'title')}</h2><p>${contentText(b,'subtitle')}</p>
       ${b.target_kind === 'item' ? `<div class="managed-banner-price">${itemPriceMarkup(itemById(b.target_id))}</div>` : ''}
-      <button class="btn btn-primary" onclick="openHomeBanner(${b.slot})">${contentText(b,'button')}</button></div>
+      <button class="btn btn-primary" onclick="event.stopPropagation();openHomeBanner(${b.slot})">${contentText(b,'button')}</button></div>
     </article>`).join('')}</div>
     ${banners.length > 1 ? `<div class="banner-dots">${banners.map((b,n) => `<button aria-label="${cartCopy('Banner','لافتة')} ${n+1}" aria-current="${n === 0}" onclick="scrollHomeBanner(${b.slot})"></button>`).join('')}</div>` : ''}
   </section>`;

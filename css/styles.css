@@ -5677,3 +5677,16 @@ body.light-theme .orders-call-btn {
 /* Explicit delivery destination selector, mobile and desktop. */
 #delivery-pin-map{height:340px;min-height:280px;width:100%;border-radius:18px;overflow:hidden;margin:14px 0;background:var(--bg-2,#eee)}
 .delivery-pin-form{display:grid;gap:12px}.delivery-pin-form button{min-height:48px}#delivery-pin-status{overflow-wrap:anywhere}#delivery-place-search>*{width:100%}
+
+/* Batch V2: choice title, badge, note; Add to Cart no longer covers the spice buttons */
+.item-choice-group h4 .choice-required { font-size:12px; font-weight:600; color:var(--orange); border:1px solid var(--orange); border-radius:999px; padding:2px 8px; margin-inline-start:6px; vertical-align:middle; }
+.choice-badge { font-style:normal; font-size:11px; font-weight:700; color:#fff; background:var(--orange); border-radius:999px; padding:2px 8px; margin-inline-start:6px; white-space:nowrap; }
+.item-choice-row .choice-note { display:block; margin-top:3px; font-size:12px; line-height:1.4; }
+.detail-screen .sticky-actions { bottom:0; margin-top:8px; padding:10px 0 12px; background:var(--bg); box-shadow:0 -14px 14px -6px var(--bg); }
+
+/* Batch D: remove the applied code */
+.coupon-applied { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 14px; margin:8px 0; border:1px solid var(--orange); border-radius:12px; }
+.coupon-applied-text { color:var(--orange); font-weight:600; }
+
+/* Batch N: focused steps keep the navigation only on a wide screen */
+@media (max-width: 1024px) { .nav.nav-wide-only { display: none; } }

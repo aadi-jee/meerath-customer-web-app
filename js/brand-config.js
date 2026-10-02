@@ -73,6 +73,8 @@ const APP_CONFIG = Object.freeze({
     offers: true,
     catering: true,
     mealDistribution: true,
+    // Batch R (241): real points. Shown only when the restaurant has also
+    // switched points on in the Admin (the server says so).
     rewards: true,
     announcements: true,
     customerAccounts: true,
