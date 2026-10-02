@@ -364,6 +364,8 @@ async function refreshMenu() {
       const payload = await response.json();
       const result = applyMenuPayload(payload);
       menuConnection.payload = payload; menuConnection.status = "ready";
+      // Batch H: the menu names the branch; read its ordering hours at once (not on the next retry).
+      if (typeof orderingHours !== "undefined" && !orderingHours.status && typeof loadOrderingHours === "function") loadOrderingHours();
       menuConnection.lastSuccess = Date.now(); menuConnection.error = "";
       if (typeof requestCustomerContent === 'function') requestCustomerContent();
       if (result.changed || result.cartChanged || previous !== "ready") refreshMenuUI();
