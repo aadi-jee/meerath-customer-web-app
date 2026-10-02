@@ -1,19 +1,34 @@
 /* Batch H: ordering hours. The server decides (oracy_ordering_status_v1); this file only
    shows what the server will accept. If the answer cannot be loaded the app stays usable
    and the server still refuses an order outside the hours. */
-const orderingHours = {status: null, skew: 0, loading: null, started: false, boundary: null};
+const orderingHours = {status: null, skew: 0, loading: null, started: false, boundary: null, retry: null};
 
 function orderingCopy(en, ar) { return state.lang === "ar" ? ar : en; }
 function orderingNow() { return Date.now() + orderingHours.skew; }
 
+/** The branch the app is ordering from: fixed in the brand settings, or the one the menu chose. */
+function orderingBranchId() {
+  if (MENU_CONFIG.branchId) return MENU_CONFIG.branchId;
+  try {
+    const branches = typeof menuConnection !== "undefined" ? menuConnection.payload?.branches || [] : [];
+    return branches.length && typeof selectMenuBranch === "function" ? selectMenuBranch(branches) || "" : "";
+  } catch (_) { return ""; }
+}
 async function loadOrderingHours() {
   if (orderingHours.loading) return orderingHours.loading;
+  const branchId = orderingBranchId();
+  if (!branchId) {
+    // The menu has not told us the branch yet: ask again shortly.
+    clearTimeout(orderingHours.retry);
+    orderingHours.retry = setTimeout(loadOrderingHours, 1500);
+    return;
+  }
   orderingHours.loading = (async () => {
     try {
       const response = await fetch(`${MENU_CONFIG.url}/rest/v1/rpc/oracy_ordering_status_v1`, {
         method: "POST",
         headers: {apikey: MENU_CONFIG.publicKey, "Content-Type": "application/json"},
-        body: JSON.stringify({p_restaurant_id: MENU_CONFIG.restaurantId, p_branch_id: MENU_CONFIG.branchId}),
+        body: JSON.stringify({p_restaurant_id: MENU_CONFIG.restaurantId, p_branch_id: branchId}),
         cache: "no-store", credentials: "omit",
       });
       if (!response.ok) return;

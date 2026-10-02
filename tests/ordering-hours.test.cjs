@@ -80,6 +80,23 @@ test('server refusals about hours are recognised; others are not', () => {
   assert.equal(run('orderingRefusal("This code cannot be used")'), false);
 });
 
+test('the branch comes from the menu when the brand settings name none; no branch = no call yet', async () => {
+  const calls = [];
+  const c = vm.createContext({state: {lang: 'en', orderType: 'delivery', screen: 'home'},
+    MENU_CONFIG: {timeZone: 'Asia/Riyadh', url: 'https://x', publicKey: 'k', restaurantId: 'r1', branchId: ''},
+    menuConnection: {payload: null}, selectMenuBranch: list => list[0].id,
+    fetch: async (url, opt) => { calls.push(JSON.parse(opt.body)); return {ok: true, json: async () => ({version: 1, now: new Date().toISOString(),
+      delivery: {open: false, enforced: true, reason: 'paused', pause_reason: 'No rider'}, takeaway: {open: true, enforced: true}, dinein: {open: true, enforced: true}})}; },
+    escapeHtml: s => String(s), Intl, Date, Math, Number, String, JSON, setTimeout: () => 0, clearTimeout: () => {}});
+  vm.runInContext(fs.readFileSync(path.join(root, 'js/ordering-hours.js'), 'utf8'), c);
+  await vm.runInContext('loadOrderingHours()', c);
+  assert.equal(calls.length, 0);
+  vm.runInContext('menuConnection.payload = {branches: [{id: "b9"}]}', c);
+  await vm.runInContext('loadOrderingHours()', c);
+  assert.deepEqual(calls, [{p_restaurant_id: 'r1', p_branch_id: 'b9'}]);
+  assert.equal(vm.runInContext('orderTypeOpen("delivery")', c), false);
+});
+
 test('app wiring: old fixed window is gone, script order is right', () => {
   const app = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
