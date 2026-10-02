@@ -54,3 +54,17 @@
   .special-add b{width:28px;height:28px}
 }
 body.light-theme .home-screen .special-card img{background:#efe9df}
+
+/* Quiet price pill: the food leads, only the small + carries the brand colour. */
+.special-add,.pairing-card>.btn.pairing-add{border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.055);color:var(--text);font-weight:600;box-shadow:none}
+.special-add b,.pairing-add b{background:var(--orange);color:#111;font-weight:700}
+.special-add:active,.pairing-card>.btn.pairing-add:active{background:rgba(255,255,255,.11);color:var(--text)}
+@media (hover:hover){.special-add:hover,.pairing-card>.btn.pairing-add:hover{background:rgba(255,255,255,.09)}}
+body.light-theme .special-add,body.light-theme .pairing-card>.btn.pairing-add{background:rgba(0,0,0,.045);border-color:rgba(0,0,0,.07)}
+
+/* Home location line */
+.loc-link{display:flex;align-items:center;gap:6px;max-width:100%;padding:0;border:0;background:none;color:inherit;font:inherit;font-weight:inherit;text-align:start;cursor:pointer;min-width:0}
+.loc-link{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.loc-link .loc-change{flex:none;color:var(--orange);font-size:13px;font-weight:600}
+.loc-link.loc-out{color:var(--muted)}
+.menu-topbar h2{margin:0}

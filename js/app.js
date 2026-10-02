@@ -308,7 +308,7 @@ function setLang(lang) {
 function go(screen, extra = {}) {
   if (typeof captureCartOrigin === 'function') captureCartOrigin(screen);
   if (screen === "savedAddressesPage" && state.screen !== "addAddressPage") {
-    state.addressReturnScreen = state.screen === "checkout" ? "checkout" : "account";
+    state.addressReturnScreen = state.screen === "checkout" ? "checkout" : state.screen === "home" ? "home" : "account";
   }
   if (screen !== "detail") state.cartEditKey = null;
   if (screen === "checkout") {
@@ -915,30 +915,92 @@ function setHomeOrderType(type, button) {
   const location = document.getElementById("homeOrderLocation");
   const note = document.getElementById("homeOrderNote");
 
-  if (location) {
-    if (type === "delivery") {
-      location.innerHTML =
-        `Deliver to <strong>${escapeHtml(state.lang === "ar" ? APP_CONFIG.branch.deliveryAreaAr : APP_CONFIG.branch.deliveryArea)}</strong>`;
-    } else if (type === "takeaway") {
-      location.innerHTML =
-        `Pickup from <strong>${escapeHtml(branchDisplayName(state.lang))}</strong>`;
-    } else {
-      location.innerHTML =
-        `Dining at <strong>${escapeHtml(branchDisplayName(state.lang))}</strong>`;
-    }
-  }
+  if (location) location.innerHTML = homeLocationMarkup();
 
-  if (note) {
-    if (type === "delivery") {
-      note.style.display = "";
-      note.textContent = t("deliveryScope");
-    } else {
-      note.style.display = "none";
+  if (note) note.style.display = homeDeliveryNoteVisible() ? "" : "none";
+  homeDeliverySync();
+}
+
+/* Home "Deliver to": the customer's own address, checked against the restaurant's delivery limits by the server. */
+const homeDelivery = {key: "", status: "", request: 0};
+function homeDeliveryAddress() {
+  if (!state.isLoggedIn) return null;
+  const address = selectedDeliveryAddress();
+  return address && validDeliveryPin(address) ? address : null;
+}
+/** The district out of a full map address: the part just before "City 12345"; never a plus code, number or country. */
+function homeAddressDistrict(text) {
+  const parts = String(text || "").split(/[,،]/).map(p => p.trim()).filter(Boolean);
+  if (parts.length < 2) return parts[0] && !/[\d٠-٩]{3,}|\+/.test(parts[0]) ? parts[0] : "";
+  const named = p => !/[\d٠-٩]/.test(p) && !p.includes("+");
+  const cityAt = parts.findIndex(p => /[\d٠-٩]{5}\s*$/.test(p));
+  if (cityAt > 0) {
+    for (let n = cityAt - 1; n >= 0; n--) if (named(parts[n])) return parts[n];
+    return parts[cityAt].replace(/[\d٠-٩\s]+$/, "").trim();
+  }
+  const names = parts.filter(named);
+  return names.length > 2 ? names[names.length - 3] : (names[0] || "");
+}
+function homeAddressName(address) {
+  const kind = address.type === "home" ? cartCopy("Home", "المنزل") : address.type === "work" ? cartCopy("Work", "العمل") : "";
+  const district = homeAddressDistrict(address.area) || homeAddressDistrict(address.label);
+  return [kind, district.slice(0, 40)].filter(Boolean).join(" · ") || cartCopy("Saved address", "عنوان محفوظ");
+}
+function homeDeliveryNoteVisible() { return state.orderType === "delivery" && !homeDeliveryAddress(); }
+function homeLocationMarkup() {
+  if (state.orderType === "takeaway") return `${cartCopy("Pickup from", "الاستلام من")} <strong>${escapeHtml(branchDisplayName(state.lang))}</strong>`;
+  if (state.orderType !== "delivery") return `${cartCopy("Dining at", "تناول الطعام في")} <strong>${escapeHtml(branchDisplayName(state.lang))}</strong>`;
+  const address = homeDeliveryAddress();
+  if (!address) {
+    return `${cartCopy("Delivery", "توصيل")} <strong>${state.isLoggedIn
+      ? `<button type="button" class="loc-link" onclick="homeChooseAddress()">${cartCopy("Add your delivery address", "أضف عنوان التوصيل")}</button>`
+      : cartCopy("Set your location at checkout", "حدد موقعك عند إتمام الطلب")}</strong>`;
+  }
+  const key = `${address.id}|${address.updatedAt}`, out = homeDelivery.key === key && homeDelivery.status === "out";
+  return `${out ? cartCopy("Delivery not available to", "التوصيل غير متاح إلى") : cartCopy("Deliver to", "التوصيل إلى")}
+    <strong><button type="button" class="loc-link${out ? " loc-out" : ""}" onclick="homeChooseAddress()">${escapeHtml(homeAddressName(address))}<span class="loc-change">${out ? cartCopy("Change", "تغيير") : "›"}</span></button></strong>`;
+}
+function homeChooseAddress() {
+  if (!state.isLoggedIn) return;
+  go("savedAddressesPage");
+}
+function selectHomeAddress(id) {
+  if (!state.isLoggedIn || !state.savedAddresses.some(row => row.id === id)) return;
+  if (state.checkoutAddressId !== id) { state.checkoutAddressId = id; clearDeliveryQuote(); }
+  go("home");
+}
+function homeDeliveryRefreshLine() {
+  if (state.screen !== "home") return;
+  const location = document.getElementById("homeOrderLocation"), note = document.getElementById("homeOrderNote");
+  if (location) location.innerHTML = homeLocationMarkup();
+  if (note) note.style.display = homeDeliveryNoteVisible() ? "" : "none";
+}
+/** Loads the saved addresses if needed, then asks the server whether the chosen one is inside the delivery limits. */
+async function homeDeliverySync() {
+  if (state.orderType !== "delivery" || !state.isLoggedIn) return;
+  try {
+    if (typeof accountAddresses !== "undefined" && !accountAddresses.loaded && typeof loadAccountAddresses === "function") {
+      await loadAccountAddresses();
+      homeDeliveryRefreshLine();
     }
+    const address = homeDeliveryAddress();
+    if (!address || !menuReady()) return;
+    const key = `${address.id}|${address.updatedAt}`;
+    if (homeDelivery.key === key && homeDelivery.status) return;
+    const request = ++homeDelivery.request, user = state.authUserId;
+    homeDelivery.key = key; homeDelivery.status = "checking";
+    const quote = await requestCustomerDeliveryQuote(address, 0);
+    if (request !== homeDelivery.request || user !== state.authUserId) return;
+    homeDelivery.status = typeof quote?.eligible === "boolean" ? (quote.eligible ? "ok" : "out") : "";
+    if (homeDelivery.status === "") homeDelivery.key = "";
+    homeDeliveryRefreshLine();
+  } catch (_) {
+    homeDelivery.key = ""; homeDelivery.status = "";   // unknown: checkout still decides
   }
 }
 
 function home() {
+  homeDeliverySync();
   const specials = ITEMS.filter((i) => i.special && i.available);
   return `
     <section class="screen home-screen">
@@ -953,13 +1015,7 @@ function home() {
     />
 
     <div class="loc" id="homeOrderLocation">
-      ${
-        state.orderType === "delivery"
-          ? `Deliver to <strong>${escapeHtml(state.lang === "ar" ? APP_CONFIG.branch.deliveryAreaAr : APP_CONFIG.branch.deliveryArea)}</strong>`
-          : state.orderType === "takeaway"
-          ? `Pickup from <strong>${escapeHtml(branchDisplayName(state.lang))}</strong>`
-          : `Dining at <strong>${escapeHtml(branchDisplayName(state.lang))}</strong>`
-      }
+      ${homeLocationMarkup()}
     </div>
 
   </div>
@@ -1014,7 +1070,7 @@ function home() {
 <div
   id="homeOrderNote"
   class="mode-note"
-  style="${state.orderType === "delivery" ? "" : "display:none"}"
+  style="${homeDeliveryNoteVisible() ? "" : "display:none"}"
 >
   ${t("deliveryScope")}
 </div>
@@ -1058,9 +1114,9 @@ function home() {
 function menu() {
   return `
     <section class="screen menu-screen">
-      <div class="topbar">
+      <div class="topbar menu-topbar">
   <h2>${t("menu")}</h2>
-  ${back("home")}
+  ${cartButton()}
 </div>
       <div class="grid">
         ${CATEGORIES.map(
@@ -2929,6 +2985,7 @@ function savedAddressesPage() {
 
                       <div class="saved-address-actions">
                         ${state.addressReturnScreen === "checkout" ? `<button onclick="selectCheckoutAddress('${escapeHtml(address.id)}')" ${addressBusy ? "disabled" : ""}>${cartCopy("Deliver here", "التوصيل هنا")}${state.checkoutAddressId === address.id ? " ✓" : ""}</button>` : ""}
+                        ${state.addressReturnScreen === "home" ? `<button onclick="selectHomeAddress('${escapeHtml(address.id)}')" ${addressBusy ? "disabled" : ""}>${cartCopy("Deliver here", "التوصيل هنا")}${state.checkoutAddressId === address.id ? " ✓" : ""}</button>` : ""}
 
                         ${
                           !isDefault
