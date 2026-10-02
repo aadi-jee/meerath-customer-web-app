@@ -31,7 +31,7 @@ function environment() {
     window: {addEventListener: () => {}},
     document: {hidden:false, addEventListener:()=>{}, getElementById:()=>({parentElement:{scrollTop:0}})},
   });
-  for (const file of ['brand-config.js', 'data.js', 'auth.js', 'content.js', 'delivery-location.js']) {
+  for (const file of ['brand-config.js', 'data.js', 'ordering-hours.js', 'auth.js', 'content.js', 'delivery-location.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, 'js', file), 'utf8'), context);
   }
   const app = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');

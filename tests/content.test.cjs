@@ -13,7 +13,7 @@ class TestDate extends RealDate {
 function environment() {
   const context = vm.createContext({console:{warn(){}},URL,Intl,Date:TestDate,AbortController,setTimeout,clearTimeout,
     localStorage:{getItem:()=>null},window:{},document:{getElementById:()=>null}});
-  for (const file of ['brand-config.js','data.js','auth.js','content.js','app.js']) {
+  for (const file of ['brand-config.js','data.js','ordering-hours.js','auth.js','content.js','app.js']) {
     let source=fs.readFileSync(path.join(__dirname,'../js',file),'utf8');
     if(file==='app.js') source=source.slice(0,source.lastIndexOf('\napplyDir();'));
     vm.runInContext(source,context);
@@ -40,7 +40,7 @@ test('content validates tenant/version and drops malformed edges and duplicate s
   const r=environment();
   assert.throws(()=>r(`applyContentPayload({...content,restaurant_id:'other'})`),/Invalid content/);
   assert.throws(()=>r(`applyContentPayload({...content,version:2})`),/Invalid content/);
-  assert.equal(r(`content.recommendations=[edge(1,1),edge(1,2,4),edge(1,2),{source_item_id:'bad'}];
+  assert.equal(r(`content.recommendations=[edge(1,1),edge(1,2,6),edge(1,2),{source_item_id:'bad'}];
     content.banners=[banner(1),banner(1),banner(4),banner(2,'item','bad')];apply();CUSTOMER_CONTENT.recommendations.length`),1);
   assert.equal(r(`CUSTOMER_CONTENT.banners.length`),1);
 });

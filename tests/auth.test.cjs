@@ -23,7 +23,7 @@ function environment() {
       return {ok:true,status:200,json:async()=>({})};
     },
   });
-  for (const file of ['brand-config.js', 'data.js']) {
+  for (const file of ['brand-config.js', 'data.js', 'ordering-hours.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, 'js', file), 'utf8'), context);
   }
   vm.runInContext(`const state={lang:'en',screen:'account',isLoggedIn:false,authUserId:'',customerName:'',

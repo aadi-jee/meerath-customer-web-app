@@ -14,6 +14,7 @@ function environment() {
     localStorage:{getItem:()=>null}, window:{}, document:{getElementById:()=>({parentElement:{scrollTop:0}})}});
   vm.runInContext(fs.readFileSync(path.join(root,'js/brand-config.js'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(root,'js/data.js'),'utf8'),c);
+  vm.runInContext(fs.readFileSync(path.join(root,'js/ordering-hours.js'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(root,'js/auth.js'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(root,'js/content.js'),'utf8'),c);
   const app = fs.readFileSync(path.join(root,'js/app.js'),'utf8');
@@ -74,11 +75,8 @@ test('cart storage rejects corrupt and other-branch drafts and tolerates unavail
 
 test('closed restaurant permits cart building but blocks both order submission entry points',async()=>{
   const run=environment();
-  assert.equal(run(`restaurantAcceptingOrders(new Date('2026-09-25T08:59:59Z'))`),false);
-  assert.equal(run(`restaurantAcceptingOrders(new Date('2026-09-25T09:00:00Z'))`),true);
-  assert.equal(run(`restaurantAcceptingOrders(new Date('2026-09-25T21:59:59Z'))`),true);
-  assert.equal(run(`restaurantAcceptingOrders(new Date('2026-09-25T22:00:00Z'))`),false);
-  run(`restaurantAcceptingOrders=()=>false;ready();addToCart(ITEMS[0]);
+  assert.equal(run(`restaurantAcceptingOrders()`),true);   // no answer from the server yet: the app stays usable
+  run(`orderingHours.status={version:1,now:new Date().toISOString(),timezone:'Asia/Riyadh',dinein:{open:false,enforced:true,reason:'closed'},takeaway:{open:false,enforced:true,reason:'closed'},delivery:{open:false,enforced:true,reason:'closed'},week:[]};ready();addToCart(ITEMS[0]);
     validateMenuCart=()=>{throw Error('Must stop before checkout network requests');};`);
   assert.equal(run('state.cart.length'),1);
   await run('placeOrder()');
@@ -105,18 +103,41 @@ test('cart quantity patches totals without replacing the screen or losing notes'
   assert.equal(run('summaries'),2);
 });
 
-test('coupon updates only summary for accepted, rejected and offer-blocked coupons',()=> {
+test('voucher code: checked by the server, priced on the cart, only the summary is redrawn', async ()=> {
   const run=environment();
   run(`row.offer=null;ready();addToCart(ITEMS[0]);
     render=()=>{throw Error('Unexpected screen replacement');};
-    let summaries=0;updateCartBreakdown=()=>{summaries++;};
-    state.coupon='MEERATH10';applyCoupon();`);
+    var summaries=0;updateCartBreakdown=()=>{summaries++;};
+    var asked=[];var answer={ok:true,code:'MKR20',kind:'percent',value:20,max_discount:null,min_food:0,allow_with_offers:false};
+    customerOrderRpc=async(name,p)=>{asked.push([name,p.p_code,p.p_food,p.p_has_offer]);return answer;};
+    state.coupon=' mkr20 ';`);
+  await run('applyCoupon()');
   assert.equal(run('state.couponOn'),true);
-  run(`state.coupon='invalid';applyCoupon();`);
+  assert.equal(run('JSON.stringify(asked[0])'),'["oracy_voucher_check_v1","MKR20",18,false]');
+  assert.equal(run('totals().discount'),3.6);          // 20 % of 18
+  assert.equal(run('totals().total'),14.4);
+  run(`state.voucher.max_discount=2`);
+  assert.equal(run('totals().discount'),2);            // top amount
+  run(`state.voucher={ok:true,code:'TEN',kind:'amount',value:10,min_food:20}`);
+  assert.equal(run('totals().discount'),0);            // below the smallest food amount
+  run(`state.voucher.min_food=0`);
+  assert.equal(run('totals().discount'),10);
+  assert.equal(run('couponBoxMarkup().includes("Coupon applied") && couponBoxMarkup().includes("Remove coupon") && !couponBoxMarkup().includes("couponInput")'),true);
+  run('removeCoupon()');
+  assert.equal(run('state.couponOn+"/"+state.voucher+"/"+state.coupon+"/"+totals().discount'),'false/null//0');
+  assert.equal(run('couponBoxMarkup().includes("couponInput") && !couponBoxMarkup().includes("removeCoupon")'),true);
+  run(`answer={ok:false,message:'You have already used this code'};state.coupon='MKR20';`);
+  await run('applyCoupon()');
   assert.equal(run('state.couponOn'),false);
-  run(`ITEMS[0].offer={};state.coupon='MEERATH10';applyCoupon();`);
+  assert.equal(run('state.voucher'),null);
+  assert.equal(run('totals().discount'),0);
+  run(`customerOrderRpc=async()=>{throw Error('offline')};`);
+  await run('applyCoupon()');
   assert.equal(run('state.couponOn'),false);
-  assert.equal(run('summaries'),3);
+  assert.equal(run('summaries'),4);
+  assert.equal(run(`state.lang='ar';voucherMessage('This code needs at least 40.00 of food').includes('40')`),true);
+  const source=fs.readFileSync(path.join(root,'js/app.js'),'utf8')+fs.readFileSync(path.join(root,'js/i18n.js'),'utf8');
+  assert.equal(source.includes('MEERATH10'),false);    // no code of one restaurant inside the app
 });
 
 test('subcategory changes replace only results and preserve the category controls',()=> {
@@ -302,7 +323,7 @@ test('offer expiry updates existing cart',()=> {
   assert.equal(run(`ready();addToCart(ITEMS[0]);ITEMS=mapMenu(payload,new Date('2026-09-09T12:00:00Z')).items;reconcileMenuCart();totals().total`),18);
 });
 test('coupon cannot stack with live item offer',()=> {
-  assert.equal(environment()(`ready();addToCart(ITEMS[0]);state.couponOn=true;totals().discount`),0);
+  assert.equal(environment()(`ready();addToCart(ITEMS[0]);state.couponOn=true;state.voucher={kind:'amount',value:10,min_food:0};totals().discount`),0);
 });
 test('Offers rendering escapes names and shows both precise prices',()=> {
   const run=environment();

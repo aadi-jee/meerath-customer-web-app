@@ -70,7 +70,6 @@ function orderAddedItemsMarkup(id) {
     .map(l => `<div class="active-order-item"><span>${Number(l.quantity) || 0} × ${escapeHtml(String(l.name || ""))}</span></div>`).join("");
 }
 function startOrderAddon(id, number, token) {
-  if (!restaurantAcceptingOrders()) { toast(restaurantClosedMessage(), 6000); return; }
   state.addonFor = {id, number, token: token || null, restaurant: MENU_CONFIG.restaurantId};
   addonRemember();
   toast(addonCopy(`Adding to order #${number}`, `إضافة إلى الطلب #${number}`), 2600);
@@ -99,7 +98,6 @@ function addonCartMarkup() {
 async function sendOrderAddon() {
   const target = addonTarget();
   if (!target || orderAddons.sending || !state.cart.length) return;
-  if (!restaurantAcceptingOrders()) { toast(restaurantClosedMessage(), 7000); return; }
   if (typeof validateMenuCart === "function" && !(await validateMenuCart())) return;
   orderAddons.sending = true;
   if (state.screen === "cart") renderKeepScroll();

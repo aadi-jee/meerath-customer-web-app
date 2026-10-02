@@ -68,3 +68,12 @@ body.light-theme .special-add,body.light-theme .pairing-card>.btn.pairing-add{ba
 .loc-link .loc-change{flex:none;color:var(--orange);font-size:13px;font-weight:600}
 .loc-link.loc-out{color:var(--muted)}
 .menu-topbar h2{margin:0}
+
+/* Batch H: ordering hours */
+.ordering-strip { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; padding: 10px 14px;
+  border: 1px solid rgba(255, 181, 71, .45); border-radius: 12px; background: rgba(255, 164, 28, .10);
+  font-size: 13.5px; line-height: 1.45; }
+.ordering-strip strong { font-weight: 700; }
+.ordering-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: #f2a528; }
+.checkout-order-types button .type-closed { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 600;
+  letter-spacing: .02em; opacity: .75; }

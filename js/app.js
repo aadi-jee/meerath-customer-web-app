@@ -1,8 +1,4 @@
 const VAT = 0.15;
-const RESTAURANT_ORDER_WINDOW = Object.freeze({
-  openSeconds: 12 * 60 * 60,
-  closeSeconds: 1 * 60 * 60,
-});
 
 const state = {
   lang: readAppStorage("language", ["mk-lang"]) === "ar" ? "ar" : "en",
@@ -71,11 +67,7 @@ editingAddressId: null,
 let cartLineSequence = 0;
 function newCartKey() { return "line-" + (++cartLineSequence); }
 function cartCopy(en, ar) { return state.lang === "ar" ? ar : en; }
-function restaurantAcceptingOrders(date = new Date()) {
-  const { seconds } = riyadhClock(date);
-  return seconds >= RESTAURANT_ORDER_WINDOW.openSeconds ||
-    seconds < RESTAURANT_ORDER_WINDOW.closeSeconds;
-}
+// Batch H: restaurantAcceptingOrders / orderTypeOpen / restaurantClosedMessage live in ordering-hours.js (the server decides).
 let cartDraftRestored = false;
 function saveCartDraft() {
   if (!cartDraftRestored) return;
@@ -106,12 +98,6 @@ function restoreCartDraft() {
     });
     if (['delivery','takeaway','dinein'].includes(draft.orderType)) state.orderType=draft.orderType;
   } catch (_) { /* Ignore malformed drafts; never trust stored prices or HTML. */ }
-}
-function restaurantClosedMessage() {
-  return cartCopy(
-    `${APP_CONFIG.brand.name} is currently closed. Please place your order during our working hours: 12:00 PM to 1:00 AM.`,
-    `${APP_CONFIG.brand.nameAr} مغلق حالياً. يرجى تقديم طلبكم خلال ساعات العمل: من 12:00 ظهراً إلى 1:00 صباحاً.`
-  );
 }
 function unavailableTimeMessage() {
   return cartCopy(
@@ -1030,6 +1016,7 @@ function home() {
 
 </div>
       <div id="appAnnouncementSlot">${typeof announcementMarkup === 'function' ? announcementMarkup() : ''}</div>
+      ${orderingStripMarkup()}
       <div class="home-search-wrap">
 
   <div class="home-search-box">
@@ -1274,6 +1261,7 @@ function cart() {
     <textarea class="field" rows="2" placeholder="${t("cookingNotes")}" oninput="state.notes=this.value">${escapeHtml(state.notes)}</textarea>
     ${typeof addonTarget === "function" && addonTarget() ? addonCartMarkup() : `<div id="couponBox">${couponBoxMarkup()}</div>
     <div class="breakdown" id="cartBreakdown" style="margin-top:14px">${cartSummaryMarkup()}</div>
+    ${orderingStripMarkup()}
     <button class="btn btn-primary" style="margin-top:16px" onclick="go('checkout')">${t("proceed")}</button>`}
   </section>`;
 }
@@ -1345,6 +1333,11 @@ function setCheckoutOrderType(type, button) {
   saveCartDraft();
   state.orderTiming = "asap";
   clearDeliveryQuote();
+  // Batch H: with ordering hours on, the notice, the times and the button depend on the type: redraw all.
+  if (orderingHours.status && ["delivery", "takeaway", "dinein"].some(x => orderingHours.status[x]?.enforced)) {
+    renderKeepScroll();
+    return;
+  }
 
   /* Order type active tab */
   const typeBox = button.closest(".checkout-order-types");
@@ -1577,8 +1570,8 @@ function checkoutCustomerMarkup() {
 }
 
 function checkout() {
-  const timingOptions = checkoutTimingOptions();
-  const acceptingOrders = restaurantAcceptingOrders();
+  const timingOptions = orderingLimitTimingOptions(checkoutTimingOptions());
+  if (state.orderTiming !== "asap" && !timingOptions.some(([value]) => value === String(state.orderTiming))) state.orderTiming = "asap";
   const checkoutBusy = state.authBusy || state.orderSubmitting;
   if (state.orderType === "delivery" && state.isLoggedIn && !state.deliveryQuoteError) setTimeout(() => refreshDeliveryQuote(), 0);
   if (typeof rewardsEnsureLoaded === "function") rewardsEnsureLoaded(() => { if (state.screen === "checkout") renderKeepScroll(); });
@@ -1619,21 +1612,21 @@ function checkout() {
           class="${state.orderType === "delivery" ? "active" : ""}"
           onclick="setCheckoutOrderType('delivery', this)"
         >
-          ${t("delivery")}
+          ${t("delivery")}${orderTypeOpen('delivery') ? "" : `<small class="type-closed">${cartCopy("Closed", "مغلق")}</small>`}
         </button>
 
         <button
           class="${state.orderType === "takeaway" ? "active" : ""}"
           onclick="setCheckoutOrderType('takeaway', this)"
         >
-          ${t("takeaway")}
+          ${t("takeaway")}${orderTypeOpen('takeaway') ? "" : `<small class="type-closed">${cartCopy("Closed", "مغلق")}</small>`}
         </button>
 
         <button
           class="${state.orderType === "dinein" ? "active" : ""}"
           onclick="setCheckoutOrderType('dinein', this)"
         >
-          ${t("dineIn")}
+          ${t("dineIn")}${orderTypeOpen('dinein') ? "" : `<small class="type-closed">${cartCopy("Closed", "مغلق")}</small>`}
         </button>
 
       </div>
@@ -1721,15 +1714,7 @@ function checkout() {
         ${timingSub}
       </p>
 
-      ${acceptingOrders ? "" : `
-        <div class="restaurant-closed-notice" role="alert" aria-live="assertive">
-          <span class="restaurant-closed-icon" aria-hidden="true">!</span>
-          <div>
-            <strong>${cartCopy("Restaurant is currently closed", "المطعم مغلق حالياً")}</strong>
-            <p>${restaurantClosedMessage()}</p>
-          </div>
-        </div>
-      `}
+      ${orderingNoticeMarkup()}
 
       ${typeof rewardsCheckoutMarkup === "function" ? rewardsCheckoutMarkup() : ""}
 
@@ -1738,9 +1723,9 @@ function checkout() {
       <button
         class="btn btn-primary checkout-place-order"
         onclick="placeOrder()"
-        ${acceptingOrders && !checkoutBusy && (state.orderType !== "delivery" || !state.isLoggedIn || !state.checkoutPinConfirmedId || (currentDeliveryQuote()?.eligible === true && !state.deliveryQuoteBusy)) ? "" : "disabled aria-disabled=\"true\""}
+        ${orderTypeOpen() && !checkoutBusy && (state.orderType !== "delivery" || !state.isLoggedIn || !state.checkoutPinConfirmedId || (currentDeliveryQuote()?.eligible === true && !state.deliveryQuoteBusy)) ? "" : "disabled aria-disabled=\"true\""}
       >
-        ${!acceptingOrders ? cartCopy("Ordering is closed", "الطلبات مغلقة") : checkoutBusy ? t("processingOrder") : t("placeOrder")}
+        ${!orderTypeOpen() ? cartCopy("Ordering is closed", "الطلبات مغلقة") : checkoutBusy ? t("processingOrder") : t("placeOrder")}
       </button>
 
     </section>`;
@@ -3982,9 +3967,9 @@ function getScheduledFor() {
 
 async function placeOrder() {
   if (state.authBusy || state.orderSubmitting) return;
-  if (!restaurantAcceptingOrders()) {
+  if (!orderTypeOpen()) {
     render();
-    return toast(restaurantClosedMessage(), 7000);
+    return toast(orderingClosedTitle() + ". " + restaurantClosedMessage(), 7000);
   }
   if (!(await validateMenuCart())) return;
   if (!checkOfferCartRules()) return;
@@ -4029,7 +4014,7 @@ async function placeOrder() {
   await startOtp();
 }
 async function createOrderAfterVerification() {
-  if (!restaurantAcceptingOrders()) { toast(restaurantClosedMessage(),7000); return; }
+  if (!orderTypeOpen()) { toast(orderingClosedTitle() + ". " + restaurantClosedMessage(),7000); return; }
   if (!(await validateMenuCart())) return;
   if (!checkOfferCartRules()) return;
   if (state.orderSubmitting) return;
@@ -4061,7 +4046,7 @@ async function createOrderAfterVerification() {
     }
   }
   if (state.orderSubmitting || !state.cart.length) return;
-  if (!restaurantAcceptingOrders()) { toast(restaurantClosedMessage(),7000); return; }
+  if (!orderTypeOpen()) { toast(orderingClosedTitle() + ". " + restaurantClosedMessage(),7000); return; }
   state.orderSubmitting = true;
   if (state.screen === "checkout") renderKeepScroll();
   const cart = state.cart.map((line) => ({ ...line, extras:[...(line.extras || [])] }));
@@ -4146,11 +4131,18 @@ async function createOrderAfterVerification() {
   } catch (error) {
     const rawMessage = String(error?.message || "");
     if (/outside its available time/i.test(rawMessage)) {
-      const message = restaurantAcceptingOrders()
+      const message = orderTypeOpen()
         ? unavailableTimeMessage()
-        : restaurantClosedMessage();
+        : orderingClosedTitle() + ". " + restaurantClosedMessage();
       go("checkout");
       setTimeout(() => toast(message, 7000));
+    } else if (orderingRefusal(rawMessage)) {
+      // Batch H: the server refused because of the hours. The cart stays; show the notice.
+      go("checkout");
+      loadOrderingHours().then(() => { if (state.screen === "checkout") renderKeepScroll(); });
+      setTimeout(() => toast(/within opening hours/i.test(rawMessage)
+        ? cartCopy("Please choose a time within opening hours.", "يرجى اختيار وقت ضمن ساعات العمل.")
+        : (orderingClosedTitle() ? orderingClosedTitle() + ". " + restaurantClosedMessage() : rawMessage), 7000));
     } else {
       if (/points/i.test(rawMessage) && typeof loadRewardsSummary === "function") {
         // Balance changed elsewhere (or expired): refresh and let the customer choose again.
