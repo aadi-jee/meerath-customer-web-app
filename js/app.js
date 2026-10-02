@@ -345,11 +345,12 @@ function voucherDiscountCents(itemsCents, hasItemOffer) {
 }
 const VOUCHER_MESSAGES_AR = {
   "This code is not valid": "هذا الكود غير صالح",
-  "This code has expired": "انتهت صلاحية هذا الكود",
+  "Too many tries. Please wait a few minutes": "محاولات كثيرة. يرجى الانتظار بضع دقائق",
+  "Too many recent orders. Please call the restaurant": "طلبات كثيرة خلال وقت قصير. يرجى الاتصال بالمطعم",
+  "Ordering is very busy right now. Please try again in a few minutes or call the restaurant": "الطلبات مزدحمة جداً الآن. حاول مجدداً بعد دقائق أو اتصل بالمطعم",
   "Sign in to use this code": "سجّل الدخول لاستخدام هذا الكود",
   "This code cannot be used together with an item offer": "لا يمكن استخدام هذا الكود مع عروض الأصناف",
   "You have already used this code": "لقد استخدمت هذا الكود من قبل",
-  "This code has been fully used": "تم استخدام هذا الكود بالكامل",
 };
 function voucherMessage(message) {
   if (state.lang !== "ar") return message;
@@ -4154,14 +4155,16 @@ async function createOrderAfterVerification() {
         state.redeemPoints = 0;
         loadRewardsSummary(true).then(() => { if (state.screen === "checkout") renderKeepScroll(); });
       }
-      if (/\bcode\b/i.test(rawMessage) && state.couponOn) {
+      if ((/\bcode\b/i.test(rawMessage) || /^Too many tries/.test(rawMessage)) && state.couponOn) {
         // Batch D: the code can no longer be used (switched off, used up, signed out…):
         // take it off so the customer sees the real total and can order.
         state.couponOn = false;
         state.voucher = null;
         toast(voucherMessage(rawMessage), 7000);
       } else {
-        toast(rawMessage || cartCopy("Could not place order. Try again.", "تعذر إرسال الطلب. حاول مرة أخرى."), 5000);
+        // Gate 2: the busy/too-many messages have Arabic words too.
+        const known = state.lang === "ar" && VOUCHER_MESSAGES_AR[rawMessage];
+        toast(known || rawMessage || cartCopy("Could not place order. Try again.", "تعذر إرسال الطلب. حاول مرة أخرى."), 5000);
       }
     }
   } finally {

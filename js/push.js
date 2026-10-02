@@ -180,7 +180,11 @@ async function pushDetach() {
     const registration = await navigator.serviceWorker.getRegistration();
     const subscription = registration && await registration.pushManager.getSubscription();
     if (!subscription) return;
-    await customerOrderRpc("oracy_customer_push_unsubscribe_v1", {p_endpoint: subscription.endpoint});
+    // Gate 2 (migration 271): the subscription's own secret proves this device asks.
+    const keys = (typeof subscription.toJSON === "function" && subscription.toJSON().keys) || {};
+    try {
+      await customerOrderRpc("oracy_customer_push_unsubscribe_v1", {p_endpoint: subscription.endpoint, p_auth: keys.auth || null});
+    } catch (_) { /* the server row goes on the next failed push; the device still forgets */ }
     await subscription.unsubscribe();
   } catch (_) { /* the device simply keeps its last state */ }
 }
