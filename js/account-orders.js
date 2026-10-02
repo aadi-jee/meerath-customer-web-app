@@ -100,6 +100,9 @@ function accountOrdersPage() {
       <div class="active-order-items"><h4>${t('orderDetails')}</h4>
       ${(Array.isArray(order.items)?order.items:[]).map(line=>`<div class="active-order-item"><span>${h(line.quantity)} × ${h(line.name)}</span></div>`).join('')}
       <div class="account-order-total"><span>${authCopy('Total','الإجمالي')}</span><strong>${money(Number(order.total)||0)}</strong></div></div>
+      ${typeof pushCardMarkup === 'function' ? pushCardMarkup({id: order.id, token: null}) : ''}
+      ${typeof orderAddonsMarkup === 'function' ? orderAddonsMarkup({id: order.id, number: String(order.order_number || ''),
+        token: null, type: order.fulfillment_type, status: order.status}) : ''}
       <a class="btn btn-ghost orders-call-btn" href="tel:${h(RESTAURANT.phone)}">${t('callRestaurant')}</a></article>`;
   }).join('');
   const historyCards = visible.map(order => `<article class="history-order-card">

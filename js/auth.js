@@ -243,6 +243,7 @@ async function bootstrapCustomerAuth() {
 
 async function signOutCustomer() {
   const token = customerAuthSession?.access_token;
+  if (typeof pushDetach === "function") pushDetach();   // Batch P: this device stops following the account
   clearAuthSession();
   state.order = null;
   state.orderHistory = [];

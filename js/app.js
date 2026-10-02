@@ -311,6 +311,8 @@ function go(screen, extra = {}) {
     state.addressReturnScreen = state.screen === "checkout" ? "checkout" : state.screen === "home" ? "home" : "account";
   }
   if (screen !== "detail") state.cartEditKey = null;
+  // Batch A: while adding to an order there is no checkout; the cart sends the items.
+  if (screen === "checkout" && typeof addonTarget === "function" && addonTarget()) screen = "cart";
   if (screen === "checkout") {
     validateMenuCart().then(ok => { if (ok && checkOfferCartRules()) { Object.assign(state, extra, {screen}); render(); } });
     return;
@@ -1269,9 +1271,9 @@ function cart() {
     }).join("")}
     ${cartRecommendationsMarkup()}
     <textarea class="field" rows="2" placeholder="${t("cookingNotes")}" oninput="state.notes=this.value">${escapeHtml(state.notes)}</textarea>
-    <div id="couponBox">${couponBoxMarkup()}</div>
+    ${typeof addonTarget === "function" && addonTarget() ? addonCartMarkup() : `<div id="couponBox">${couponBoxMarkup()}</div>
     <div class="breakdown" id="cartBreakdown" style="margin-top:14px">${cartSummaryMarkup()}</div>
-    <button class="btn btn-primary" style="margin-top:16px" onclick="go('checkout')">${t("proceed")}</button>
+    <button class="btn btn-primary" style="margin-top:16px" onclick="go('checkout')">${t("proceed")}</button>`}
   </section>`;
 }
 
@@ -2060,7 +2062,12 @@ const idx = o ? customerStatusStep(o.status) : 0;
                         })
                         .join("")}
 
+                      ${typeof orderAddedItemsMarkup === "function" ? orderAddedItemsMarkup(o.backendId) : ""}
                     </div>
+                    ${typeof pushCardMarkup === "function" && !["completed", "rejected", "cancelled"].includes(o.status)
+                        ? pushCardMarkup({id: o.backendId, token: o.trackingToken}) : ""}
+                    ${typeof orderAddonsMarkup === "function" ? orderAddonsMarkup({id: o.backendId, number: String(o.id || ""),
+                        token: o.trackingToken, type: o.orderType || state.orderType, status: o.status}) : ""}
 
                     <a
                       class="btn btn-ghost orders-call-btn"
@@ -3698,6 +3705,7 @@ function render() {
       .replace('class="nav"', `class="nav${NAV_WIDE_ONLY.includes(state.screen) ? " nav-wide-only" : ""}"`));
   }
   navSync();
+  if (typeof pushAfterRender === "function") pushAfterRender();   // Batch P
   if(state.screen==="addAddressPage")mountDeliveryMap();
   if (["home","menu","listing","detail","cart","checkout","offers"].includes(state.screen)) {
     const screen = $app().querySelector(".screen");
@@ -3847,6 +3855,8 @@ function quickAdd(id) {
 function updateCartBreakdown() {
   const box = document.getElementById("cartBreakdown");
   if (box) box.innerHTML = cartSummaryMarkup();
+  const addon = document.getElementById("addonCart");   // Batch A: the "items to add" sum follows the cart
+  if (addon && typeof addonCartMarkup === "function") addon.outerHTML = addonCartMarkup();
 }
 function chgQty(idx, d, button) {
   const line = state.cart[idx];
