@@ -311,6 +311,7 @@ function go(screen, extra = {}) {
     state.addressReturnScreen = state.screen === "checkout" ? "checkout" : state.screen === "home" ? "home" : "account";
   }
   if (screen !== "detail") state.cartEditKey = null;
+  if (["rewards", "account"].includes(screen) && typeof rewardsTouch === "function") rewardsTouch();
   // Batch A: while adding to an order there is no checkout; the cart sends the items.
   if (screen === "checkout" && typeof addonTarget === "function" && addonTarget()) screen = "cart";
   if (screen === "checkout") {

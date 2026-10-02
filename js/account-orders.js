@@ -22,6 +22,7 @@ async function loadAccountOrders(append = false) {
     accountOrders.more = rows.length > 20;
     const seen = new Set(accountOrders.rows.map(row => row.id));
     accountOrders.rows.push(...rows.slice(0,20).filter(row => !seen.has(row.id)));
+    if (!append && typeof loadRewardsSummary === 'function') loadRewardsSummary(true).then(() => { if (state.screen === 'track') renderKeepScroll(); });
   } catch (_) {
     if (generation === accountOrders.generation) accountOrders.error = true;
   } finally {
@@ -43,16 +44,21 @@ async function refreshAccountOrdersQuietly() {
     const rows = await customerAuthRpc('oracy_customer_orders_v1', {p_restaurant_id: MENU_CONFIG.restaurantId, p_offset: 0});
     if (generation !== accountOrders.generation || user !== state.authUserId || accountOrders.busy || !Array.isArray(rows)) return;
     const fresh = new Map(rows.slice(0,20).map(row => [row.id, row]));
-    let changed = false;
+    let changed = false, settled = false;
     accountOrders.rows = accountOrders.rows.map(row => {
       const next = fresh.get(row.id);
       if (!next) return row;
       fresh.delete(row.id);
       if (JSON.stringify(next) !== JSON.stringify(row)) changed = true;
+      // An order just closed: its points (earned or given back) are read again.
+      if (next.status !== row.status && ['completed','cancelled','rejected'].includes(next.status)) settled = true;
       return next;
     });
     if (fresh.size) { accountOrders.rows.unshift(...fresh.values()); changed = true; }
     if (changed && state.screen === 'track') renderKeepScroll();
+    if (settled && typeof loadRewardsSummary === 'function') {
+      loadRewardsSummary(true).then(() => { if (['track','account','rewards'].includes(state.screen)) renderKeepScroll(); });
+    }
   } catch (_) { /* the next round tries again */ } finally { accountOrders.quiet = false; }
 }
 if (typeof setInterval === 'function') setInterval(refreshAccountOrdersQuietly, 5000);

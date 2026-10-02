@@ -115,6 +115,7 @@ async function loadRewardsSummary(force = false) {
     const s = await customerOrderRpc("oracy_rewards_summary_v1", {p_restaurant_id: MENU_CONFIG.restaurantId});
     rewardsState.summary = s;
     rewardsState.summaryFor = state.authUserId;
+    rewardsState.summaryAt = Date.now();
     if (s && s.rules) rewardsState.rules = s.rules;
     if (s && s.enabled === false) rewardsState.rules = {enabled: false};
   } catch (error) {
@@ -124,6 +125,12 @@ async function loadRewardsSummary(force = false) {
     rewardsState.summaryTried = state.authUserId;
   }
   return rewardsState.summary;
+}
+
+/** Opening the points or account screen: a summary older than 20 seconds is read again (points change when an order is paid). */
+function rewardsTouch() {
+  if (!state.isLoggedIn || !rewardsState.summary || Date.now() - (rewardsState.summaryAt || 0) < 20000) return;
+  loadRewardsSummary(true).then(() => { if (["rewards", "account", "track"].includes(state.screen)) renderKeepScroll(); });
 }
 
 /** Load rules (and the summary when signed in) once; then call onReady. Never loops. */
