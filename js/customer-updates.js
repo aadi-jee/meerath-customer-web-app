@@ -57,7 +57,7 @@ async function websiteRpc(name, payload) {
       body: JSON.stringify(payload), credentials: 'omit', cache: 'no-store', signal: controller.signal,
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.message || 'Request failed');
+    if (!response.ok) throw Object.assign(new Error(data.message || 'Request failed'), data.hint === 'module_off' ? {hint: 'module_off'} : {});
     return data;
   } finally { clearTimeout(timer); }
 }
@@ -91,7 +91,7 @@ function announcementMarkup() {
 function announcementAction(index) {
   const row = appAnnouncements[index];
   if (!row || !liveAnnouncements().includes(row)) return;
-  if (row.action === 'catering' && featureEnabled('catering')) go('cateringPage');
+  if (row.action === 'catering' && cateringOn()) go('cateringPage');
   if (row.action === 'menu' || row.action === 'offers') go(row.action);
   if (row.action === 'call') window.location.href = 'tel:' + RESTAURANT.phone;
   if (row.action === 'whatsapp') window.open(waLink(updateCopy(`Hello ${APP_CONFIG.brand.shortName}`,`مرحباً ${APP_CONFIG.brand.shortNameAr}`)), '_blank', 'noopener');
@@ -104,8 +104,10 @@ function toggleAnnouncement(button) {
     ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4l12 8-12 8z" fill="currentColor"/></svg>'
     : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14" fill="none" stroke="currentColor" stroke-width="3"/></svg>';
 }
+/* Batch E: also off when catering is switched off for the restaurant (status call). */
+function cateringOn() { return featureEnabled('catering') && (typeof featureOn !== 'function' || featureOn('catering')); }
 function cateringCardMarkup() {
-  if (!featureEnabled('catering')) return '';
+  if (!cateringOn()) return '';
   return `<button class="catering-card" onclick="go('cateringPage')"><strong>${updateCopy('Events & Catering', 'المناسبات والتموين')} →</strong><span>${updateCopy('Family gatherings, office lunches and special occasions.', 'تجمعات عائلية وغداء العمل والمناسبات الخاصة.')} <span class="catering-quote-callout">${updateCopy('Request a quote.', 'اطلب عرض سعر.')}</span></span></button>`;
 }
 function requiredLabel(en, ar) {
@@ -266,7 +268,7 @@ function cateringConfirmationPage() {
     </div></section>${nav('more')}`;
 }
 function cateringPage() {
-  if (!featureEnabled('catering')) return '';
+  if (!cateringOn()) return '';
   if (cateringConfirmation) return cateringConfirmationPage();
   seedCateringCustomer();
   return `<section class="screen"><div class="topbar">${back('home')}<h2>${updateCopy('Events & Catering','المناسبات والتموين')}</h2></div>
@@ -339,7 +341,10 @@ async function submitCatering(event) {
   } catch (error) {
     result.textContent = error.name === 'AbortError'
       ? updateCopy('Confirmation timed out. Please contact us on WhatsApp before resubmitting to avoid a duplicate enquiry.', 'انتهت مهلة التأكيد. يرجى التواصل عبر واتساب قبل إعادة الإرسال لتجنب تكرار الطلب.')
+      : error.hint === 'module_off' && typeof moduleOffText === 'function' ? moduleOffText(error.message)
       : updateCopy('Could not confirm your enquiry: ', 'تعذر تأكيد طلبك: ') + error.message;
+    // Batch E: catering was switched off meanwhile: read the status again so the entry disappears.
+    if (error.hint === 'module_off' && typeof loadOrderingHours === 'function') loadOrderingHours();
   } finally { cateringBusy = false; button.disabled = false; }
 }
 function captureCartOrigin(screen) {

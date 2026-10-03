@@ -3,6 +3,8 @@
 const pushState = {key: null, keyTried: false, subscribed: false, busy: false, error: "", checked: false};
 const PUSH_DISMISS_KEY = "oracy_push_dismissed";
 function pushCopy(en, ar) { return state.lang === "ar" ? ar : en; }
+/* Batch E: notifications switched off for the restaurant = never ask, never subscribe. */
+function pushAllowed() { return typeof featureOn !== "function" || featureOn("push"); }
 function pushSupported() {
   return typeof navigator !== "undefined" && "serviceWorker" in navigator &&
     typeof window !== "undefined" && "PushManager" in window && "Notification" in window;
@@ -56,7 +58,7 @@ async function pushSave(subscription, order) {
 }
 /** The customer tapped "Turn on": ask the browser, subscribe, tell the server. */
 async function pushEnable(orderId, token) {
-  if (pushState.busy || !pushSupported()) return;
+  if (pushState.busy || !pushSupported() || !pushAllowed()) return;
   pushState.busy = true; pushState.error = "";
   pushRefreshCards();
   try {
@@ -79,7 +81,8 @@ async function pushEnable(orderId, token) {
     pushState.subscribed = true;
     toast(pushCopy("Notifications are on for your orders.", "تم تفعيل الإشعارات لطلباتك."), 3000);
   } catch (error) {
-    pushState.error = String(error?.message || error);
+    pushState.error = error?.hint === "module_off" && typeof moduleOffText === "function"
+      ? moduleOffText(error.message) : String(error?.message || error);
   } finally {
     pushState.busy = false;
     pushRefreshCards();
@@ -87,7 +90,7 @@ async function pushEnable(orderId, token) {
 }
 /** Already allowed on this device: quietly tie it to this order too (guests) and keep the language current. */
 async function pushFollowOrder(orderId, token) {
-  if (!pushSupported() || Notification.permission !== "granted" || !orderId) return;
+  if (!pushAllowed() || !pushSupported() || Notification.permission !== "granted" || !orderId) return;
   try {
     const registration = await navigator.serviceWorker.getRegistration();
     const subscription = registration && await registration.pushManager.getSubscription();
@@ -113,6 +116,7 @@ function pushCardMarkup(order) {
   // Only server-issued ids ever reach the button's handler.
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!order?.id || !uuid.test(order.id) || (order.token && !uuid.test(order.token))) return "";
+  if (!pushAllowed()) return `<div data-push-card="1" hidden></div>`;
   const args = `'${order.id}','${order.token || ""}'`;
   if (!pushSupported()) {
     // iPhone / iPad: push works only for an app added to the Home Screen.

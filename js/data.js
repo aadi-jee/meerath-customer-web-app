@@ -473,7 +473,14 @@ async function customerOrderRpc(name, params) {
   if (!response.ok) {
     let detail = null;
     try { detail = await response.json(); } catch (_) {}
-    throw new Error(customerRpcMessage(response.status, detail));
+    const refusal = new Error(customerRpcMessage(response.status, detail));
+    // Batch E (283): a part of the app was switched off for this restaurant. Ask the
+    // server for the status again, so the screen shows the notice instead of a retry.
+    if (detail && detail.code === "P0001" && detail.hint === "module_off") {
+      refusal.hint = "module_off";
+      if (typeof loadOrderingHours === "function") loadOrderingHours();
+    }
+    throw refusal;
   }
   return response.json();
 }

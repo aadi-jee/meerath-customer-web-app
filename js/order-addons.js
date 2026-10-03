@@ -143,7 +143,7 @@ async function sendOrderAddon() {
       `تم الإرسال. الإجمالي الجديد بعد تأكيد المطعم: ${money(Number(result.order_total) || 0)}`), 6000);
     go("track");
   } catch (error) {
-    toast(String(error?.message || error), 6500);
+    toast(typeof moduleOffText === "function" ? moduleOffText(error?.message || error) : String(error?.message || error), 6500);
     // An order that can no longer take items: leave the mode, keep the cart for a normal order.
     if (/paid or closed|No more items|delivery order|not available/i.test(String(error?.message || ""))) {
       state.addonFor = null; addonRemember();

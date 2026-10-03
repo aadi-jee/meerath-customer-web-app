@@ -17,7 +17,9 @@ const rewardsState = {
 function rewardsCopy(en, ar) { return state.lang === "ar" ? ar : en; }
 
 function rewardsOn() {
-  return Boolean(APP_CONFIG.features.rewards && rewardsState.rules && rewardsState.rules.enabled === true);
+  // Batch E: also off when points are switched off for the restaurant (status call).
+  return Boolean(APP_CONFIG.features.rewards && (typeof featureOn !== "function" || featureOn("rewards")) &&
+    rewardsState.rules && rewardsState.rules.enabled === true);
 }
 
 // ---------- pure helpers (tested) ----------

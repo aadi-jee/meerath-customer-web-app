@@ -5,6 +5,45 @@ const orderingHours = {status: null, skew: 0, loading: null, started: false, bou
 
 function orderingCopy(en, ar) { return state.lang === "ar" ? ar : en; }
 function orderingNow() { return Date.now() + orderingHours.skew; }
+/* Batch E (283): the restaurant's switched-on parts, as the server's last answer said.
+   No "features" in the answer (an older database, or nothing loaded yet) = everything on.
+   The server refuses a switched-off part anyway; this only hides it. */
+function featureOn(name) {
+  const features = orderingHours.status?.features;
+  return !features || typeof features !== "object" || features[name] !== false;
+}
+function featuresOffKey() {
+  return ["app", "ordering", "delivery", "rewards", "vouchers", "push", "catering", "recommendations"].filter(x => !featureOn(x)).join(",");
+}
+/** A switched-off part must not stay chosen: delivery moves to pick-up, a code and chosen points come off. */
+function orderingApplyFeatures() {
+  if (typeof state === "undefined") return;
+  if (state.orderType === "delivery" && featureOn("ordering") && orderingState("delivery").reason === "unavailable") {
+    state.orderType = "takeaway";
+    state.orderTiming = "asap";
+    if (typeof clearDeliveryQuote === "function") clearDeliveryQuote();
+  }
+  if (!featureOn("rewards")) state.redeemPoints = 0;
+  if (!featureOn("vouchers")) { state.couponOn = false; state.voucher = null; state.coupon = ""; }
+}
+const MODULE_OFF_AR = {
+  "Online ordering is not available for this restaurant right now. Please call the restaurant.": "الطلب عبر الإنترنت غير متاح لهذا المطعم حالياً. يرجى الاتصال بالمطعم.",
+  "Delivery is not available from this restaurant. Please choose pick-up or dine-in.": "التوصيل غير متاح من هذا المطعم. يرجى اختيار الاستلام أو الطلب داخل المطعم.",
+  "Notifications are not available for this restaurant.": "الإشعارات غير متاحة لهذا المطعم.",
+  "Catering enquiries are not available right now. Please contact the restaurant directly.": "طلبات التموين غير متاحة حالياً. يرجى التواصل مع المطعم مباشرة.",
+};
+/** The server's words for a switched-off part, in the customer's language. */
+function moduleOffText(message) {
+  const text = String(message || "");
+  return (state.lang === "ar" && MODULE_OFF_AR[text]) || text;
+}
+/** app:false — one notice in place of the whole app. */
+function appUnavailableMarkup() {
+  return `<section class="screen app-unavailable"><div class="restaurant-closed-notice" role="alert" aria-live="assertive">
+    <span class="restaurant-closed-icon" aria-hidden="true">!</span>
+    <div><strong>${orderingCopy("This app is not available right now.", "هذا التطبيق غير متاح حالياً.")}</strong>
+    <p>${orderingCopy("Please contact the restaurant.", "يرجى التواصل مع المطعم.")}</p></div></div></section>`;
+}
 
 /** The branch the app is ordering from: fixed in the brand settings, or the one the menu chose. */
 function orderingBranchId() {
@@ -37,12 +76,15 @@ async function loadOrderingHours() {
       if (!response.ok) return;
       const status = await response.json();
       if (!status || status.version !== 1) return;
-      const before = orderingSignature();
+      const before = orderingSignature(), featuresBefore = featuresOffKey();
       orderingHours.status = status;
+      orderingApplyFeatures();
       const serverNow = Date.parse(status.now);
       orderingHours.skew = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
       orderingScheduleBoundary();
-      if (before !== orderingSignature()) orderingRefreshUI();
+      // Batch E: a part switched on or off changes any screen, not only Home / cart / checkout.
+      if (featuresBefore !== featuresOffKey()) { if (typeof render === "function") render(); }
+      else if (before !== orderingSignature()) orderingRefreshUI();
     } catch (_) { /* keep the last answer */ }
     finally { if (typeof clearTimeout === "function") clearTimeout(timer); orderingHours.loading = null; }
   })();
@@ -56,8 +98,11 @@ function orderingSignature() {
 }
 /** What the server said for one order type, corrected for a limit that has passed since it answered. */
 function orderingState(type) {
+  // Batch E: ordering (or delivery) switched off for this restaurant. No opening time: it is not about the hours.
+  if (!featureOn("ordering") || (type === "delivery" && !featureOn("delivery"))) return {open: false, enforced: true, reason: "unavailable"};
   const raw = orderingHours.status?.[type];
   if (!raw || raw.enforced === false) return {open: true};
+  if (raw.reason === "unavailable" && raw.open === false) return {open: false, enforced: true, reason: "unavailable"};
   const now = orderingNow();
   if (raw.open && raw.until && now >= Date.parse(raw.until)) return {open: false, reason: "cutoff", opens_at: raw.opens_at};
   if (!raw.open && raw.reason !== "paused" && raw.opens_at && now >= Date.parse(raw.opens_at)) return {open: true};
@@ -85,9 +130,16 @@ function orderingOpensText(iso) {
     : new Intl.DateTimeFormat(locale, {timeZone: zone, weekday: "long"}).format(at);
   return orderingCopy(`${day} at ${time}`, `${day} الساعة ${time}`);
 }
+/** Only delivery is switched off (pick-up or dine-in can still be ordered, now or later). */
+function orderingDeliveryOnlyOff(type) {
+  return type === "delivery" && ["takeaway", "dinein"].some(x => orderingState(x).reason !== "unavailable");
+}
 function orderingClosedTitle(type = state.orderType) {
   const s = orderingState(type);
   if (s.open !== false) return "";
+  if (s.reason === "unavailable") return orderingDeliveryOnlyOff(type)
+    ? orderingCopy("Delivery is not available from this restaurant", "التوصيل غير متاح من هذا المطعم")
+    : orderingCopy("Online ordering is not available right now", "الطلب عبر الإنترنت غير متاح حالياً");
   if (s.reason === "paused") return orderingCopy(`${orderingTypeName(type)} is paused right now`, `${orderingTypeName(type)} متوقف مؤقتاً`);
   if (s.reason === "cutoff") return orderingCopy(`${orderingTypeName(type)} has closed for now`, `${orderingTypeName(type)} مغلق حالياً`);
   return orderingCopy("Restaurant is currently closed", "المطعم مغلق حالياً");
@@ -95,6 +147,9 @@ function orderingClosedTitle(type = state.orderType) {
 function restaurantClosedMessage(type = state.orderType) {
   const s = orderingState(type);
   if (s.open !== false) return "";
+  if (s.reason === "unavailable") return orderingDeliveryOnlyOff(type)
+    ? orderingCopy("Please choose pick-up or dine-in.", "يرجى اختيار الاستلام أو الطلب داخل المطعم.")
+    : orderingCopy("Please call the restaurant.", "يرجى الاتصال بالمطعم.");
   const opens = orderingOpensText(s.opens_at);
   if (s.reason === "paused") {
     const reason = String(s.pause_reason || "").trim();
@@ -117,6 +172,11 @@ function orderingNoticeMarkup(type = state.orderType) {
 function orderingStripMarkup() {
   if (restaurantAcceptingOrders()) return "";
   const s = orderingState("dinein");
+  if (s.reason === "unavailable") {
+    return `<div class="ordering-strip" role="status"><span class="ordering-dot" aria-hidden="true"></span>
+    <span><strong>${orderingCopy("Online ordering is not available right now.", "الطلب عبر الإنترنت غير متاح حالياً.")}</strong>
+    ${orderingCopy("Please call the restaurant.", "يرجى الاتصال بالمطعم.")}</span></div>`;
+  }
   const opens = orderingOpensText(s.opens_at);
   return `<div class="ordering-strip" role="status"><span class="ordering-dot" aria-hidden="true"></span>
     <span><strong>${orderingCopy("Closed now", "مغلق الآن")}</strong>${opens ? ` · ${orderingCopy("Opens", "يفتح")} ${escapeHtml(opens)}` : ""}

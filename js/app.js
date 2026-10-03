@@ -300,6 +300,7 @@ function go(screen, extra = {}) {
   if (["rewards", "account"].includes(screen) && typeof rewardsTouch === "function") rewardsTouch();
   // Batch H: opening the cart or checkout asks the server again, so a pause shows before the customer presses Place Order.
   if (["cart", "checkout"].includes(screen) && typeof loadOrderingHours === "function") loadOrderingHours();
+  if (typeof orderingApplyFeatures === "function") orderingApplyFeatures();   // Batch E: never land on a switched-off choice
   // Batch A: while adding to an order there is no checkout; the cart sends the items.
   if (screen === "checkout" && typeof addonTarget === "function" && addonTarget()) screen = "cart";
   if (screen === "checkout") {
@@ -889,6 +890,10 @@ function updateHomeSearch(value) {
     value.trim().length > 0
   );
 }
+/** Batch E: delivery is offered unless it is switched off for the restaurant (while ordering itself is on). */
+function deliveryOffered() {
+  return typeof orderingState !== "function" || orderingState("delivery").reason !== "unavailable" || !featureOn("ordering");
+}
 function setHomeOrderType(type, button) {
   state.orderType = type;
   saveCartDraft();
@@ -1057,7 +1062,7 @@ function home() {
 
   <button class="${state.orderType === "takeaway" ? "on" : ""}" onclick="setHomeOrderType('takeaway', this)">${t("takeaway")}</button>
 
-  <button class="${state.orderType === "delivery" ? "on" : ""}" onclick="setHomeOrderType('delivery', this)">${t("delivery")}</button>
+  <button class="${state.orderType === "delivery" ? "on" : ""}" onclick="setHomeOrderType('delivery', this)" ${deliveryOffered() ? "" : `disabled aria-disabled="true" title="${cartCopy("Delivery is not available from this restaurant.", "التوصيل غير متاح من هذا المطعم.")}"`}>${t("delivery")}</button>
 </div>
 
 <div
@@ -1512,7 +1517,7 @@ async function refreshDeliveryQuote(force = false) {
     return quote;
   } catch (error) {
     if (request !== state.deliveryQuoteRequest) return null;
-    state.deliveryQuote = null; state.deliveryQuoteError = String(error?.message || error);
+    state.deliveryQuote = null; state.deliveryQuoteError = moduleOffText(error?.message || error);
     return null;
   } finally {
     if (request === state.deliveryQuoteRequest) {
@@ -1614,8 +1619,9 @@ function checkout() {
         <button
           class="${state.orderType === "delivery" ? "active" : ""}"
           onclick="setCheckoutOrderType('delivery', this)"
+          ${deliveryOffered() ? "" : `disabled aria-disabled="true" title="${cartCopy("Delivery is not available from this restaurant.", "التوصيل غير متاح من هذا المطعم.")}"`}
         >
-          ${t("delivery")}${orderTypeOpen('delivery') ? "" : `<small class="type-closed">${cartCopy("Closed", "مغلق")}</small>`}
+          ${t("delivery")}${orderTypeOpen('delivery') ? "" : `<small class="type-closed">${deliveryOffered() ? cartCopy("Closed", "مغلق") : cartCopy("Not available", "غير متاح")}</small>`}
         </button>
 
         <button
@@ -1728,7 +1734,7 @@ function checkout() {
         onclick="placeOrder()"
         ${orderTypeOpen() && !checkoutBusy && (state.orderType !== "delivery" || !state.isLoggedIn || !state.checkoutPinConfirmedId || (currentDeliveryQuote()?.eligible === true && !state.deliveryQuoteBusy)) ? "" : "disabled aria-disabled=\"true\""}
       >
-        ${!orderTypeOpen() ? cartCopy("Ordering is closed", "الطلبات مغلقة") : checkoutBusy ? t("processingOrder") : t("placeOrder")}
+        ${!orderTypeOpen() ? (orderingState(state.orderType).reason === "unavailable" ? cartCopy("Ordering is not available", "الطلب غير متاح") : cartCopy("Ordering is closed", "الطلبات مغلقة")) : checkoutBusy ? t("processingOrder") : t("placeOrder")}
       </button>
 
     </section>`;
@@ -3690,6 +3696,12 @@ function render() {
     appearanceSettingsPage,
     account,
   };
+  // Batch E: the app itself is switched off for this restaurant: one notice, nothing else.
+  if (typeof featureOn === "function" && !featureOn("app")) {
+    $app().innerHTML = appUnavailableMarkup();
+    $app().style.paddingBottom = "20px";
+    return;
+  }
   $app().innerHTML = (map[state.screen] || home)();
   // Batch N: every screen keeps the navigation. On a phone the focused steps
   // (item, checkout, sign-in, new address) show it only on a wide screen.
@@ -3881,6 +3893,7 @@ function chgQty(idx, d, button) {
 // Batch D: the code box in the cart. Not applied: the field and "Apply code".
 // Applied: "Coupon applied" with the code, and "Remove coupon" beside it.
 function couponBoxMarkup() {
+  if (typeof featureOn === "function" && !featureOn("vouchers")) return "";   // Batch E: codes switched off
   if (state.couponOn && state.voucher?.code) {
     return `<div class="coupon-applied" role="status">
       <span class="coupon-applied-text">✓ ${cartCopy("Coupon applied", "تم تطبيق الكوبون")} <b dir="ltr">${escapeHtml(state.voucher.code)}</b></span>
@@ -3906,6 +3919,7 @@ async function applyCoupon() {
   const code = state.coupon.trim().toUpperCase();
   state.couponOn = false;
   state.voucher = null;
+  if (typeof featureOn === "function" && !featureOn("vouchers")) { refreshCouponBox(); updateCartBreakdown(); return; }
   if (!code) { updateCartBreakdown(); return; }
   const cents = n => Math.round(Number(n) * 100);
   const itemsCents = state.cart.reduce((n,l) => n + cents(l.price) * l.qty, 0);
@@ -4126,7 +4140,7 @@ async function createOrderAfterVerification() {
       scheduled_for: getScheduledFor() ? new Date(getScheduledFor()).toISOString() : null,
       suggested_eta: suggestedEta,
       // Batch D (253): only a code that takes something off this cart is sent.
-      coupon_code: state.couponOn && state.voucher && totals().discount > 0 ? state.voucher.code : "",
+      coupon_code: state.couponOn && state.voucher && totals().discount > 0 && featureOn("vouchers") ? state.voucher.code : "",
       // Batch R (241): points to use; the server prices and checks them.
       ...(state.redeemPoints > 0 ? {redeem_points: state.redeemPoints} : {}),
       address,
@@ -4196,6 +4210,14 @@ async function createOrderAfterVerification() {
       orderAttemptClear();
       go("checkout");
       setTimeout(() => toast(cartCopy("Please place your order again.", "يرجى تأكيد الطلب مرة أخرى."), 6000));
+    } else if (error?.hint === "module_off") {
+      // Batch E: ordering (or delivery) was switched off for this restaurant. The cart stays;
+      // read the status again so the checkout shows the notice instead of another try.
+      go("checkout");
+      Promise.resolve(loadOrderingHours()).then(() => {
+        if (state.screen === "checkout") renderKeepScroll();
+        toast(orderingClosedTitle() ? orderingClosedTitle() + ". " + restaurantClosedMessage() : moduleOffText(rawMessage), 7000);
+      });
     } else if (orderingRefusal(rawMessage)) {
       // Batch H: the server refused because of the hours. The cart stays; show the notice.
       go("checkout");

@@ -125,6 +125,8 @@ function recoRoleOf(id) {
 }
 function recoCanAdd(id) { const item = itemById(id); return !!item && canAddItem(item); }
 
+/* Batch E: suggestions switched off for the restaurant = none anywhere (no heading, no manual pairings). */
+function recoOff() { return typeof featureOn === "function" && !featureOn("recommendations"); }
 const legacyCartRecommendations = cartRecommendations;
 const legacyRequestCustomerContent = requestCustomerContent;
 
@@ -136,6 +138,7 @@ requestCustomerContent = function () {
 
 /** Cart suggestions as menu items, each with its source. */
 cartRecommendations = function () {
+  if (recoOff()) return [];
   if (!recoReady() || !state.cart.length) {
     return legacyCartRecommendations().map(item => Object.assign(Object.create(item), {item, recoSource: "manual"}));
   }
@@ -192,7 +195,7 @@ cartRecommendationsMarkup = function () {
 };
 
 function itemRecommendations(item) {
-  if (!item || !recoReady()) return [];
+  if (!item || recoOff() || !recoReady()) return [];
   return recoForItem(RECO, item.id, recoCanAdd).map(e => Object.assign(Object.create(itemById(e.id)), {item: itemById(e.id), recoSource: e.source}));
 }
 function itemRecommendationsMarkup(item) {
@@ -206,7 +209,7 @@ function itemRecommendationsMarkup(item) {
 
 /** After an order: "Next time, try" — the placed order's suggestions (open only). */
 function nextTimeRecommendationsMarkup(order) {
-  if (!recoReady() || !order || !Array.isArray(order.items)) return "";
+  if (recoOff() || !recoReady() || !order || !Array.isArray(order.items)) return "";
   const ids = order.items.map(l => l.id).filter(id => itemById(id));
   const list = recoForCart(RECO, ids, id => !!itemById(id) && canOrderItem(itemById(id)), recoRoleOf).slice(0, 3);
   if (!list.length) return "";
