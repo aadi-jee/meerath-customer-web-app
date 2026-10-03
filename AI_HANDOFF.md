@@ -182,6 +182,35 @@ This rule applies to every configurable item, not only Karahi.
 - Website alignment is a separate future task. Share approved backend content
   contracts, not Customer App frontend code wholesale.
 
+## Batch PC — offers push (4 October 2026)
+
+Customer side of push campaigns (server: migration 301, not in this repository).
+
+- **Switch "Offers and news"** (`js/push.js`, `pushOffersMarkup(place)`): under an order's push card once order
+  notifications are on, and as a row on the signed-in Account screen (one hook line in `signedInAccount()` in
+  `js/app.js`). It is OFF until the customer taps it. The only code path that agrees is `pushOffersSet(true)`,
+  called by the switch's own `onchange`; subscribing for an order (`pushEnable`, `pushFollowOrder`) never touches it.
+- **State is the server's** (`oracy_customer_push_offers_v1`, `p_on: null` reads). It is read again each time the
+  Orders, confirmation or Account screen is shown (`pushAfterRender`). Nothing about the agreement is kept in
+  localStorage. A tap is shown at once and put back, with a plain message, if the server does not confirm it.
+- **Account, device not set up:** switching on runs the normal flow first (`pushSubscribe(null)`: browser question →
+  subscribe → `oracy_customer_push_subscribe_v1` without an order), then agrees. No push in the browser → no row;
+  iPhone not on the Home Screen → the Home Screen hint without a switch; blocked in the browser → that sentence
+  without a switch. `pushAllowed()` false → nothing at all.
+- **Service worker** (`sw.js`): `kind:"offer"` gets tag `offer-<uuid>` (else `offer`), `renotify:false` and a
+  "stop" action. Only `menu|offers|category|item` and UUIDs survive; the address is built in the worker
+  (`./?go=…[&id=…][&c=…]`, `./?offers=manage`), never taken from the message. Order messages are unchanged.
+- **App side:** `pushOpenFromLink` / the worker's messages → `pushOpenOffer` (same rules as a home banner; anything
+  gone or not orderable → the menu; waits up to 8 s for the menu) and `oracy_customer_push_opened_v1` once per
+  campaign, best effort. "Stop offers" → `pushOffersManage`: Account (signed in), else Orders if a card is there,
+  else a small sheet with the switch.
+- **Sign-out** (`pushDetach`) is unchanged: the server removes the device, and the agreement with it.
+- Tests: `tests/push-offers.test.cjs` (38). `tests/batch-e.test.cjs` no longer pins the cache keys of `js/app.js`
+  and `js/push.js` (now `20261004-pc1`).
+- Not verified here: a real browser/phone (notification action buttons are not shown by iOS Safari and desktop
+  Firefox; there the Account row is the way to stop), and the live server functions.
+- Left as found: the older "Notifications" row on both Account screens still only shows a toast.
+
 ## Historical baseline — 18 September 2026
 
 **As at 18 September 2026.** The customer ordering app. Plain HTML, CSS and JavaScript — no framework, no build step.

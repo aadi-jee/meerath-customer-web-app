@@ -3281,6 +3281,7 @@ ${typeof rewardsAccountCardMarkup === "function" ? rewardsAccountCardMarkup() : 
 
           <span class="account-arrow">›</span>
         </button>
+${typeof pushOffersMarkup === "function" ? pushOffersMarkup("account") : ""}
 
       </div>
       <div class="account-section-title account-settings-title">

@@ -56,27 +56,34 @@ async function pushSave(subscription, order) {
     p_order_id: order?.id || null, p_tracking_token: order?.token || null,
   });
 }
-/** The customer tapped "Turn on": ask the browser, subscribe, tell the server. */
+/** Ask the browser, subscribe, tell the server. order = {id, token} or null (a signed-in customer). Throws a plain message. */
+async function pushSubscribe(order) {
+  const key = await pushPublicKey();
+  if (!key) throw new Error(pushCopy("Notifications are not available right now.", "الإشعارات غير متاحة حالياً."));
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") throw new Error(permission === "denied"
+    ? pushBlockedText() : pushCopy("Notifications were not turned on.", "لم يتم تفعيل الإشعارات."));
+  const registration = await pushRegistration();
+  let subscription = await registration.pushManager.getSubscription();
+  if (subscription && subscription.options?.applicationServerKey &&
+      btoa(String.fromCharCode(...new Uint8Array(subscription.options.applicationServerKey))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") !== key) {
+    await subscription.unsubscribe();   // made for an older key
+    subscription = null;
+  }
+  subscription ||= await registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: pushKeyBytes(key)});
+  await pushSave(subscription, order);
+  return subscription;
+}
+function pushBlockedText() {
+  return pushCopy("Notifications are blocked for this site in your browser settings.", "الإشعارات محظورة لهذا الموقع في إعدادات المتصفح.");
+}
+/** The customer tapped "Turn on" under an order. This never agrees to offers: that is its own switch. */
 async function pushEnable(orderId, token) {
   if (pushState.busy || !pushSupported() || !pushAllowed()) return;
   pushState.busy = true; pushState.error = "";
   pushRefreshCards();
   try {
-    const key = await pushPublicKey();
-    if (!key) throw new Error(pushCopy("Notifications are not available right now.", "الإشعارات غير متاحة حالياً."));
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") throw new Error(permission === "denied"
-      ? pushCopy("Notifications are blocked for this site in your browser settings.", "الإشعارات محظورة لهذا الموقع في إعدادات المتصفح.")
-      : pushCopy("Notifications were not turned on.", "لم يتم تفعيل الإشعارات."));
-    const registration = await pushRegistration();
-    let subscription = await registration.pushManager.getSubscription();
-    if (subscription && subscription.options?.applicationServerKey &&
-        btoa(String.fromCharCode(...new Uint8Array(subscription.options.applicationServerKey))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") !== key) {
-      await subscription.unsubscribe();   // made for an older key
-      subscription = null;
-    }
-    subscription ||= await registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: pushKeyBytes(key)});
-    await pushSave(subscription, orderId ? {id: orderId, token: token || null} : null);
+    await pushSubscribe(orderId ? {id: orderId, token: token || null} : null);
     if (orderId) pushFollowed.add(orderId);
     pushState.subscribed = true;
     toast(pushCopy("Notifications are on for your orders.", "تم تفعيل الإشعارات لطلباتك."), 3000);
@@ -131,7 +138,7 @@ function pushCardMarkup(order) {
   if (!pushState.key) return `<div data-push-card="1" hidden></div>`;
   if (Notification.permission === "granted" && pushState.subscribed) {
     pushFollowOrderOnce(order.id, order.token);
-    return `<div class="push-card push-on" data-push-card="1"><span>${pushCopy("Notifications are on for this order.", "الإشعارات مفعّلة لهذا الطلب.")}</span></div>`;
+    return `<div class="push-card push-on" data-push-card="1"><span>${pushCopy("Notifications are on for this order.", "الإشعارات مفعّلة لهذا الطلب.")}</span>${pushOffersMarkup("card")}</div>`;
   }
   if (Notification.permission === "denied" || (pushDismissed() && !pushState.error)) return `<div data-push-card="1" hidden></div>`;
   return `<div class="push-card" data-push-card="1">
@@ -149,10 +156,14 @@ function pushFollowOrderOnce(id, token) {
 }
 function pushRefreshCards() {
   if (typeof document === "undefined") return;
-  if (["track", "confirmation"].includes(state.screen) && typeof renderKeepScroll === "function") renderKeepScroll();
+  if (["track", "confirmation", "account"].includes(state.screen) && typeof renderKeepScroll === "function") renderKeepScroll();
 }
 /** Called after every draw: the confirmation screen gets the card under its message. */
 function pushAfterRender() {
+  if (pushOffers.screen !== state.screen) {   // Batch PC: a screen with the offers switch asks the server again
+    pushOffers.screen = state.screen;
+    if (["track", "confirmation", "account"].includes(state.screen)) pushOffersLoad();
+  }
   if (state.screen !== "confirmation" || !state.order?.backendId || typeof document === "undefined") return;
   const box = document.querySelector(".confirmation-screen .success");
   if (!box || box.querySelector("[data-push-card]")) return;
@@ -163,13 +174,20 @@ if (pushSupported()) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (event.data?.type === "oracy-open-orders" && typeof go === "function") { state.orderTab = "active"; go("track"); }
+    else if (event.data?.type === "oracy-open-offer") pushOpenOffer(event.data);
+    else if (event.data?.type === "oracy-manage-offers") pushOffersManage();
   });
 }
-/* Opened from a notification: straight to the Orders screen. */
+/* Opened from a notification: an order goes straight to the Orders screen, an offer to what it is about. */
 function pushOpenFromLink() {
   try {
-    if (new URLSearchParams(location.search).get("orders") !== "1") return;
+    const query = new URLSearchParams(location.search);
+    const offer = query.has("go") ? {go: query.get("go"), id: query.get("id"), c: query.get("c")} : null;
+    const manage = query.get("offers") === "manage";
+    if (query.get("orders") !== "1" && !offer && !manage) return;
     history.replaceState(history.state, "", location.pathname);
+    if (offer) { pushOpenOffer(offer); return; }
+    if (manage) { pushOffersManage(); return; }
     state.orderTab = "active";
     if (typeof go === "function") go("track");
   } catch (_) {}
@@ -179,6 +197,7 @@ if (typeof window !== "undefined") window.addEventListener("load", () => setTime
 async function pushDetach() {
   pushState.subscribed = false;
   pushFollowed.clear();
+  pushOffers.on = false; pushOffers.error = "";   // Batch PC: the server forgets the agreement with the device
   if (!pushSupported()) return;
   try {
     const registration = await navigator.serviceWorker.getRegistration();
@@ -191,4 +210,171 @@ async function pushDetach() {
     } catch (_) { /* the server row goes on the next failed push; the device still forgets */ }
     await subscription.unsubscribe();
   } catch (_) { /* the device simply keeps its last state */ }
+}
+
+/* Batch PC (301): "Offers and news". A separate agreement, OFF until the customer switches it on here.
+ * Only the switch itself ever agrees; the server's answer is the only thing that shows the switch as on. */
+const pushOffers = {on: false, busy: false, error: "", screen: "", opened: new Set()};
+const PUSH_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+async function pushSubscription() {
+  if (!pushSupported()) return null;
+  const registration = await navigator.serviceWorker.getRegistration();
+  return (registration && await registration.pushManager.getSubscription()) || null;
+}
+/** on: null reads, true agrees, false withdraws. The subscription's own secret proves this device asks. */
+async function pushOffersRpc(subscription, on) {
+  const keys = (typeof subscription.toJSON === "function" && subscription.toJSON().keys) || {};
+  const answer = await customerOrderRpc("oracy_customer_push_offers_v1",
+    {p_endpoint: subscription.endpoint, p_auth: keys.auth || null, p_on: on});
+  const known = answer?.ok === true && answer.known === true;
+  return {known, on: known && answer.on === true};
+}
+/** Read the server's state (never changes it). A failed read keeps what is shown. */
+async function pushOffersLoad() {
+  if (!pushAllowed() || pushOffers.busy) return;
+  let on = pushOffers.on;
+  try {
+    const subscription = await pushSubscription();
+    on = subscription ? (await pushOffersRpc(subscription, null)).on : false;
+  } catch (_) {}
+  if (pushOffers.busy || on === pushOffers.on) return;   // a tap in the meantime wins
+  pushOffers.on = on;
+  pushOffersRefresh();
+}
+/** The customer moved the switch. Shown at once, put back with a plain message if the server did not take it. */
+async function pushOffersSet(wanted) {
+  wanted = wanted === true;
+  if (pushOffers.busy || !pushAllowed()) { pushOffersRefresh(); return; }
+  const before = pushOffers.on;
+  pushOffers.busy = true; pushOffers.error = ""; pushOffers.on = wanted;
+  pushOffersRefresh();
+  try {
+    let subscription = await pushSubscription();
+    if (wanted && !subscription) {
+      // Account screen, device not set up yet: the usual permission question first (signed-in customers only).
+      if (!state.isLoggedIn) throw new Error(pushOffersOrderFirstText());
+      subscription = await pushSubscribe(null);
+      pushState.subscribed = true;
+    }
+    if (subscription) {
+      let answer = await pushOffersRpc(subscription, wanted);
+      if (wanted && !answer.known) {
+        // The server does not have this device (any more): save it again, then agree.
+        if (!state.isLoggedIn) throw new Error(pushOffersOrderFirstText());
+        await pushSave(subscription, null);
+        answer = await pushOffersRpc(subscription, true);
+      }
+      if (answer.on !== wanted) throw new Error(pushCopy("This could not be changed. Please try again.", "تعذّر تغيير هذا الإعداد. يرجى المحاولة مرة أخرى."));
+    }
+  } catch (error) {
+    pushOffers.on = before;
+    pushOffers.error = error?.hint === "module_off" && typeof moduleOffText === "function"
+      ? moduleOffText(error.message) : String(error?.message || error);
+  } finally {
+    pushOffers.busy = false;
+    pushOffersRefresh();
+  }
+}
+function pushOffersOrderFirstText() {
+  return pushCopy("Turn on notifications for an order first, then switch on offers.", "فعّل إشعارات أحد طلباتك أولاً ثم فعّل العروض.");
+}
+/** The switch. place: "card" (under an order), "account" (signed-in Account screen), "sheet" (opened from "Stop offers"). */
+function pushOffersMarkup(place) {
+  if (!pushAllowed()) return "";
+  const account = place === "account", sheet = place === "sheet";
+  let usable = false, note = "";
+  if (!pushSupported()) {
+    // iPhone / iPad: push works only for an app added to the Home Screen.
+    if (!sheet && (!account || !pushIsIos() || pushStandalone())) return "";
+    note = account ? pushCopy("On iPhone: tap Share, then “Add to Home Screen”, and open the app from there.",
+      "على الآيفون: اضغط مشاركة ثم «إضافة إلى الشاشة الرئيسية» وافتح التطبيق من هناك.") : "";
+  } else {
+    if (account) pushCheck();
+    if (Notification.permission === "granted" && pushState.subscribed) usable = true;
+    else if (Notification.permission === "denied") { if (place === "card") return ""; note = pushBlockedText(); }
+    else if (account && pushState.key) usable = true;      // switching on asks the browser first
+    else if (!sheet) return "";                            // the server has no push: nothing to offer
+  }
+  if (!usable && !note) note = pushCopy("Offers are off on this device.", "العروض متوقفة على هذا الجهاز.");
+  const copy = `<strong>${pushCopy("Offers and news", "العروض والأخبار")}</strong>
+      <span>${usable ? pushCopy("Occasional offers from this restaurant. Never more than one a day. You can turn this off at any time.",
+        "عروض من هذا المطعم بين حين وآخر. لا تزيد عن عرض واحد في اليوم. يمكنك إيقافها في أي وقت.") : note}</span>
+      ${usable && pushOffers.error ? `<span class="push-error" role="alert">${escapeHtml(pushOffers.error)}</span>` : ""}`;
+  const control = usable ? `<input type="checkbox" role="switch" class="push-switch" ${pushOffers.on ? "checked" : ""} ${pushOffers.busy ? "disabled" : ""}
+      onchange="pushOffersSet(this.checked)">` : "";
+  const tag = usable ? "label" : "div";
+  if (account) return `<${tag} class="account-list-item push-offers" data-push-offers="account">
+      <div class="account-list-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"></path><path d="M15 9a4 4 0 0 1 0 6"></path><path d="M18 6a8 8 0 0 1 0 12"></path></svg></div>
+      <div class="account-list-copy">${copy}</div>${control}</${tag}>`;
+  return `<${tag} class="push-offers" data-push-offers="${sheet ? "sheet" : "card"}">${control}<div class="push-offers-copy">${copy}</div></${tag}>`;
+}
+/** Redraw only the switches (order card, Account row, sheet): no screen jump while the customer taps. */
+function pushOffersRefresh() {
+  if (typeof document === "undefined") return;
+  document.querySelectorAll("[data-push-offers]").forEach((old) => {
+    const focused = old.contains(document.activeElement);
+    const holder = document.createElement("template");
+    holder.innerHTML = pushOffersMarkup(old.getAttribute("data-push-offers"));
+    const next = holder.content.firstElementChild;
+    if (!next) { old.remove(); return; }
+    old.replaceWith(next);
+    if (focused) next.querySelector("input")?.focus();
+  });
+}
+/** "Stop offers" on a notification: bring the customer to the switch (two taps at most to stop). */
+async function pushOffersManage() {
+  if (!pushAllowed() || typeof document === "undefined" || typeof go !== "function") return;
+  pushState.checked = false;
+  await pushCheck();
+  await pushOffersLoad();
+  if (state.isLoggedIn) go("account"); else { state.orderTab = "active"; go("track"); }
+  const row = document.querySelector("#app [data-push-offers]");
+  if (row) { if (typeof row.scrollIntoView === "function") row.scrollIntoView({block: "center"}); return; }
+  pushOffersSheetClose();
+  (document.querySelector(".phone") || document.body).insertAdjacentHTML("beforeend",
+    `<div class="push-sheet" id="pushOffersSheet" role="dialog" aria-label="${pushCopy("Offers and news", "العروض والأخبار")}">${pushOffersMarkup("sheet")}
+      <button type="button" class="link" onclick="pushOffersSheetClose()">${pushCopy("Close", "إغلاق")}</button></div>`);
+}
+function pushOffersSheetClose() { document.getElementById("pushOffersSheet")?.remove(); }
+/** Only these four words and real ids are ever used from an offer notification or link. */
+function pushOfferTarget(data) {
+  const text = (value) => (typeof value === "string" ? value : "");
+  let kind = ["menu", "offers", "category", "item"].includes(text(data?.go)) ? data.go : "menu";
+  const id = (kind === "category" || kind === "item") && PUSH_UUID.test(text(data?.id)) ? data.id : null;
+  if ((kind === "category" || kind === "item") && !id) kind = "menu";
+  return {kind, id, campaign: PUSH_UUID.test(text(data?.c)) ? data.c.toLowerCase() : null};
+}
+function pushMenuLoaded() {
+  return new Promise((resolve) => {
+    let tries = 0;
+    const check = () => {
+      if (typeof menuReady !== "function" || menuReady() || ++tries > 32) resolve();   // 8 s at most
+      else setTimeout(check, 250);
+    };
+    check();
+  });
+}
+/** Opened from an offer: the same places, by the same rules, as a home banner. Anything gone → the menu. */
+async function pushOpenOffer(data) {
+  const target = pushOfferTarget(data);
+  pushOfferOpened(target.campaign);
+  await pushMenuLoaded();
+  if (typeof go !== "function") return;
+  if (target.kind === "item" && canOrderItem(itemById(target.id))) openItem(target.id);
+  else if (target.kind === "category" && CATEGORIES.some(c => c.id === target.id) &&
+    ITEMS.some(i => i.category === target.id && canOrderItem(i))) go("listing", {categoryId: target.id, subcategoryId: ""});
+  else if (target.kind === "offers" && ITEMS.some(i => i.offer && canOrderItem(i))) go("offers");
+  else go("menu");
+}
+/** Tell the restaurant its offer was opened: once per offer, never shown, never waited for. */
+async function pushOfferOpened(campaign) {
+  if (!campaign || pushOffers.opened.has(campaign) || !pushAllowed()) return;
+  pushOffers.opened.add(campaign);
+  try {
+    const subscription = await pushSubscription();
+    if (!subscription) return;
+    const keys = (typeof subscription.toJSON === "function" && subscription.toJSON().keys) || {};
+    await customerOrderRpc("oracy_customer_push_opened_v1",
+      {p_campaign_id: campaign, p_endpoint: subscription.endpoint, p_auth: keys.auth || null});
+  } catch (_) { /* a count for the restaurant only */ }
 }
