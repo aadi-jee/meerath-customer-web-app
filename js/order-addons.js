@@ -15,7 +15,9 @@ function addonRestore() {
     const saved = JSON.parse(sessionStorage.getItem(ADDON_FOR_KEY) || "null");
     if (saved && typeof saved.id === "string" && typeof saved.number === "string") {
       state.addonFor = {id: saved.id, number: saved.number, token: typeof saved.token === "string" ? saved.token : null,
-        restaurant: saved.restaurant};
+        restaurant: saved.restaurant,
+        clientId: typeof saved.clientId === "string" ? saved.clientId : null,
+        clientKey: typeof saved.clientKey === "string" ? saved.clientKey : null};
       if (saved.restaurant !== MENU_CONFIG.restaurantId) state.addonFor = null;
     }
   } catch (_) {}
@@ -70,7 +72,10 @@ function orderAddedItemsMarkup(id) {
     .map(l => `<div class="active-order-item"><span>${Number(l.quantity) || 0} × ${escapeHtml(String(l.name || ""))}</span></div>`).join("");
 }
 function startOrderAddon(id, number, token) {
-  state.addonFor = {id, number, token: token || null, restaurant: MENU_CONFIG.restaurantId};
+  // Gate 3: the same order again keeps the id of a request that may already have landed.
+  const previous = state.addonFor && state.addonFor.id === id ? state.addonFor : null;
+  state.addonFor = {id, number, token: token || null, restaurant: MENU_CONFIG.restaurantId,
+    clientId: previous ? previous.clientId || null : null, clientKey: previous ? previous.clientKey || null : null};
   addonRemember();
   toast(addonCopy(`Adding to order #${number}`, `إضافة إلى الطلب #${number}`), 2600);
   go(state.cart.length ? "cart" : "menu");
@@ -101,7 +106,11 @@ async function sendOrderAddon() {
   if (typeof validateMenuCart === "function" && !(await validateMenuCart())) return;
   orderAddons.sending = true;
   if (state.screen === "cart") renderKeepScroll();
-  target.clientId ||= crypto.randomUUID();   // the same id on a retry: never sent twice
+  // Gate 3: one id per cart as it stands (a retry after a lost answer sends the
+  // same request; a changed cart is a new request). Kept across a reload.
+  const cartKey = JSON.stringify(state.cart.map(l => [l.id, l.qty, l.size || null, l.choice || null, (l.extras || []).map(e => e.id || e.name || e).sort(), l.spice || "", l.notes || ""]).concat([state.notes || ""]));
+  const sentKey = target.clientKey;   // the cart the kept id was minted for
+  if (!target.clientId || sentKey !== cartKey) { target.clientId = crypto.randomUUID(); target.clientKey = cartKey; addonRemember(); }
   try {
     const result = await customerOrderRpc("oracy_request_order_addon_v1", {
       p_order_id: target.id, p_tracking_token: target.token || null,
@@ -116,6 +125,13 @@ async function sendOrderAddon() {
         }),
       },
     });
+    if (result && result.duplicate === true && sentKey !== null && sentKey !== undefined && sentKey !== cartKey) {
+      // The earlier request already reached the restaurant; this cart was changed since.
+      target.clientId = null; target.clientKey = null; addonRemember();
+      toast(addonCopy("Your earlier request already reached the restaurant. Send this cart as a new request.",
+        "طلبك السابق وصل إلى المطعم بالفعل. أرسل هذه السلة كطلب جديد."), 7000);
+      return;
+    }
     state.cart = [];
     state.notes = "";
     saveCartDraft();
@@ -131,7 +147,9 @@ async function sendOrderAddon() {
     // An order that can no longer take items: leave the mode, keep the cart for a normal order.
     if (/paid or closed|No more items|delivery order|not available/i.test(String(error?.message || ""))) {
       state.addonFor = null; addonRemember();
-    } else { target.clientId = null; }
+    }
+    // Gate 3: the id is kept for the retry — if the request did reach the server
+    // (answer lost), the same id makes the retry return that request, not a second one.
   } finally {
     orderAddons.sending = false;
     if (state.screen === "cart") renderKeepScroll();

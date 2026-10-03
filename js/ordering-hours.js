@@ -24,12 +24,15 @@ async function loadOrderingHours() {
     return;
   }
   orderingHours.loading = (async () => {
+    // Gate 3: 8 s at most; a hung answer must not stop the next poll.
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const timer = setTimeout(() => controller?.abort(), 8000);
     try {
       const response = await fetch(`${MENU_CONFIG.url}/rest/v1/rpc/oracy_ordering_status_v1`, {
         method: "POST",
         headers: {apikey: MENU_CONFIG.publicKey, "Content-Type": "application/json"},
         body: JSON.stringify({p_restaurant_id: MENU_CONFIG.restaurantId, p_branch_id: branchId}),
-        cache: "no-store", credentials: "omit",
+        cache: "no-store", credentials: "omit", signal: controller?.signal,
       });
       if (!response.ok) return;
       const status = await response.json();
@@ -41,7 +44,7 @@ async function loadOrderingHours() {
       orderingScheduleBoundary();
       if (before !== orderingSignature()) orderingRefreshUI();
     } catch (_) { /* keep the last answer */ }
-    finally { orderingHours.loading = null; }
+    finally { if (typeof clearTimeout === "function") clearTimeout(timer); orderingHours.loading = null; }
   })();
   return orderingHours.loading;
 }

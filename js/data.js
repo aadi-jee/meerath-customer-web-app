@@ -436,17 +436,30 @@ async function customerOrderRpc(name, params) {
   try {
     accessToken = typeof activeAccessToken === "function" ? await activeAccessToken() : null;
   } catch (_) {}
-  const response = await fetch(`${MENU_CONFIG.url}/rest/v1/rpc/${name}`, {
-    method: "POST",
-    headers: {
-      apikey: MENU_CONFIG.publicKey,
-      "Content-Type": "application/json",
-      ...(accessToken ? {Authorization: `Bearer ${accessToken}`} : {}),
-    },
-    body: JSON.stringify(params),
-    cache: "no-store",
-    credentials: "omit",
-  });
+  // Gate 3: a hung request must not freeze Place Order for ever — 12 s, then
+  // the customer may try again (the same client_order_id makes a retry safe).
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timer = setTimeout(() => controller?.abort(), 12000);
+  let response;
+  try {
+    response = await fetch(`${MENU_CONFIG.url}/rest/v1/rpc/${name}`, {
+      method: "POST",
+      headers: {
+        apikey: MENU_CONFIG.publicKey,
+        "Content-Type": "application/json",
+        ...(accessToken ? {Authorization: `Bearer ${accessToken}`} : {}),
+      },
+      body: JSON.stringify(params),
+      cache: "no-store",
+      credentials: "omit",
+      signal: controller?.signal,
+    });
+  } catch (error) {
+    if (error && error.name === "AbortError") throw new Error("The connection is slow. Please try again.");
+    throw error;
+  } finally {
+    if (typeof clearTimeout === "function") clearTimeout(timer);
+  }
   if (!response.ok) {
     let message = "Order service is unavailable. Please try again.";
     try {

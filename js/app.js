@@ -4016,6 +4016,36 @@ async function placeOrder() {
   state.otpPurpose = "guestOrder";
   await startOtp();
 }
+/* Gate 3: the client_order_id for the cart as it is now (same cart → same id). */
+const orderAttempt = {key: null, id: null};
+const ORDER_ATTEMPT_KEY = "oracy_order_attempt";
+/* The attempt survives a reload: a retry after a timeout must not make a second order. */
+function orderAttemptLoad() {
+  if (orderAttempt.key !== null) return;
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(ORDER_ATTEMPT_KEY) || "null");
+    if (saved && typeof saved.key === "string" && typeof saved.id === "string") { orderAttempt.key = saved.key; orderAttempt.id = saved.id; }
+  } catch (_) {}
+}
+function orderAttemptSave() {
+  try {
+    if (orderAttempt.id) sessionStorage.setItem(ORDER_ATTEMPT_KEY, JSON.stringify({key: orderAttempt.key, id: orderAttempt.id}));
+    else sessionStorage.removeItem(ORDER_ATTEMPT_KEY);
+  } catch (_) {}
+}
+function orderAttemptClear() { orderAttempt.key = null; orderAttempt.id = null; orderAttemptSave(); orderAttempt.key = null; }
+function orderAttemptId(cart, address) {
+  orderAttemptLoad();
+  const key = JSON.stringify([
+    state.orderType, state.orderTiming, typeof getScheduledFor === "function" ? getScheduledFor() : null, address || "",
+    (state.customer.mobile || "").trim(), (state.customer.name || "").trim(), (state.customer.email || "").trim(),
+    state.couponOn ? (state.voucher?.code || "") : "", state.redeemPoints || 0, state.notes || "",
+    cart.map(l => [l.id, l.qty, l.size || null, l.choice || null, (l.extras || []).map(e => e.id || e.name || e).sort(), l.spice || "", l.notes || ""]),
+  ]);
+  if (orderAttempt.key !== key || !orderAttempt.id) { orderAttempt.key = key; orderAttempt.id = crypto.randomUUID(); orderAttemptSave(); }
+  return orderAttempt.id;
+}
+
 async function createOrderAfterVerification() {
   if (!orderTypeOpen()) { toast(orderingClosedTitle() + ". " + restaurantClosedMessage(),7000); return; }
   if (!(await validateMenuCart())) return;
@@ -4063,9 +4093,22 @@ async function createOrderAfterVerification() {
     go("checkout");
     return toast(cartCopy("Please shorten the delivery address to 500 characters.", "يرجى اختصار عنوان التوصيل إلى 500 حرف."));
   }
-  const clientOrderId = crypto.randomUUID();
+  // Gate 3: one id per cart as it stands. A retry after a lost answer sends
+  // the same id and the server hands back the order it already made; a
+  // changed cart gets a new id.
+  const clientOrderId = orderAttemptId(cart, address);
+  /* A retry while the first request is still running meets the server's unique
+     id; one quiet re-send a moment later then returns that order. */
+  const submitOnce = async (payload) => {
+    try { return await submitCustomerOrder(payload); }
+    catch (error) {
+      if (!/duplicate key|23505|client_order_id/i.test(String(error?.message || ""))) throw error;
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      return submitCustomerOrder(payload);
+    }
+  };
   try {
-    const result = await submitCustomerOrder({
+    const result = await submitOnce({
       client_order_id: clientOrderId,
       customer_name: state.customer.name.trim(),
       customer_phone: state.customer.mobile.trim(),
@@ -4121,6 +4164,7 @@ async function createOrderAfterVerification() {
       step: 0,
     };
     if(state.orderType==="delivery"){state.lastDeliveryAddressId=defaultAddress.id;state.checkoutPinConfirmedId=null;}
+    orderAttemptClear();
     state.cart = [];
     saveCartDraft();
     state.couponOn = false;
