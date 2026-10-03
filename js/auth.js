@@ -91,6 +91,10 @@ function authMessage(error, action = "login") {
     "The request timed out. Check your connection and try again.",
     "انتهت مهلة الطلب. تحقق من اتصالك وحاول مرة أخرى."
   );
+  if (/captcha/i.test(String(error?.message || ""))) return authCopy(
+    "The security check did not complete. Please try again.",
+    "لم يكتمل فحص الأمان. يرجى المحاولة مرة أخرى."
+  );
   if (error?.status === 429) return authCopy(
     "Too many attempts. Please wait before trying again.",
     "محاولات كثيرة. يرجى الانتظار قبل المحاولة مرة أخرى."
@@ -105,16 +109,26 @@ function authMessage(error, action = "login") {
   );
 }
 
+/* Gate 4: the sign-in calls carry a Turnstile token when a site key is
+ * configured (captcha.js); without one nothing changes. */
+async function authCaptchaFields() {
+  if (typeof captchaAuthFields !== "function") return {};
+  return captchaAuthFields();
+}
+
 async function requestPhoneOtp(phone) {
+  const captchaFields = await authCaptchaFields();
   return authHttp("otp", {body: {
     phone,
     create_user: true,
     data: {restaurant_id: APP_CONFIG.tenant.restaurantId, tenant_slug: APP_CONFIG.tenant.slug},
+    ...captchaFields,
   }});
 }
 
 async function verifyPhoneOtp(phone, token) {
-  const session = await authHttp("verify", {body: {phone, token, type: "sms"}});
+  const captchaFields = await authCaptchaFields();
+  const session = await authHttp("verify", {body: {phone, token, type: "sms", ...captchaFields}});
   return saveAuthSession(session);
 }
 

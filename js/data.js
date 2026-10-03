@@ -432,10 +432,20 @@ const LEGACY_CUSTOMER_ORDER_HISTORY_STORAGE_KEY = "meerath-customer-order-histor
 const customerOrderConnection = { pending: null, timer: null };
 
 async function customerOrderRpc(name, params) {
+  const signedInOnly = ["oracy_create_customer_order_v1", "oracy_create_pin_delivery_order_v2"];
   let accessToken = null;
+  let tokenError = null;
   try {
     accessToken = typeof activeAccessToken === "function" ? await activeAccessToken() : null;
-  } catch (_) {}
+  } catch (error) { tokenError = error; }
+  // Gate 4 (280): the server takes orders from signed-in customers only. A
+  // token refresh that failed on the network is a retry, not a sign-in problem;
+  // a refresh the server refused has already ended the sign-in.
+  if (signedInOnly.includes(name) && !accessToken) {
+    if (typeof state !== "undefined" && !state.isLoggedIn) throw new Error("Please sign in again to continue.");
+    throw new Error(tokenError && [400, 401, 403].includes(tokenError.status)
+      ? "Please sign in again to continue." : "The connection is slow. Please try again.");
+  }
   // Gate 3: a hung request must not freeze Place Order for ever — 12 s, then
   // the customer may try again (the same client_order_id makes a retry safe).
   const controller = typeof AbortController === "function" ? new AbortController() : null;
@@ -461,14 +471,25 @@ async function customerOrderRpc(name, params) {
     if (typeof clearTimeout === "function") clearTimeout(timer);
   }
   if (!response.ok) {
-    let message = "Order service is unavailable. Please try again.";
-    try {
-      const detail = await response.json();
-      if (typeof detail?.message === "string" && detail.message.length < 220) message = detail.message;
-    } catch (_) {}
-    throw new Error(message);
+    let detail = null;
+    try { detail = await response.json(); } catch (_) {}
+    throw new Error(customerRpcMessage(response.status, detail));
   }
   return response.json();
+}
+
+/* Gate 4: only the server's own, written-for-customers refusals (code P0001,
+ * raised by our functions) reach the screen. Driver, permission, timeout and
+ * other internal texts become one plain message. */
+function customerRpcMessage(status, detail) {
+  const code = String(detail?.code || "");
+  const message = typeof detail?.message === "string" ? detail.message : "";
+  if (code === "P0001" && message.length > 0 && message.length < 220 && !/\n|\r/.test(message)) return message;
+  if (status === 401 || code === "PGRST301" || (code === "42501" && /^(Authentication required|permission denied)/i.test(message))) {
+    return "Please sign in again to continue.";
+  }
+  if (/duplicate key|23505|client_order_id/i.test(message)) return message; // Gate 3 retry logic reads this
+  return "Order service is unavailable. Please try again.";
 }
 
 async function submitCustomerOrder(order) {
@@ -513,11 +534,32 @@ function restoreTrackedCustomerOrder() {
   }
 }
 
+/* Gate 4: the device keeps 20 orders for at most 30 days, and never the
+ * customer's e-mail (the account has it; a shared phone should not). */
+const CUSTOMER_ORDER_HISTORY_DAYS = 30;
+function trimCustomerOrderHistory(list, now = Date.now()) {
+  const oldest = now - CUSTOMER_ORDER_HISTORY_DAYS * 24 * 60 * 60 * 1000;
+  return (Array.isArray(list) ? list : [])
+    .filter(order => order && typeof order.id === "string")
+    .filter(order => {
+      const at = Number(order.completedAt || order.createdAt || 0);
+      return !Number.isFinite(at) || at === 0 || at >= oldest;
+    })
+    .slice(0, 20)
+    .map(order => {
+      // Nothing on the device needs the address or e-mail again: reorder uses items only.
+      const {address, deliveryQuote, customer, ...rest} = order;
+      return customer && typeof customer === "object"
+        ? {...rest, customer: {name: customer.name || "", mobile: customer.mobile || ""}}
+        : rest;
+    });
+}
+
 function saveCustomerOrderHistory() {
   try {
     localStorage.setItem(
       CUSTOMER_ORDER_HISTORY_STORAGE_KEY,
-      JSON.stringify(state.orderHistory.slice(0, 20))
+      JSON.stringify(trimCustomerOrderHistory(state.orderHistory))
     );
   } catch (_) {}
 }
@@ -527,9 +569,7 @@ function restoreCustomerOrderHistory() {
     const saved = JSON.parse(
       readAppStorage("customer-order-history", [LEGACY_CUSTOMER_ORDER_HISTORY_STORAGE_KEY]) || "[]"
     );
-    state.orderHistory = Array.isArray(saved)
-      ? saved.filter(order => order && typeof order.id === "string").slice(0, 20)
-      : [];
+    state.orderHistory = trimCustomerOrderHistory(saved);
   } catch (_) {
     state.orderHistory = [];
     localStorage.removeItem(CUSTOMER_ORDER_HISTORY_STORAGE_KEY);

@@ -1784,7 +1784,7 @@ function confirmation() {
 
           <p class="confirmation-order">
             ${t("order")}
-            <strong>${o.id}</strong>
+            <strong>${escapeHtml(o.id)}</strong>
           </p>
 
           <div class="pending-confirmation-badge">
@@ -1852,7 +1852,7 @@ function confirmation() {
 
         <p class="confirmation-order">
           ${t("order")}
-          <strong>${o.id}</strong>
+          <strong>${escapeHtml(o.id)}</strong>
         </p>
 
         <p class="confirmation-eta">
@@ -2105,7 +2105,7 @@ const idx = o ? customerStatusStep(o.status) : 0;
                           <div class="history-order-top">
                   
                             <div>
-                              <strong>#${order.id}</strong>
+                              <strong>#${escapeHtml(order.id)}</strong>
                               <span>
                                 ${formatOrderDate(order.completedAt || order.createdAt)}
                               </span>
@@ -2148,7 +2148,7 @@ const idx = o ? customerStatusStep(o.status) : 0;
                   
                           <button
                             class="history-reorder-btn"
-                            onclick="reorderFromHistory('${order.id}')"
+                            onclick="reorderFromHistory('${escapeHtml(order.id)}')"
                           >
                             ${t("reorder")}
                           </button>
@@ -2701,6 +2701,8 @@ function signInPage() {
         ${t("saudiNumberNote")}
       </p>
 
+      ${typeof captchaBox === "function" ? captchaBox() : ""}
+
       <button
         class="btn btn-primary signin-continue"
         onclick="startOtp()"
@@ -2798,6 +2800,8 @@ function otpPage() {
         value="${state.otpCode}"
         oninput="state.otpCode=this.value.replace(/[^0-9]/g,'').slice(0,6)"
       />
+
+      ${typeof captchaBox === "function" ? captchaBox() : ""}
 
       <button
         class="btn btn-primary otp-verify-btn"
@@ -4080,6 +4084,8 @@ async function createOrderAfterVerification() {
   }
   if (state.orderSubmitting || !state.cart.length) return;
   if (!orderTypeOpen()) { toast(orderingClosedTitle() + ". " + restaurantClosedMessage(),7000); return; }
+  // Gate 4 (280): the server takes orders from signed-in customers only.
+  if (!state.isLoggedIn) { go("checkout"); return toast(t("signInRequired")); }
   state.orderSubmitting = true;
   if (state.screen === "checkout") renderKeepScroll();
   const cart = state.cart.map((line) => ({ ...line, extras:[...(line.extras || [])] }));
@@ -4183,6 +4189,13 @@ async function createOrderAfterVerification() {
         : orderingClosedTitle() + ". " + restaurantClosedMessage();
       go("checkout");
       setTimeout(() => toast(message, 7000));
+    } else if (/Client order ID conflict/i.test(rawMessage)) {
+      // Gate 4 (280): the attempt id met an order that is not this customer's
+      // (the same cart was sent to another branch, or the id is stale): a new
+      // id and one more tap place the order.
+      orderAttemptClear();
+      go("checkout");
+      setTimeout(() => toast(cartCopy("Please place your order again.", "يرجى تأكيد الطلب مرة أخرى."), 6000));
     } else if (orderingRefusal(rawMessage)) {
       // Batch H: the server refused because of the hours. The cart stays; show the notice.
       go("checkout");

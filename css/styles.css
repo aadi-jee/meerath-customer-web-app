@@ -5690,3 +5690,9 @@ body.light-theme .orders-call-btn {
 
 /* Batch N: focused steps keep the navigation only on a wide screen */
 @media (max-width: 1024px) { .nav.nav-wide-only { display: none; } }
+
+/* Gate 4: Turnstile challenge box (empty until the challenge needs a click). */
+.captcha-box { min-height: 0; margin: 12px 0; display: flex; justify-content: center; }
+.captcha-box:empty { margin: 0; }
+.captcha-floating { position: fixed; left: 0; right: 0; bottom: 16px; z-index: 60; pointer-events: none; }
+.captcha-floating > * { pointer-events: auto; }

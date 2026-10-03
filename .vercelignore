@@ -1,0 +1,7 @@
+# Gate 4: only the app itself is deployed.
+tests/
+supabase/
+node_modules/
+*.md
+*.orig
+.gitignore

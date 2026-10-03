@@ -52,6 +52,7 @@ function environment() {
 
 test('checkout submits a stable backend order and only clears cart after success', async () => {
   const run = environment();
+  run('state.isLoggedIn=true');   // Gate 4 (280): the server takes signed-in orders only
   run(`submitCustomerOrder=async request=>({id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     order_number:'MK001001',tracking_token:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
     status:'pending_confirmation',total:35,created_at:'2026-09-11T12:00:00Z'});

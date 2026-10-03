@@ -56,6 +56,10 @@ const APP_CONFIG = Object.freeze({
   backend: Object.freeze({
     url: "https://skwburtcthxihpgqagmm.supabase.co",
     publicKey: "sb_publishable_6f7rQ5e2pJ_rdUoBxaInoA_wJW5KtHW",
+    // Gate 4: Cloudflare Turnstile site key (public). Empty = no captcha.
+    // Set it together with "CAPTCHA protection" in Supabase Auth (secret key
+    // there) — the app must ship with the key BEFORE the setting goes on.
+    captchaSiteKey: "",
     rpc: Object.freeze({
       menu: "meerath_customer_menu_v1",
       content: "meerath_customer_content_v1",
