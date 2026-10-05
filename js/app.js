@@ -647,6 +647,22 @@ function offerLabel(offer) {
   const amount = offer.type === "percentage" ? `${offer.amount}%` : money(offer.amount);
   return state.lang === "ar" ? `خصم ${amount}` : `${amount} off`;
 }
+/** CX-2: an item or category without its own photo gets a monogram tile, never the logo. */
+function hasOwnPhoto(row) {
+  return !!row && !!row.image && row.image !== APP_CONFIG.brand.logo;
+}
+function monogramTile(row, extraClass = "") {
+  const name = String((state.lang === "ar" ? row.nameAr || row.name : row.name) || "").trim();
+  return `<span class="cx-mono ${extraClass}" aria-hidden="true">${escapeHtml(Array.from(name)[0] || "")}</span>`;
+}
+/** CX-2: placeholders shown only while the first menu load is still running. */
+function menuFirstLoad() {
+  return typeof menuConnection !== "undefined" && menuConnection.status === "loading" && !CATEGORIES.length;
+}
+function skeletonTiles(kind, count) {
+  return Array.from({length: count}, () => `<div class="cx-skel cx-skel-${kind}" aria-hidden="true"></div>`).join("");
+}
+
 /** "1 item" / "3 items" (English only needs the singular). */
 function itemsCountLabel(count) {
   const n = Number(count) || 0;
@@ -1085,12 +1101,13 @@ function home() {
       <div class="h-row"><h3>${t("todaysSpecial")}</h3><button class="link" onclick="go('menu')">${t("seeAll")}</button></div>
       <div class="scroll">
         ${!specials.length && menuReady() ? `<p class="menu-hint">${menuText("noSpecials")}</p>` : ""}
+        ${menuFirstLoad() ? skeletonTiles("special", 3) : ""}
         ${specials
           .map(
             (i) => `
           <article class="special-card">
             <button class="special-open" onclick="openItem('${i.id}')" aria-label="${loc(i, "name")}">
-              <img class="${i.image === APP_CONFIG.brand.logo ? "no-photo" : ""}" src="${i.image}" alt="" loading="lazy" />
+              ${hasOwnPhoto(i) ? `<img src="${i.image}" alt="" loading="lazy" />` : monogramTile(i, "cx-mono-special")}
               ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
               <h4>${loc(i, "name")}</h4>
             </button>
@@ -1103,11 +1120,12 @@ function home() {
       </div>
       <div class="h-row"><h3>${t("categories")}</h3></div>
       <div class="grid">
+        ${menuFirstLoad() ? skeletonTiles("cat", 4) : ""}
         ${CATEGORIES
           .map(
             (c) =>
               `<button class="cat cat-photo" onclick="go('listing',{categoryId:'${c.id}'})">
-  <img src="${c.image}" alt="${loc(c, "name")}" />
+  ${hasOwnPhoto(c) ? `<img src="${c.image}" alt="${loc(c, "name")}" loading="lazy" />` : monogramTile(c, "cx-mono-cat")}
   <span class="cat-label">${loc(c, "name")}</span>
 </button>`
           )
@@ -1126,9 +1144,10 @@ function menu() {
   ${cartButton()}
 </div>
       <div class="grid">
+        ${menuFirstLoad() ? skeletonTiles("cat", 6) : ""}
         ${CATEGORIES.map(
           (c) =>
-            `<button class="cat cat-photo" onclick="go('listing',{categoryId:'${c.id}'})"><img src="${c.image}" alt="${loc(c, "name")}" />${loc(c, "name")}</button>`
+            `<button class="cat cat-photo" onclick="go('listing',{categoryId:'${c.id}'})">${hasOwnPhoto(c) ? `<img src="${c.image}" alt="${loc(c, "name")}" loading="lazy" />` : monogramTile(c, "cx-mono-cat")}${loc(c, "name")}</button>`
         ).join("")}
       </div>
     </section>
@@ -1149,8 +1168,8 @@ function listing() {
       <div class="menu-items-grid">
       ${!items.length && menuReady() ? `<p class="menu-hint">${menuText("noItems")}</p>` : ""}
       ${items.map(i => `
-        <article class="item ${canOrderItem(i) ? "" : "menu-unavailable"}">
-          <img src="${i.image}" alt="${loc(i, "name")}" onclick="openItem('${i.id}')" />
+        <article class="item ${canOrderItem(i) ? "" : "menu-unavailable"} ${hasOwnPhoto(i) ? "" : "cx-no-photo"}">
+          ${hasOwnPhoto(i) ? `<img src="${i.image}" alt="${loc(i, "name")}" loading="lazy" onclick="openItem('${i.id}')" />` : ""}
           <div onclick="openItem('${i.id}')">
             ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
             ${i.bestSeller ? `<span class="badge">${t("bestSeller")}</span>` : ""}
@@ -1253,7 +1272,7 @@ function cart() {
       const saved = roundMoney(Math.max(0, (l.basePrice ?? item?.basePrice ?? l.price) - l.price) * l.qty);
       return `<div class="cart-line cart-editable" data-cart-key="${escapeHtml(l.cartKey)}" onclick="cartRowClick(event,${idx})">
         <button class="cart-image-link" onclick="openCartItem(${idx})" aria-label="${cartCopy("Edit", "تعديل")} ${name}">
-          <img src="${l.image}" alt="" />
+          ${hasOwnPhoto(l) ? `<img src="${l.image}" alt="" />` : monogramTile(item || {name: ""}, "cx-mono-cart")}
         </button>
         <div class="cart-line-content">
           <button class="cart-name-link" onclick="openCartItem(${idx})"><h4>${name}</h4></button>

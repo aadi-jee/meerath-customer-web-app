@@ -41,6 +41,33 @@
     });
   }
 
+  // Photos fade in when they arrive; a cached photo shows at once.
+  function watchImages(screen) {
+    screen.querySelectorAll("img:not([data-cx-img])").forEach(function (img) {
+      img.setAttribute("data-cx-img", "1");
+      if (img.complete) return;
+      img.classList.add("cx-img-wait");
+      var show = function () { img.classList.remove("cx-img-wait"); };
+      img.addEventListener("load", show, {once: true});
+      img.addEventListener("error", show, {once: true});
+    });
+  }
+
+  // The cart count gives a small bump when it goes up.
+  var lastCartCount = null;
+  function bumpCart() {
+    var badge = document.querySelector(".cart-count-badge");
+    var count = badge ? parseInt(badge.textContent, 10) || 0 : 0;
+    if (lastCartCount !== null && count > lastCartCount) {
+      document.querySelectorAll(".cart-count-badge").forEach(function (el) {
+        el.classList.remove("cx-bump");
+        void el.offsetWidth;
+        el.classList.add("cx-bump");
+      });
+    }
+    lastCartCount = count;
+  }
+
   function measure() {
     queued = false;
     var screen = currentScreen();
@@ -59,6 +86,8 @@
     }
     onScroll(screen);
     syncTotals(screen);
+    watchImages(screen);
+    bumpCart();
   }
   function schedule() {
     if (queued) return;

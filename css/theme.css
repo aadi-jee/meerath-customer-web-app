@@ -206,3 +206,174 @@ body.light-theme .history-status.account-status-negative {
   #app > .screen > .topbar::before,
   #app > .home-screen > .home-search-wrap::before { transition: none; }
 }
+
+/* ==========================================================================
+   CX-2 - Classic x Heritage: colour roles, light effects, motion
+   ========================================================================== */
+
+/* ---- 6. Colour roles ----------------------------------------------------
+   Orange = something to tap. Gold = offers, Best Seller, rewards.
+   A price is information, so it is written in the text colour. */
+:root[data-style="heritage"] .price,
+:root[data-style="heritage"] .special-card .price,
+:root[data-style="heritage"] .history-order-meta strong,
+:root[data-style="heritage"] .account-order-total strong,
+:root[data-style="heritage"] .checkout-total-card .total span:last-child,
+:root[data-style="heritage"] .home-search-result-copy span {
+  color: var(--text);
+}
+:root[data-style="heritage"] .price del ~ span { color: var(--cx-reward); }   /* an offer price */
+
+:root[data-style="heritage"] .badge {
+  background: rgba(224, 177, 90, 0.12);
+  border: 1px solid rgba(224, 177, 90, 0.34);
+  color: var(--cx-reward);
+  letter-spacing: 0.2px;
+}
+@supports (background: color-mix(in srgb, #000 50%, transparent)) {
+  :root[data-style="heritage"] .badge {
+    background: color-mix(in srgb, var(--cx-reward) 13%, transparent);
+    border-color: color-mix(in srgb, var(--cx-reward) 38%, transparent);
+  }
+  :root[data-style="heritage"] .home-screen .special-card .badge {
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+  }
+}
+
+/* Rewards card: brushed-gold edge with one slow passing light */
+:root[data-style="heritage"] .account-rewards-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-color: rgba(224, 177, 90, 0.5);
+  background-image: linear-gradient(135deg, rgba(224, 177, 90, 0.16), rgba(224, 177, 90, 0) 42%, rgba(224, 177, 90, 0.1));
+}
+
+/* ---- 7. Passing light (one main button per screen) ----------------------- */
+.cx-cta-bar > .btn-primary,
+.detail-screen .btn-primary[onclick="addFromDetail()"],
+.splash > .btn-primary,
+:root[data-style="heritage"] .account-rewards-card {
+  position: relative;
+  overflow: hidden;
+}
+.cx-cta-bar > .btn-primary:not(:disabled)::after,
+.detail-screen .btn-primary[onclick="addFromDetail()"]:not(:disabled)::after,
+.splash > .btn-primary::after,
+:root[data-style="heritage"] .account-rewards-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 60%;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.34) 50%, rgba(255, 255, 255, 0) 100%);
+  transform: translateX(-130%);
+  pointer-events: none;
+  animation: cx-sheen 5.6s var(--cx-ease) 1.2s infinite;
+}
+:root[data-style="heritage"] .account-rewards-card::after {
+  z-index: -1;
+  background: linear-gradient(105deg, rgba(224, 177, 90, 0) 0%, rgba(224, 177, 90, 0.2) 50%, rgba(224, 177, 90, 0) 100%);
+  animation-duration: 8s;
+}
+[dir="rtl"] .cx-cta-bar > .btn-primary:not(:disabled)::after,
+[dir="rtl"] .detail-screen .btn-primary[onclick="addFromDetail()"]:not(:disabled)::after,
+[dir="rtl"] .splash > .btn-primary::after,
+[dir="rtl"]:root[data-style="heritage"] .account-rewards-card::after {
+  animation-name: cx-sheen-rtl;
+}
+@keyframes cx-sheen {
+  0% { transform: translateX(-130%); }
+  22%, 100% { transform: translateX(300%); }
+}
+@keyframes cx-sheen-rtl {
+  0% { transform: translateX(300%); }
+  22%, 100% { transform: translateX(-130%); }
+}
+
+/* ---- 8. Touch feedback --------------------------------------------------- */
+.btn, .icon-btn, .add, .special-add, .cat, .menu-subcategories button, .orders-tabs button, .more-item, .account-list-item {
+  transition: transform var(--cx-fast) var(--cx-ease), filter var(--cx-fast) var(--cx-ease);
+}
+.btn-primary:active:not(:disabled), .add:active:not(:disabled), .special-add:active { transform: scale(0.97); filter: brightness(1.08); }
+.cat:active, .more-item:active, .account-list-item:active { transform: scale(0.985); }
+
+.cart-count-badge.cx-bump { animation: cx-bump var(--cx-slow) var(--cx-ease); }
+@keyframes cx-bump {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.45); }
+  100% { transform: scale(1); }
+}
+
+/* ---- 9. Photos ----------------------------------------------------------- */
+#app img { transition: opacity var(--cx-slow) var(--cx-ease); }
+#app img.cx-img-wait { opacity: 0; }
+
+/* No photo: a monogram tile instead of the logo */
+.cx-mono {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  border-radius: 12px;
+  background:
+    radial-gradient(120% 90% at 20% 10%, rgba(224, 177, 90, 0.16), rgba(224, 177, 90, 0) 60%),
+    var(--bg-2);
+  border: 1px solid var(--cx-hairline);
+  color: var(--cx-reward);
+  font-weight: 700;
+  line-height: 1;
+}
+.cx-mono.cx-mono-special { aspect-ratio: 4 / 3; border-radius: 10px; font-size: 34px; }
+#app .cat .cx-mono.cx-mono-cat { display: grid; aspect-ratio: 16 / 10; margin: 0; font-size: 38px; line-height: 1; color: var(--cx-reward); }
+.cx-mono.cx-mono-cart { width: 64px; height: 64px; font-size: 24px; }
+.item.cx-no-photo { grid-template-columns: minmax(0, 1fr) auto; padding-inline-start: 14px; }
+
+/* Item description: two lines, the item screen has the full text */
+.menu-items-grid .item h4 + p {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* ---- 10. First load ------------------------------------------------------ */
+.cx-skel {
+  border-radius: 14px;
+  border: 1px solid var(--cx-hairline);
+  background: linear-gradient(100deg, var(--card) 30%, var(--bg-2) 50%, var(--card) 70%);
+  background-size: 220% 100%;
+  animation: cx-skel 1.4s linear infinite;
+}
+.cx-skel-special { flex: 0 0 calc((100% - 20px) / 2.35); aspect-ratio: 3 / 4; }
+.cx-skel-cat { aspect-ratio: 5 / 4; border-radius: var(--radius); }
+@keyframes cx-skel {
+  from { background-position: 120% 0; }
+  to { background-position: -100% 0; }
+}
+
+/* ---- 11. Splash ---------------------------------------------------------- */
+.splash > .splash-brand-logo { animation: cx-logo-in 0.9s var(--cx-ease) both; }
+.splash > p { animation: cx-rise-in 0.6s var(--cx-ease) 0.3s both; }
+.splash > .btn { animation: cx-rise-in 0.6s var(--cx-ease) 0.45s both; }
+.splash > .btn + .btn { animation-delay: 0.55s; }
+@keyframes cx-logo-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes cx-rise-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- 12. Reduce motion: everything above stands still -------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .cx-cta-bar > .btn-primary::after,
+  .detail-screen .btn-primary::after,
+  .splash > .btn-primary::after,
+  .account-rewards-card::after { display: none; }
+  .cx-skel, .cart-count-badge.cx-bump,
+  .splash > .splash-brand-logo, .splash > p, .splash > .btn { animation: none; }
+  #app img, .btn, .icon-btn, .add, .special-add, .cat { transition: none; }
+}

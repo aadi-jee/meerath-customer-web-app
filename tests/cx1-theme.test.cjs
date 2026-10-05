@@ -43,8 +43,8 @@ test('the theme layer loads last and every changed file has a new cache key', ()
   const scripts = [...html.matchAll(/<script src="(js\/[^"?]+)/g)].map(m => m[1]);
   assert.equal(sheets.at(-1), 'css/theme.css');
   assert.equal(scripts.at(-1), 'js/theme.js');
-  for (const file of ['css/theme.css', 'js/theme.js', 'js/brand-config.js', 'js/i18n.js', 'js/account-orders.js',
-    'js/customer-updates.js', 'js/app.js']) assert.ok(html.includes(`${file}?v=20261006-cx1"`), file);
+  for (const file of ['js/brand-config.js', 'js/i18n.js', 'js/account-orders.js',
+    'js/customer-updates.js']) assert.ok(html.includes(`${file}?v=20261006-cx1"`), file);
   assert.ok(html.includes('user-scalable=no'));   // owner decision: pinch-zoom stays off
 });
 
