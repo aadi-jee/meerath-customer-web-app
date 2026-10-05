@@ -114,7 +114,7 @@ function accountOrdersPage() {
   const historyCards = visible.map(order => `<article class="history-order-card">
     <div class="history-order-top"><div><strong>#${h(order.order_number)}</strong><span>${h(date(order.created_at))}</span></div>
     <span class="history-status ${order.status==='rejected'||order.status==='cancelled'?'account-status-negative':''}">${h(accountOrderStatus(order.status))}</span></div>
-    <div class="history-order-meta"><span>${h(accountOrderType(order.fulfillment_type))}</span><span>${(Array.isArray(order.items)?order.items:[]).reduce((n,line)=>n+(Number(line.quantity)||0),0)} ${t('items')}</span><strong>${money(Number(order.total)||0)}</strong></div>
+    <div class="history-order-meta"><span>${h(accountOrderType(order.fulfillment_type))}</span><span>${(count => typeof itemsCountLabel === 'function' ? itemsCountLabel(count) : `${count} ${t('items')}`)((Array.isArray(order.items)?order.items:[]).reduce((n,line)=>n+(Number(line.quantity)||0),0))}</span><strong>${money(Number(order.total)||0)}</strong></div>
     ${typeof rewardsOrderLine === 'function' ? rewardsOrderLine(order.order_number) : ''}
     <details class="account-order-details"><summary>${t('orderDetails')}</summary>
     ${(Array.isArray(order.items)?order.items:[]).map(line=>`<div class="active-order-item">${h(line.quantity)} × ${h(line.name)}</div>`).join('')}
@@ -128,6 +128,6 @@ function accountOrdersPage() {
     ${accountOrders.busy&&!accountOrders.rows.length?`<div class="account-orders-notice" role="status">${authCopy('Loading orders…','جارٍ تحميل الطلبات…')}</div>`:''}
     ${!accountOrders.busy&&!accountOrders.error&&!visible.length?empty:''}
     ${history?`<div class="order-history-list">${historyCards}</div>`:`<div class="account-active-orders">${activeCards}</div>`}
-    ${accountOrders.more?`<button class="btn btn-ghost account-load-more" onclick="loadAccountOrders(true)" ${accountOrders.busy?'disabled':''}>${authCopy('Load more','تحميل المزيد')}</button>`:''}
+    ${accountOrders.more&&(history||visible.length)?`<button class="btn btn-ghost account-load-more" onclick="loadAccountOrders(true)" ${accountOrders.busy?'disabled':''}>${authCopy('Load more','تحميل المزيد')}</button>`:''}
     </section>${nav('track')}`;
 }

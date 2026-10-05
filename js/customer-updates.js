@@ -111,7 +111,7 @@ function cateringCardMarkup() {
   return `<button class="catering-card" onclick="go('cateringPage')"><strong>${updateCopy('Events & Catering', 'المناسبات والتموين')} →</strong><span>${updateCopy('Family gatherings, office lunches and special occasions.', 'تجمعات عائلية وغداء العمل والمناسبات الخاصة.')} <span class="catering-quote-callout">${updateCopy('Request a quote.', 'اطلب عرض سعر.')}</span></span></button>`;
 }
 function requiredLabel(en, ar) {
-  return `${updateCopy(en, ar)} <span class="required-mark" aria-hidden="true">*</span>`;
+  return `<span class="cx-label-text">${updateCopy(en, ar)} <span class="required-mark" aria-hidden="true">*</span></span>`;
 }
 function cateringField(key, en, ar, type = 'text', attrs = '') {
   const label = attrs.includes('required') ? requiredLabel(en, ar) : updateCopy(en, ar);
@@ -172,7 +172,7 @@ function selectCateringDate(value) {
 function cateringAreaMarkup() {
   const venue=cateringDraft.venue_type || '';
   const outside=venue==='outside', atMeerath=venue==='meerath';
-  return `<label id="cateringAreaLabel">${updateCopy('Event location','موقع المناسبة')} <span id="cateringAreaRequired" class="required-mark" ${outside?'':'hidden'} aria-hidden="true">*</span><input class="field" name="area" type="text" value="${escapeHtml(cateringDraft.area || '')}" maxlength="160" ${outside?'required':''} ${atMeerath?'disabled':''} placeholder="${atMeerath?escapeHtml(configuredBranchName()):updateCopy('Area, street or venue name','الحي أو الشارع أو اسم القاعة')}"></label>`;
+  return `<label id="cateringAreaLabel"><span class="cx-label-text">${updateCopy('Event location','موقع المناسبة')} <span id="cateringAreaRequired" class="required-mark" ${outside?'':'hidden'} aria-hidden="true">*</span></span><input class="field" name="area" type="text" value="${escapeHtml(cateringDraft.area || '')}" maxlength="160" ${outside?'required':''} ${atMeerath?'disabled':''} placeholder="${atMeerath?escapeHtml(configuredBranchName()):updateCopy('Area, street or venue name','الحي أو الشارع أو اسم القاعة')}"></label>`;
 }
 function updateCateringVenue(form) {
   saveCateringDraft(form);

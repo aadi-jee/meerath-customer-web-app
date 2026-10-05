@@ -223,7 +223,7 @@ noSavedAddressesSub: "Add an address to make delivery checkout faster.",
 addNewAddress: "Add new address",
 addAddressTitle: "Add new address",
 addressType: "Address type",
-home: "Home",
+homeAddress: "Home",
 work: "Work",
 other: "Other",
 
@@ -550,7 +550,7 @@ noSavedAddressesSub: "أضف عنواناً لتسهيل وتسريع طلبات
 addNewAddress: "إضافة عنوان جديد",
 addAddressTitle: "إضافة عنوان جديد",
 addressType: "نوع العنوان",
-home: "المنزل",
+homeAddress: "المنزل",
 work: "العمل",
 other: "أخرى",
 
@@ -567,7 +567,7 @@ directionsPlaceholder: "علامة مميزة أو رقم البوابة أو ت
 saveAddress: "حفظ العنوان",
 addAddressTitle: "إضافة عنوان جديد",
 addressType: "نوع العنوان",
-home: "المنزل",
+homeAddress: "المنزل",
 work: "العمل",
 other: "أخرى",
 

@@ -31,6 +31,9 @@ const APP_CONFIG = Object.freeze({
     logo: "assets/images/meerath-logo.png",
     logoAlt: "Meerath Kabab & Roll",
     layoutPreset: "heritage",
+    // CX-1: a theme is a structure (screen layout) plus a style (look).
+    // Unknown names fall back to classic + heritage.
+    theme: Object.freeze({structure: "classic", style: "heritage"}),
     colors: Object.freeze({
       dark: Object.freeze({primary: "#f08a1a", primaryStrong: "#ff9f2e", accent: "#e0b15a"}),
       light: Object.freeze({primary: "#c76600", primaryStrong: "#e87908", accent: "#8a5b0a"}),
@@ -126,6 +129,16 @@ function brandShortName(lang = "en") {
   return lang === "ar" ? APP_CONFIG.brand.shortNameAr : APP_CONFIG.brand.shortName;
 }
 
+const THEME_STRUCTURES = Object.freeze(["classic"]);
+const THEME_STYLES = Object.freeze(["heritage"]);
+function brandTheme() {
+  const chosen = (APP_CONFIG.brand && APP_CONFIG.brand.theme) || {};
+  return {
+    structure: THEME_STRUCTURES.includes(chosen.structure) ? chosen.structure : THEME_STRUCTURES[0],
+    style: THEME_STYLES.includes(chosen.style) ? chosen.style : THEME_STYLES[0],
+  };
+}
+
 function applyBrandShell(theme = "dark") {
   if (typeof document === "undefined") return;
   const palette = APP_CONFIG.brand.colors[theme] || APP_CONFIG.brand.colors.dark;
@@ -138,6 +151,9 @@ function applyBrandShell(theme = "dark") {
   root.style.setProperty("--gold", palette.accent);
   root.dataset.brand = APP_CONFIG.tenant.slug;
   root.dataset.layout = APP_CONFIG.brand.layoutPreset;
+  const brandLook = brandTheme();
+  root.dataset.structure = brandLook.structure;
+  root.dataset.style = brandLook.style;
   document.title = APP_CONFIG.brand.appTitle;
   const description = document.querySelector('meta[name="description"]');
   if (description) description.content = APP_CONFIG.brand.description;

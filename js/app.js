@@ -647,6 +647,12 @@ function offerLabel(offer) {
   const amount = offer.type === "percentage" ? `${offer.amount}%` : money(offer.amount);
   return state.lang === "ar" ? `خصم ${amount}` : `${amount} off`;
 }
+/** "1 item" / "3 items" (English only needs the singular). */
+function itemsCountLabel(count) {
+  const n = Number(count) || 0;
+  return `${n} ${n === 1 && state.lang !== "ar" ? "item" : t("items")}`;
+}
+
 function cartButton() {
   const count = cartCount();
 
@@ -1027,6 +1033,7 @@ function home() {
       ${orderingStripMarkup()}
       <div class="home-search-wrap">
 
+  <div class="cx-search-row">
   <div class="home-search-box">
 
     <svg
@@ -1047,6 +1054,8 @@ function home() {
       oninput="updateHomeSearch(this.value)"
     />
 
+  </div>
+  <span class="cx-search-cart">${cartButton()}</span>
   </div>
 
   <div
@@ -1270,7 +1279,10 @@ function cart() {
     ${typeof addonTarget === "function" && addonTarget() ? addonCartMarkup() : `<div id="couponBox">${couponBoxMarkup()}</div>
     <div class="breakdown" id="cartBreakdown" style="margin-top:14px">${cartSummaryMarkup()}</div>
     ${orderingStripMarkup()}
-    <button class="btn btn-primary" style="margin-top:16px" onclick="go('checkout')">${t("proceed")}</button>`}
+    <div class="cx-cta-bar">
+      <div class="cx-cta-total"><span>${t("total")}</span><strong data-cx-total>${money(totals().total)}</strong></div>
+      <button class="btn btn-primary" onclick="go('checkout')">${t("proceed")}</button>
+    </div>`}
   </section>`;
 }
 
@@ -1729,6 +1741,8 @@ function checkout() {
 
       <div class="breakdown checkout-total-card">${cartSummaryMarkup()}</div>
 
+      <div class="cx-cta-bar">
+      <div class="cx-cta-total"><span>${t("total")}</span><strong data-cx-total>${money(totals().total)}</strong></div>
       <button
         class="btn btn-primary checkout-place-order"
         onclick="placeOrder()"
@@ -1736,6 +1750,7 @@ function checkout() {
       >
         ${!orderTypeOpen() ? (orderingState(state.orderType).reason === "unavailable" ? cartCopy("Ordering is not available", "الطلب غير متاح") : cartCopy("Ordering is closed", "الطلبات مغلقة")) : checkoutBusy ? t("processingOrder") : t("placeOrder")}
       </button>
+      </div>
 
     </section>`;
 }
@@ -2138,10 +2153,10 @@ const idx = o ? customerStatusStep(o.status) : 0;
                             </span>
                   
                             <span>
-                              ${(order.items || []).reduce(
+                              ${itemsCountLabel((order.items || []).reduce(
                                 (sum, item) => sum + item.qty,
                                 0
-                              )} ${t("items")}
+                              ))}
                             </span>
                   
                             ${
@@ -2977,7 +2992,7 @@ function savedAddressesPage() {
                     <div class="saved-address-copy">
 
                       <div class="saved-address-heading">
-                        <strong>${t(address.type)}</strong>
+                        <strong>${t(address.type === "home" ? "homeAddress" : address.type)}</strong>
 
                         ${
                           isDefault
@@ -3148,7 +3163,7 @@ function addAddressPage() {
           class="${state.addressType === "home" ? "active" : ""}"
           onclick="setAddressType('home',this)"
         >
-          ${t("home")}
+          ${t("homeAddress")}
         </button>
 
         <button

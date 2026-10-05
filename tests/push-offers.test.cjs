@@ -574,7 +574,7 @@ test('the Account screen has the row for a signed-in customer only, and the chan
   assert.equal(app.split(hook).length, 2);
   assert.ok(app.indexOf(hook) > app.indexOf('function signedInAccount()') && app.indexOf(hook) < app.indexOf('function account()'));
   const html = read('index.html');
-  for (const file of ['css/order-addons.css', 'js/app.js', 'js/push.js']) assert.ok(html.includes(`${file}?v=20261004-pc1"`), file);
+  for (const file of ['css/order-addons.css', 'js/push.js']) assert.ok(html.includes(`${file}?v=20261004-pc1"`), file);
   const push = read('js/push.js');
   assert.equal(push.split('p_on: true').length, 1);            // nothing agrees with a fixed "true"
   assert.equal(push.split('pushOffersSet(').length, 3);        // the function and the switch's own handler

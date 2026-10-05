@@ -1,0 +1,208 @@
+/* ==========================================================================
+   ORACY customer app - theme layer (CX-1)
+   Loaded last. A theme = structure (html[data-structure]) + style
+   (html[data-style]). Brand colours still come from brand-config.js
+   (--orange, --orange-2, --gold). Nothing here is tenant specific.
+   ========================================================================== */
+
+/* ---- 1. Tokens ---------------------------------------------------------- */
+:root {
+  /* type scale */
+  --cx-text-xs: 12px;
+  --cx-text-sm: 13.5px;
+  --cx-text-md: 15px;
+  --cx-text-lg: 17px;
+  --cx-text-xl: 20px;
+  --cx-text-2xl: 24px;
+  --cx-text-3xl: 30px;
+  /* spacing */
+  --cx-space-1: 4px;
+  --cx-space-2: 8px;
+  --cx-space-3: 12px;
+  --cx-space-4: 16px;
+  --cx-space-5: 24px;
+  --cx-space-6: 32px;
+  /* shape */
+  --cx-radius-sm: 10px;
+  --cx-radius-md: 14px;
+  --cx-radius-lg: 20px;
+  --cx-radius-pill: 999px;
+  /* depth */
+  --cx-shadow-1: 0 4px 14px rgba(0, 0, 0, 0.18);
+  --cx-shadow-2: 0 14px 34px rgba(0, 0, 0, 0.32);
+  /* motion */
+  --cx-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --cx-fast: 140ms;
+  --cx-base: 240ms;
+  --cx-slow: 420ms;
+  --cx-glass-blur: blur(16px) saturate(1.35);
+}
+/* Colour roles and frozen bars. Declared on body so they follow the light or dark theme. */
+body {
+  /* colour roles */
+  --cx-action: var(--orange);
+  --cx-action-strong: var(--orange-2);
+  --cx-reward: var(--gold);
+  --cx-surface: var(--card);
+  --cx-hairline: var(--line);
+  --cx-glass: var(--bg);
+  --cx-glass-strong: var(--bg);
+}
+@supports (background: color-mix(in srgb, #000 50%, transparent)) {
+  body {
+    --cx-glass: color-mix(in srgb, var(--bg) 90%, transparent);
+    --cx-glass-strong: color-mix(in srgb, var(--bg) 94%, transparent);
+  }
+}
+
+/* ---- 2. Style: heritage (warm charcoal, dark theme) --------------------- */
+:root[data-style="heritage"] body.dark-theme {
+  --bg: #0a0807;
+  --bg-2: #13100d;
+  --card: #191613;
+  --line: #2e2822;
+  --line-soft: #26211c;
+  --muted: #a09787;
+}
+:root[data-style="heritage"] body.dark-theme .phone { background: var(--bg); }
+:root[data-style="heritage"] body.dark-theme .nav { background: rgba(13, 11, 9, 0.98); }
+
+/* ---- 3. Keyboard focus (never shown for touch) -------------------------- */
+:focus-visible {
+  outline: 2px solid var(--cx-action);
+  outline-offset: 2px;
+}
+
+/* ---- 4. Small corrections ----------------------------------------------- */
+/* A rejected or cancelled order must not look like a completed one. */
+body.light-theme .history-status.account-status-negative {
+  background: #fdecea;
+  border-color: #f3c1ba;
+  color: #b3372a;
+}
+.cx-label-text { display: block; }
+
+/* ---- 5. Phone and tablet layout (the desktop website mode is untouched) -- */
+@media (max-width: 1024px) {
+  /* One header for every screen: title starts beside the back button. */
+  #app > .screen:not(.detail-screen) > .topbar > h2 {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: start;
+    transform-origin: left center;
+    transition: transform var(--cx-base) var(--cx-ease);
+  }
+  [dir="rtl"] #app > .screen:not(.detail-screen) > .topbar > h2 { transform-origin: right center; }
+
+  /* Frozen header */
+  #app > .screen:not(.detail-screen):not(.home-screen) > .topbar {
+    position: sticky;
+    /* sticky offsets are measured from inside the screen padding (set by theme.js) */
+    top: calc(6px + var(--safe-top) - var(--cx-pad-t, 20px));
+    z-index: 20;
+    isolation: isolate;
+  }
+  #app > .screen:not(.detail-screen):not(.home-screen) > .topbar::before,
+  #app > .home-screen > .home-search-wrap::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: -120px;
+    bottom: -8px;
+    left: calc(-1 * var(--cx-pad-l, 18px));
+    right: calc(-1 * var(--cx-pad-r, 18px));
+    background: var(--cx-glass);
+    -webkit-backdrop-filter: var(--cx-glass-blur);
+    backdrop-filter: var(--cx-glass-blur);
+    border-bottom: 1px solid var(--cx-hairline);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--cx-base) var(--cx-ease);
+  }
+  #app > .screen.cx-scrolled:not(.detail-screen):not(.home-screen) > .topbar::before { opacity: 1; }
+  #app > .screen.cx-scrolled:not(.detail-screen):not(.home-screen) > .topbar > h2 { transform: scale(0.86); }
+
+  /* Frozen second row: Orders tabs, sub-category chips */
+  #app > .orders-screen > .orders-tabs,
+  #app > .listing-screen > .menu-subcategories {
+    position: sticky;
+    top: var(--cx-subrow-top, 64px);
+    z-index: 21;
+  }
+  #app > .screen.cx-scrolled.cx-has-subrow:not(.detail-screen):not(.home-screen) > .topbar::before {
+    bottom: calc(-1 * (var(--cx-subrow-h, 0px) + 22px));
+  }
+  #app > .listing-screen > .menu-subcategories { scrollbar-width: none; }
+  #app > .listing-screen > .menu-subcategories::-webkit-scrollbar { display: none; }
+
+  /* Home: the search bar freezes, with the cart beside it */
+  #app > .home-screen > .home-search-wrap {
+    position: sticky;
+    top: calc(8px + var(--safe-top) - var(--cx-pad-t, 20px));
+    isolation: isolate;
+  }
+  #app > .home-screen.cx-search-stuck > .home-search-wrap::before { opacity: 1; }
+  .cx-search-row { display: flex; align-items: center; gap: 10px; }
+  .cx-search-row > .home-search-box { flex: 1 1 auto; min-width: 0; }
+  .cx-search-cart { display: none; flex: 0 0 auto; }
+  #app > .home-screen.cx-search-stuck .cx-search-cart { display: block; }
+  .cx-search-cart .icon-btn { width: 54px; height: 54px; border-radius: var(--cx-radius-md); }
+
+  /* Item photo fills the screen edge to edge */
+  #app > .detail-screen > .hero-img {
+    width: calc(100% + var(--cx-pad-l, 18px) + var(--cx-pad-r, 18px));
+    max-width: none;
+    margin-left: calc(-1 * var(--cx-pad-l, 18px));
+    margin-right: calc(-1 * var(--cx-pad-r, 18px));
+  }
+
+  /* Frozen total and action at the bottom of cart and checkout */
+  .cx-cta-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 15;
+    margin-top: 16px;
+    padding: 10px 0;
+    isolation: isolate;
+  }
+  .cx-cta-bar::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: 0;
+    bottom: -40px;
+    left: calc(-1 * var(--cx-pad-l, 18px));
+    right: calc(-1 * var(--cx-pad-r, 18px));
+    background: var(--cx-glass-strong);
+    -webkit-backdrop-filter: var(--cx-glass-blur);
+    backdrop-filter: var(--cx-glass-blur);
+    border-top: 1px solid var(--cx-hairline);
+    pointer-events: none;
+  }
+  .checkout-screen .cx-cta-bar { padding-bottom: calc(10px + var(--safe)); }
+  .cx-cta-bar > .btn { width: 100%; margin-top: 0; }
+}
+.cx-cta-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: var(--cx-text-sm);
+}
+.cx-cta-total strong {
+  color: var(--text);
+  font-size: var(--cx-text-lg);
+  font-weight: 700;
+}
+@media (min-width: 1025px) {
+  .cx-cta-total, .cx-search-cart { display: none; }
+  .cx-cta-bar > .btn { margin-top: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #app > .screen > .topbar > h2,
+  #app > .screen > .topbar::before,
+  #app > .home-screen > .home-search-wrap::before { transition: none; }
+}
