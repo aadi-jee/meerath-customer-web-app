@@ -110,7 +110,8 @@ test('the smart cart dock is hidden when empty and shows the last items, count a
 
 test('changed files have new cache keys; one Place Order button; a message stays clear of the main button', () => {
   const html = read('index.html'), app = read('js/app.js'), css = read('css/theme.css');
-  for (const file of ['css/theme.css', 'js/theme.js', 'js/app.js']) assert.ok(html.includes(`${file}?v=20261006-cx3b"`), file);
+  assert.ok(html.includes('js/theme.js?v=20261006-cx3b"'));
+  for (const file of ['css/theme.css', 'js/app.js', 'js/data.js']) assert.ok(html.includes(`${file}?v=20261006-cx3c"`), file);
   assert.equal(app.split('onclick="placeOrder()"').length, 2);
   assert.ok(css.includes('.phone:has(.cx-cta-bar) .toast'));
   assert.ok(css.includes('.cx-cart-bar { display: none; }'));   // desktop website mode keeps its own layout
@@ -143,4 +144,53 @@ test('the dock animates in the theme layer only; the amount shown always ends as
   assert.ok(theme.includes('prefers-reduced-motion: reduce'));
   assert.ok(css.includes(':has(> .cx-cart-bar:not([hidden])) > .topbar .cart-icon-btn'));
   assert.ok(css.includes('.cx-cart-bar, .cx-dock-thumb { animation: none !important; }'));
+});
+
+test('an item with no regular price can be seen but not ordered, and never stays in a cart', () => {
+  const run = environment();
+  run(`row.base_price = 0; ready();`);
+  assert.equal(run('canOrderItem(ITEMS[0])'), false);
+  assert.equal(run('addToCart(ITEMS[0])'), false);
+  assert.equal(run('state.cart.length'), 0);
+  assert.ok(run('itemPriceMarkup(ITEMS[0])').includes('Price coming soon'));
+  assert.equal(run('itemPriceMarkup(ITEMS[0])').includes(run('money(0)')), false);
+  run(`state.screen='listing'; openItem(id);`);
+  const html = run('detail()');
+  assert.ok(html.includes('Price coming soon') && html.includes('disabled'));
+  assert.equal(html.includes('id="cxAddQty"'), false);
+  // priced when added, price removed afterwards: the line leaves the cart on the next menu update
+  run(`row.base_price = 18; ready(); addToCart(ITEMS[0]); row.base_price = 0; ready(); reconcileMenuCart();`);
+  assert.equal(run('state.cart.length'), 0);
+});
+
+test('a full-discount offer on a priced item is still orderable', () => {
+  const run = environment();
+  run(`row.offer={has_offer:true,offer_active:true,offer_type:'percentage',offer_discount:100,
+      offer_valid_from:'2026-09-08',offer_valid_to:'2026-09-08'}; ready();`);
+  assert.equal(run('ITEMS[0].price'), 0);
+  assert.equal(run('canOrderItem(ITEMS[0])'), true);
+});
+
+test('a sub-category with no items is not offered', () => {
+  const run = environment();
+  run(`payload.subcategories=[{id:'55555555-5555-5555-5555-555555555555',category_id:cat,name_en:'Full'},
+      {id:'66666666-6666-6666-6666-666666666666',category_id:cat,name_en:'Empty'}];
+    row.subcategory_id='55555555-5555-5555-5555-555555555555';
+    ready(); SUBCATEGORIES=mapMenu(payload,now).subcategories; state.categoryId=cat;`);
+  let html = run('listing()');
+  assert.ok(html.includes('>Full<'));
+  assert.equal(html.includes('>Empty<'), false);
+  run(`state.subcategoryId='66666666-6666-6666-6666-666666666666';`);
+  html = run('listing()');
+  assert.equal(run('state.subcategoryId'), '');
+  assert.ok(html.includes('Test dish'));
+});
+
+test('bars are pinned to the bottom on short screens and the item photo is edge to edge', () => {
+  const css = read('css/theme.css');
+  const part = css.slice(css.indexOf('15b. Bars stay at the bottom'), css.indexOf('16. A message never covers'));
+  assert.ok(part.includes('flex-direction: column') && part.includes('flex-shrink: 0'));
+  assert.ok(part.includes('.cx-cart-bar:not([hidden]) { margin-top: auto;'));
+  assert.ok(part.includes('.sticky-actions.cx-add-bar { margin-top: auto; }'));
+  assert.ok(part.includes('margin-top: calc(-1 * var(--cx-pad-t, 20px));'));
 });

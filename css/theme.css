@@ -668,7 +668,7 @@ body.light-theme .toggle { border-color: #d8d3ca; }
     color: #1a1004;
     font-size: var(--cx-text-sm);
     font-weight: 700;
-    box-shadow: 0 6px 16px rgba(240, 138, 26, 0.26);
+    box-shadow: 0 2px 8px rgba(240, 138, 26, 0.22);
   }
   [dir="rtl"] .cx-dock-cta { padding: 0 16px 0 12px; }
   .cx-dock-cta svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
@@ -703,6 +703,30 @@ body.light-theme .toggle { border-color: #d8d3ca; }
   from { transform: translateX(-70%) scale(0.5); opacity: 0; }
   to { transform: translateX(0) scale(1); opacity: 1; }
 }
+
+/* ---- 15b. Bars stay at the bottom even when the screen is not full ---------- */
+@media (max-width: 1024px) {
+  #app > .home-screen,
+  #app > .menu-screen,
+  #app > .listing-screen,
+  #app > .detail-screen {
+    display: flex;
+    flex-direction: column;
+  }
+  #app > .home-screen > *,
+  #app > .menu-screen > *,
+  #app > .listing-screen > *,
+  #app > .detail-screen > * { flex-shrink: 0; }
+  #app > .screen > .cx-cart-bar:not([hidden]) { margin-top: auto; padding-top: 18px; }
+  #app > .detail-screen > .sticky-actions.cx-add-bar { margin-top: auto; }
+  /* edge-to-edge photo: it starts behind the status bar, not under a dark strip */
+  #app > .detail-screen > .hero-img,
+  #app .detail-screen > .cx-ph.cx-ph-hero {
+    margin-top: calc(-1 * var(--cx-pad-t, 20px));
+    height: calc(min(44vh, 320px) + var(--safe-top));
+  }
+}
+.cx-price-soon { color: var(--muted); font-size: 0.82em; font-weight: 600; }
 
 /* ---- 16. A message never covers the main button --------------------------- */
 @supports selector(:has(*)) {

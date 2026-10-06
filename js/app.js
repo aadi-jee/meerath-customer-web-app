@@ -145,6 +145,7 @@ function choiceName(choice) {
 // Batch V (238): the big price on the item screen follows the chosen size,
 // choice and extras straight away (no full re-render).
 function detailPriceMarkup(item) {
+  if (!itemHasPrice(item)) return `<span class="cx-price-soon">${priceSoonLabel()}</span>`;
   const n = normalizeItemChoices(item, state);
   const price = roundMoney(item.price + n.extraPrice), base = roundMoney(item.basePrice + n.baseExtraPrice);
   const old = item.offer && base > price ? `<del style="color:var(--muted);font-size:0.85em;margin-inline-end:8px">${money(base)}</del>` : "";
@@ -694,7 +695,11 @@ function back(to = "home") {
 function money(n) {
   return `${t("sar")} ${Number(n).toFixed(2)}`;
 }
+function priceSoonLabel() {
+  return cartCopy("Price coming soon", "السعر قريباً");
+}
 function itemPriceMarkup(item) {
+  if (!itemHasPrice(item)) return `<span class="cx-price-soon">${priceSoonLabel()}</span>`;
   const old = item.offer ? `<del style="color:var(--muted);font-size:0.85em;margin-inline-end:8px">${money(item.basePrice)}</del>` : "";
   return `${old}<span>${money(item.price)}</span>`;
 }
@@ -1168,7 +1173,7 @@ function home() {
               <h4>${loc(i, "name")}</h4>
             </button>
             <button class="special-add" onclick="quickAdd('${i.id}')" aria-label="${t("add")} ${loc(i, "name")}">
-              <span>${money(i.price)}</span><b aria-hidden="true">+</b>
+              <span>${itemHasPrice(i) ? money(i.price) : priceSoonLabel()}</span><b aria-hidden="true">+</b>
             </button>
           </article>`
           )
@@ -1214,7 +1219,9 @@ function menu() {
 
 function listing() {
   const cat = CATEGORIES.find(c => c.id === state.categoryId);
-  const subs = SUBCATEGORIES.filter(s => s.category === state.categoryId);
+  // CX-3c: a sub-category with nothing in it is not offered as a choice.
+  const subs = SUBCATEGORIES.filter(s => s.category === state.categoryId && ITEMS.some(i => i.subcategory === s.id));
+  if (state.subcategoryId && !subs.some(s => s.id === state.subcategoryId)) state.subcategoryId = "";
   const items = ITEMS.filter(i => i.category === state.categoryId && (!state.subcategoryId || i.subcategory === state.subcategoryId));
   return `
     <section class="screen listing-screen">

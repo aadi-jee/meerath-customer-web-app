@@ -294,8 +294,12 @@ function mapMenu(payload, date = new Date()) {
 function menuReady() {
   return menuConnection.status === "ready" && Date.now() - menuConnection.lastSuccess <= MENU_CONFIG.maxAgeMs;
 }
+/** CX-3c: an item whose regular price has not been entered yet can be seen but not ordered. */
+function itemHasPrice(item) {
+  return !!item && Number(item.basePrice) > 0;
+}
 function canOrderItem(item) {
-  return !!item && item.available === true && item.offer?.maxQty !== 0 && menuReady() && !noSizeOnSale(item) &&
+  return !!item && item.available === true && itemHasPrice(item) && item.offer?.maxQty !== 0 && menuReady() && !noSizeOnSale(item) &&
     (!restaurantAcceptingOrders() || scheduleAllows((menuConnection.payload?.schedules || []).filter(s => s.menu_item_id === item.id)));
 }
 function reconcileMenuCart() {
@@ -304,7 +308,7 @@ function reconcileMenuCart() {
   const used = new Map();
   state.cart = state.cart.flatMap(line => {
     const item = ITEMS.find(i => i.id === line.id);
-    if (!item?.available) return [];
+    if (!item?.available || !itemHasPrice(item)) return [];
     const cap = item.offer?.maxQty ?? Infinity;
     const qty = Math.min(Number.isSafeInteger(line.qty) && line.qty > 0 ? line.qty : 0,
       Math.max(0, cap - (used.get(item.id) || 0)));
