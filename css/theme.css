@@ -820,6 +820,10 @@ body.light-theme .toggle { border-color: #d8d3ca; }
   #app img, .btn, .icon-btn, .add, .special-add, .cat { transition: none; }
 }
 
+/* Every theme: the delivery line turns into a clear warning when the chosen
+   address is outside the delivery area. */
+#app .home-screen .mode-note.mode-note-warn { color: var(--danger); font-weight: 600; }
+
 /* =====================================================================
    18. STRUCTURE "scroll" (CX-4): Home is the menu.
    Everything here is scoped to html[data-structure="scroll"]; the classic
@@ -833,7 +837,7 @@ body.light-theme .toggle { border-color: #d8d3ca; }
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
-  margin: 18px calc(-1 * var(--cx-pad-r, 18px)) 0 calc(-1 * var(--cx-pad-l, 18px));
+  margin: 4px calc(-1 * var(--cx-pad-r, 18px)) 0 calc(-1 * var(--cx-pad-l, 18px));
   padding: 0 var(--cx-pad-r, 18px) 0 var(--cx-pad-l, 18px);
   scroll-padding-inline: var(--cx-pad-l, 18px);
   border-bottom: 1px solid var(--cx-hairline);

@@ -1018,11 +1018,10 @@ function setHomeOrderType(type, button) {
   }
 
   const location = document.getElementById("homeOrderLocation");
-  const note = document.getElementById("homeOrderNote");
 
   if (location) location.innerHTML = homeLocationMarkup();
 
-  if (note) note.style.display = homeDeliveryNoteVisible() ? "" : "none";
+  homeOrderNoteRefresh();
   homeDeliverySync();
 }
 
@@ -1051,7 +1050,37 @@ function homeAddressName(address) {
   const district = homeAddressDistrict(address.area) || homeAddressDistrict(address.label);
   return [kind, district.slice(0, 40)].filter(Boolean).join(" · ") || cartCopy("Saved address", "عنوان محفوظ");
 }
-function homeDeliveryNoteVisible() { return state.orderType === "delivery" && !homeDeliveryAddress(); }
+/** True when the server has said the chosen address is outside the delivery limits. */
+function homeDeliveryOut() {
+  const address = homeDeliveryAddress();
+  return !!address && homeDelivery.key === `${address.id}|${address.updatedAt}` && homeDelivery.status === "out";
+}
+/**
+ * The line under Dine-in / Pick-up / Delivery (every theme):
+ *  - no delivery address yet: where the fee and availability will be shown;
+ *  - the chosen address is outside the delivery area: say so, with what to do;
+ *  - the chosen address is fine (or not checked yet): nothing, and no empty space.
+ */
+function homeDeliveryNoteText() {
+  if (state.orderType !== "delivery") return "";
+  if (!homeDeliveryAddress()) return t("deliveryScope");
+  if (homeDeliveryOut()) return cartCopy("We do not deliver to this address yet. Choose another address or switch to Pick-up.",
+    "لا نوصل إلى هذا العنوان حالياً. اختر عنواناً آخر أو حوّل إلى الاستلام من الفرع.");
+  return "";
+}
+function homeDeliveryNoteVisible() { return !!homeDeliveryNoteText(); }
+function homeOrderNoteMarkup() {
+  const text = homeDeliveryNoteText();
+  return `<div id="homeOrderNote" class="mode-note${homeDeliveryOut() ? " mode-note-warn" : ""}" ${homeDeliveryOut() ? `role="status"` : ""} style="${text ? "" : "display:none"}">${text}</div>`;
+}
+function homeOrderNoteRefresh() {
+  const note = typeof document !== "undefined" ? document.getElementById("homeOrderNote") : null;
+  if (!note) return;
+  const text = homeDeliveryNoteText();
+  note.textContent = text;
+  note.style.display = text ? "" : "none";
+  if (note.classList) note.classList.toggle("mode-note-warn", homeDeliveryOut());
+}
 function homeLocationMarkup() {
   if (state.orderType === "takeaway") return `${cartCopy("Pickup from", "الاستلام من")} <strong>${escapeHtml(branchDisplayName(state.lang))}</strong>`;
   if (state.orderType !== "delivery") return `${cartCopy("Dining at", "تناول الطعام في")} <strong>${escapeHtml(branchDisplayName(state.lang))}</strong>`;
@@ -1076,9 +1105,9 @@ function selectHomeAddress(id) {
 }
 function homeDeliveryRefreshLine() {
   if (state.screen !== "home") return;
-  const location = document.getElementById("homeOrderLocation"), note = document.getElementById("homeOrderNote");
+  const location = document.getElementById("homeOrderLocation");
   if (location) location.innerHTML = homeLocationMarkup();
-  if (note) note.style.display = homeDeliveryNoteVisible() ? "" : "none";
+  homeOrderNoteRefresh();
 }
 /** Loads the saved addresses if needed, then asks the server whether the chosen one is inside the delivery limits. */
 async function homeDeliverySync() {
@@ -1176,13 +1205,7 @@ function home() {
   <button class="${state.orderType === "delivery" ? "on" : ""}" onclick="setHomeOrderType('delivery', this)" ${deliveryOffered() ? "" : `disabled aria-disabled="true" title="${cartCopy("Delivery is not available from this restaurant.", "التوصيل غير متاح من هذا المطعم.")}"`}>${t("delivery")}</button>
 </div>
 
-<div
-  id="homeOrderNote"
-  class="mode-note"
-  style="${homeDeliveryNoteVisible() ? "" : "display:none"}"
->
-  ${t("deliveryScope")}
-</div>
+${homeOrderNoteMarkup()}
       ${homeBannersMarkup()}
       <div class="h-row"><h3><span class="cx-text-shimmer">${t("todaysSpecial")}</span></h3><button class="link" onclick="go('menu')">${t("seeAll")}</button></div>
       <div class="scroll">
@@ -1339,7 +1362,7 @@ function homeScroll() {
         <button class="${state.orderType === "takeaway" ? "on" : ""}" onclick="setHomeOrderType('takeaway', this)">${t("takeaway")}</button>
         <button class="${state.orderType === "delivery" ? "on" : ""}" onclick="setHomeOrderType('delivery', this)" ${deliveryOffered() ? "" : `disabled aria-disabled="true"`}>${t("delivery")}</button>
       </div>
-      <div id="homeOrderNote" class="mode-note" style="${homeDeliveryNoteVisible() ? "" : "display:none"}">${t("deliveryScope")}</div>
+      ${homeOrderNoteMarkup()}
       ${homeBannersMarkup()}
       <div class="cx-catbar" id="cxMenuTop" role="tablist" aria-label="${t("categories")}">
         <button class="cx-catbar-search" onclick="menuJump('search')" aria-label="${t("search")}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></button>

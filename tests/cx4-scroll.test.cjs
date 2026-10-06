@@ -115,11 +115,33 @@ test('Home carries no "Order again" or points card: those live under Orders and 
   for (const gone of ['cx-again', 'cx-points', 'reorderFromHistory']) assert.equal(html.includes(gone), false, gone);
 });
 
+test('the delivery line (every theme): shown without an address, a warning outside the area, gone when fine', () => {
+  for (const saved of ['', 'scroll']) {
+    const run = environment(saved), page = saved ? 'homeScroll()' : 'home()';
+    run(`I18N.en.deliveryScope = 'Select your location at checkout'; homeDeliverySync = () => {};`);
+    run(`state.orderType = 'dinein'`);
+    assert.equal(run('homeDeliveryNoteText()'), '');
+    run(`state.orderType = 'delivery'; homeDeliveryAddress = () => null;`);
+    assert.equal(run('homeDeliveryNoteText()'), 'Select your location at checkout');
+    assert.match(run(page), /id="homeOrderNote" class="mode-note"  style="">Select your location/);
+    run(`homeDeliveryAddress = () => ({id:'a', updatedAt:'1'}); homeDelivery.key = 'a|1'; homeDelivery.status = 'ok';`);
+    assert.equal(run('homeDeliveryNoteText()'), '');                                  // inside the area: no line
+    assert.match(run(page), /id="homeOrderNote" class="mode-note"  style="display:none"><\/div>/);   // and no space
+    run(`homeDelivery.status = 'checking'`);
+    assert.equal(run('homeDeliveryNoteText()'), '');
+    run(`homeDelivery.status = 'out'`);
+    assert.match(run('homeDeliveryNoteText()'), /We do not deliver to this address yet/);
+    assert.match(run(page), /class="mode-note mode-note-warn" role="status" style="">We do not deliver/);
+    run(`homeDelivery.key = 'other|1'`);                                               // an answer about another address does not count
+    assert.equal(run('homeDeliveryNoteText()'), '');
+  }
+});
+
 test('files changed in CX-4 have new cache keys and the classic rules are untouched', () => {
   const html = read('index.html'), css = read('css/theme.css'), spy = read('js/theme.js');
   assert.ok(html.includes('js/brand-config.js?v=20261006-cx4"'));
-  assert.ok(html.includes('js/app.js?v=20261006-cx4d"'));
-  for (const file of ['js/theme.js', 'css/theme.css']) assert.ok(html.includes(`${file}?v=20261006-cx4c"`), file);
+  for (const file of ['js/app.js', 'css/theme.css']) assert.ok(html.includes(`${file}?v=20261006-cx4e"`), file);
+  assert.ok(html.includes('js/theme.js?v=20261006-cx4c"'));
   assert.ok(css.includes('#app > .home-screen > .home-topbar {\n    position: sticky;'));   // frozen header
   const added = css.slice(css.indexOf('18. STRUCTURE "scroll"'));
   // every rule that changes an existing element is scoped to the scroll structure
