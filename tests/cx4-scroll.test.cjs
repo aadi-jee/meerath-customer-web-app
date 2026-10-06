@@ -158,10 +158,47 @@ test('address screen: no separate confirm step; Save is one pinned button that w
   assert.ok(read('js/i18n.js').includes('You can save up to 3 addresses'));
 });
 
+test('checkout: the saved address is already chosen in one line; Change opens a sheet; nothing asks to confirm', () => {
+  const run = environment();
+  run(`var accountAddresses = {loaded: true, busy: false, mutating: false, error: false}; var loadAccountAddresses = async () => true;
+    state.isLoggedIn = true; state.authUserId = 'u1'; state.orderType = 'delivery'; state.customerName = 'A'; state.customerPhone = '+9665';
+    state.cart = [{id: I(1), qty: 2, price: 18, extras: []}];
+    orderTypeOpen = () => true; restaurantAcceptingOrders = () => true; deliveryOffered = () => true; orderingNoticeMarkup = () => '';
+    const AD1 = {id: 'a1', type: 'home', area: 'Al Olaya, Riyadh 12345', label: '8347 King Fahd Rd, Al Olaya, Riyadh 12345', latitude: 24.7, longitude: 46.7, updatedAt: 'v1', directions: ''};
+    const AD2 = {id: 'b1', type: 'work', area: 'Al Muruj, Riyadh 12263', label: 'Tower 2, Al Muruj, Riyadh 12263', latitude: 24.8, longitude: 46.6, updatedAt: 'v1', directions: ''};
+    state.savedAddresses = [AD1, AD2]; state.defaultAddressId = 'a1'; state.checkoutAddressId = null; state.lastDeliveryAddressId = null;
+    state.checkoutPinConfirmedId = null;`);
+  let page = run('checkout()');
+  assert.equal(run('state.checkoutPinConfirmedId') + '|' + run('state.checkoutPinConfirmedVersion'), 'a1|v1');   // chosen for the customer
+  assert.match(page, /class="cx-addr">[\s\S]*Deliver to<\/small><strong>Home · Al Olaya<\/strong>/);
+  assert.ok(page.includes('onclick="openCheckoutAddressSheet()"'));
+  for (const gone of ['Location confirmed', 'Deliver here', 'Choose / edit address', 'Confirm the map location', 'cx-sheet-panel'])
+    assert.equal(page.includes(gone), false, gone);
+  assert.match(page, /cx-co-line"><span><b>2×<\/b> Seekh<\/span>/);                    // what is being ordered
+  assert.equal(page.split('onclick="placeOrder()"').length - 1, 1);
+  // the sheet lists both addresses and choosing one keeps the customer on checkout
+  run('state.checkoutAddressSheet = true');
+  page = run('checkout()');
+  assert.equal(page.split('class="cx-sheet-row').length - 1, 2);
+  run(`state.screen = 'checkout'; pickCheckoutAddress('b1')`);
+  assert.equal([run('state.checkoutAddressId'), run('state.checkoutPinConfirmedId'), run('state.checkoutAddressSheet')].join('|'), 'b1|b1|false');
+  assert.match(run('checkout()'), /<strong>Work · Al Muruj<\/strong>/);
+  // no saved address: one button; a closed restaurant: one notice, no times, the button says when it opens
+  run(`state.savedAddresses = []; state.checkoutAddressId = null; state.defaultAddressId = null; state.checkoutPinConfirmedId = null;`);
+  page = run('checkout()');
+  assert.ok(page.includes('onclick="checkoutAddAddress()"') && page.includes('Add delivery address'));
+  run(`orderTypeOpen = () => false; restaurantAcceptingOrders = () => false; orderingOpensText = () => 'today at 12:00 PM';
+       orderingState = () => ({reason: 'closed', opens_at: 'x'});`);
+  page = run('checkout()');
+  for (const gone of ['type-closed', 'checkout-time-options']) assert.equal(page.includes(gone), false, gone);
+  assert.match(page, /checkout-place-order"[\s\S]*?disabled[\s\S]*?Opens today at 12:00 PM/);
+});
+
 test('files changed in CX-4 have new cache keys and the classic rules are untouched', () => {
   const html = read('index.html'), css = read('css/theme.css'), spy = read('js/theme.js');
   assert.ok(html.includes('js/brand-config.js?v=20261006-cx4"'));
-  for (const file of ['js/app.js', 'css/theme.css', 'js/delivery-location.js', 'js/i18n.js']) assert.ok(html.includes(`${file}?v=20261006-cx4f"`), file);
+  for (const file of ['js/app.js', 'css/theme.css']) assert.ok(html.includes(`${file}?v=20261006-cx4g"`), file);
+  for (const file of ['js/delivery-location.js', 'js/i18n.js']) assert.ok(html.includes(`${file}?v=20261006-cx4f"`), file);
   assert.ok(html.includes('js/theme.js?v=20261006-cx4c"'));
   assert.ok(css.includes('#app > .home-screen > .home-topbar {\n    position: sticky;'));   // frozen header
   const added = css.slice(css.indexOf('18. STRUCTURE "scroll"'));

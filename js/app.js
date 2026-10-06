@@ -353,6 +353,7 @@ function go(screen, extra = {}) {
     state.addressReturnScreen = state.screen === "checkout" ? "checkout" : state.screen === "home" ? "home" : "account";
   }
   if (screen !== "detail") state.cartEditKey = null;
+  state.checkoutAddressSheet = false;
   if (["rewards", "account"].includes(screen) && typeof rewardsTouch === "function") rewardsTouch();
   // Batch H: opening the cart or checkout asks the server again, so a pause shows before the customer presses Place Order.
   if (["cart", "checkout"].includes(screen) && typeof loadOrderingHours === "function") loadOrderingHours();
@@ -449,7 +450,7 @@ function cartSummaryMarkup() {
     ${tot.offerSavings ? `<div class="offer-saving"><span>${cartCopy("Offer savings", "توفير العروض")}</span><span>− ${money(tot.offerSavings)}</span></div>` : ""}
     ${tot.discount ? `<div><span>${t("coupon")}${state.voucher?.code ? ` <b dir="ltr">${escapeHtml(state.voucher.code)}</b>` : ""}</span><span>− ${money(tot.discount)}</span></div>` : ""}
     ${tot.points ? `<div class="rewards-line"><span>${cartCopy(`Points (${state.redeemPoints})`, `النقاط (${state.redeemPoints})`)}</span><span>− ${money(tot.points)}</span></div>` : ""}
-    ${state.orderType === "delivery" ? `<div><span>${t("deliveryFee")}</span><span>${currentDeliveryQuote()?.eligible ? money(tot.delivery) : cartCopy("Select location", "اختر الموقع")}</span></div>` : ""}
+    ${state.orderType === "delivery" ? `<div><span>${t("deliveryFee")}</span><span>${currentDeliveryQuote()?.eligible ? money(tot.delivery) : state.deliveryQuoteBusy ? cartCopy("Calculating…", "جارٍ الحساب…") : state.deliveryQuoteError ? "—" : cartCopy("Add address", "أضف العنوان")}</span></div>` : ""}
     <div class="total"><span>${t("total")}</span><span>${money(tot.total)}</span></div>
     <div class="included-vat"><span>${cartCopy("Includes VAT 15%", "يشمل ضريبة القيمة المضافة 15%")}</span><span>${money(tot.vat)}</span></div>`;
 }
@@ -1650,63 +1651,9 @@ function setCheckoutOrderType(type, button) {
 
   /* Location card */
   const locationCard = document.querySelector(".checkout-location-card");
-
-  if (locationCard) {
-    if (type === "delivery") {
-      locationCard.innerHTML = `
-        <div class="checkout-location-head">
-          <h4>${t("deliveryTo")}</h4>
-
-          <button
-            class="link"
-            onclick="go('savedAddressesPage')"
-          >
-            ${t("change")}
-          </button>
-        </div>
-
-        <p>
-          ${checkoutDeliveryAddressHtml()}
-        </p>
-      `;
-    } else if (type === "takeaway") {
-      locationCard.innerHTML = `
-        <h4>${t("pickupFrom")}</h4>
-
-        <p>
-          ${escapeHtml(branchDisplayName(state.lang))}<br>
-          ${loc(RESTAURANT, "address")}
-        </p>
-
-        <a
-          class="link"
-          href="${RESTAURANT.maps}"
-          target="_blank"
-          rel="noopener"
-        >
-          ${t("directions")}
-        </a>
-      `;
-    } else {
-      locationCard.innerHTML = `
-        <h4>${t("diningAt")}</h4>
-
-        <p>
-          ${escapeHtml(branchDisplayName(state.lang))}<br>
-          ${loc(RESTAURANT, "address")}
-        </p>
-
-        <a
-          class="link"
-          href="${RESTAURANT.maps}"
-          target="_blank"
-          rel="noopener"
-        >
-          ${t("directions")}
-        </a>
-      `;
-    }
-  }
+  checkoutAutoConfirmAddress();
+  if (locationCard) locationCard.innerHTML = checkoutLocationInner();
+  if (type === "delivery") setTimeout(() => refreshDeliveryQuote(), 0);
 
   /* Timing options */
   const timingBox = document.querySelector(".checkout-time-options");
@@ -1742,6 +1689,7 @@ function updateCheckoutSummary() {
     const current = document.querySelector(selector);
     const next = template.content.querySelector(selector);
     if (current && next) current.replaceChildren(...next.childNodes);
+    if (current?.classList && next?.classList && selector === '.checkout-location-card') current.classList.toggle('cx-addr-out', next.classList.contains('cx-addr-out'));
   }
   const current = document.querySelector('.checkout-place-order');
   const next = template.content.querySelector('.checkout-place-order');
@@ -1756,9 +1704,6 @@ function updateCheckoutSummary() {
 function selectedDeliveryAddress() {
   const id = state.checkoutAddressId || state.lastDeliveryAddressId || state.defaultAddressId;
   return state.savedAddresses.find(row => row.id === id) || null;
-}
-function deliveryAddressButton() {
-  return state.isLoggedIn ? `<button type="button" class="btn btn-ghost" onclick="go('savedAddressesPage')">${cartCopy("Choose / edit address", "اختيار / تعديل العنوان")}</button>` : `<small>${cartCopy("Choose your address after verifying your number.", "اختر عنوانك بعد التحقق من رقمك.")}</small>`;
 }
 function selectCheckoutAddress(id) {
   if (!state.isLoggedIn || accountAddresses.busy || accountAddresses.mutating) return;
@@ -1826,23 +1771,119 @@ function totalsWithoutDelivery() {
   return {foodTotal: Math.max(0, itemsCents - couponCents - pointsCents) / 100};
 }
 function deliveryQuoteMarkup() {
-  if (state.deliveryQuoteBusy) return `<div class="delivery-quote-note">${cartCopy("Checking delivery area and fee…", "جارٍ التحقق من منطقة ورسوم التوصيل…")}</div>`;
-  if (state.deliveryQuoteError) return `<div class="delivery-quote-note delivery-quote-error">${escapeHtml(state.deliveryQuoteError)} <a href="tel:${escapeHtml(RESTAURANT.phone)}">${cartCopy("Call restaurant","اتصل بالمطعم")}</a> <button type="button" class="link" onclick="refreshDeliveryQuote(true)">${cartCopy("Retry","إعادة المحاولة")}</button></div>`;
+  if (state.deliveryQuoteBusy) return `<div class="cx-addr-fee">${cartCopy("Checking delivery area and fee…", "جارٍ التحقق من منطقة ورسوم التوصيل…")}</div>`;
+  if (state.deliveryQuoteError) return `<div class="cx-addr-fee delivery-quote-error" role="alert">${escapeHtml(state.deliveryQuoteError)} <a href="tel:${escapeHtml(RESTAURANT.phone)}">${cartCopy("Call restaurant","اتصل بالمطعم")}</a> <button type="button" class="link" onclick="refreshDeliveryQuote(true)">${cartCopy("Retry","إعادة المحاولة")}</button></div>`;
   const q=currentDeliveryQuote();
-  if (!q?.eligible) return `<div class="delivery-quote-note">${cartCopy("Confirm the map location to calculate delivery.", "أكد الموقع على الخريطة لحساب التوصيل.")}</div>`;
-  return `<div class="delivery-quote-note"><strong>${escapeHtml(q.zone || cartCopy("Delivery area","منطقة التوصيل"))}</strong> · ${Number(q.fee)===0?cartCopy("Free delivery","توصيل مجاني"):money(Number(q.fee))} · ${Number(q.distance_km).toFixed(2)} km</div>`;
+  if (!q?.eligible) return "";
+  return `<div class="cx-addr-fee"><strong>${Number(q.fee)===0?cartCopy("Free delivery","توصيل مجاني"):`${t("deliveryFee")} ${money(Number(q.fee))}`}</strong>${q.zone ? ` · ${escapeHtml(q.zone)}` : ""}</div>`;
 }
 function deliveryConfirmationMarkup(o) {
   return o.orderType === "delivery" && o.address ? `<p class="confirmation-message"><strong>${cartCopy("Delivery address", "عنوان التوصيل")}</strong><br>${escapeHtml(o.address)}</p>` : "";
 }
-function checkoutDeliveryAddressHtml() {
+/*
+ * CX-4g: the delivery address on checkout is one clean line.
+ * The saved address (last used, else the default) is already chosen and its fee already
+ * worked out; "Place order" is the confirmation, "Change" opens the list of addresses.
+ * Nothing sent to the server changes: the app marks the shown address as the confirmed one.
+ */
+function checkoutAutoConfirmAddress() {
+  if (state.orderType !== "delivery" || !state.isLoggedIn) return;
+  if (typeof accountAddresses !== "undefined" && !accountAddresses.loaded) {
+    if (!accountAddresses.busy && !accountAddresses.error && typeof loadAccountAddresses === "function") {
+      loadAccountAddresses().then(() => { if (state.screen === "checkout") renderKeepScroll(); });
+    }
+    return;
+  }
   const address = selectedDeliveryAddress();
-  if (!address) return `${t("noDeliveryAddressSelected")}<br><small>${t("addDeliveryAddressPrompt")}</small><br>${deliveryAddressButton()}`;
-  const previous=address.id===state.lastDeliveryAddressId;
-  return `<strong>${previous?cartCopy("Your last delivery location","موقع توصيل طلبك السابق"):cartCopy("Delivery location","موقع التوصيل")}</strong>
-    <p>${escapeHtml(pinAddressText(address))}</p>
-    ${validDeliveryPin(address)?`<a href="${deliveryPinLink(address)}" target="_blank" rel="noopener">${cartCopy("View on map","عرض على الخريطة")}</a>`:""}
-    <button type="button" class="btn btn-ghost" onclick="selectCheckoutAddress('${escapeHtml(address.id)}')">${state.checkoutPinConfirmedId===address.id?cartCopy("Location confirmed ✓","تم تأكيد الموقع ✓"):cartCopy("Deliver here","التوصيل هنا")}</button>${deliveryAddressButton()}`;
+  if (!validDeliveryPin(address)) return;
+  if (state.checkoutPinConfirmedId !== address.id || state.checkoutPinConfirmedVersion !== address.updatedAt) {
+    state.checkoutPinConfirmedId = address.id;
+    state.checkoutPinConfirmedVersion = address.updatedAt;
+    clearDeliveryQuote();
+  }
+}
+const CHECKOUT_PIN_ICON = `<span class="cx-addr-pin" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"></path><circle cx="12" cy="10" r="2.4"></circle></svg></span>`;
+function checkoutDeliveryAddressHtml() {
+  if (!state.isLoggedIn) return `<div class="cx-addr"><div class="cx-addr-copy"><small>${cartCopy("Deliver to", "التوصيل إلى")}</small><p>${cartCopy("Choose your address after verifying your number.", "اختر عنوانك بعد التحقق من رقمك.")}</p></div></div>`;
+  if (typeof accountAddresses !== "undefined" && !accountAddresses.loaded) {
+    return accountAddresses.error
+      ? `<div class="cx-addr"><div class="cx-addr-copy"><small>${cartCopy("Deliver to", "التوصيل إلى")}</small><p>${t("addressesUnavailable")}</p></div><button type="button" class="link cx-addr-change" onclick="checkoutRetryAddresses()">${cartCopy("Retry","إعادة المحاولة")}</button></div>`
+      : `<div class="cx-addr"><div class="cx-addr-copy"><small>${cartCopy("Deliver to", "التوصيل إلى")}</small><p>${t("loadingAddresses")}</p></div></div>`;
+  }
+  const address = selectedDeliveryAddress();
+  if (!address) return `<button type="button" class="btn btn-ghost cx-addr-add" onclick="checkoutAddAddress()">+ ${cartCopy("Add delivery address", "أضف عنوان التوصيل")}</button>`;
+  if (!validDeliveryPin(address)) return `<div class="cx-addr">${CHECKOUT_PIN_ICON}<div class="cx-addr-copy"><small>${cartCopy("Deliver to", "التوصيل إلى")}</small><strong>${escapeHtml(homeAddressName(address))}</strong><p>${cartCopy("This address needs a map pin before we can deliver.","يحتاج هذا العنوان إلى موقع على الخريطة قبل التوصيل.")}</p></div>
+      <button type="button" class="link cx-addr-change" onclick="editAddress('${escapeHtml(address.id)}')">${cartCopy("Set pin","حدد الموقع")}</button></div>`;
+  return `<div class="cx-addr">${CHECKOUT_PIN_ICON}<div class="cx-addr-copy"><small>${cartCopy("Deliver to", "التوصيل إلى")}</small><strong>${escapeHtml(homeAddressName(address))}</strong><p>${escapeHtml(pinAddressText(address))}</p></div>
+      <button type="button" class="link cx-addr-change" onclick="openCheckoutAddressSheet()">${t("change")}</button></div>`;
+}
+function checkoutLocationInner() {
+  if (state.orderType === "delivery") return `${checkoutDeliveryAddressHtml()}${state.isLoggedIn && selectedDeliveryAddress() ? deliveryQuoteMarkup() : ""}`;
+  return `<h4>${state.orderType === "takeaway" ? t("pickupFrom") : t("diningAt")}</h4>
+      <p>${escapeHtml(branchDisplayName(state.lang))}<br>${loc(RESTAURANT, "address")}</p>
+      <a class="link" href="${RESTAURANT.maps}" target="_blank" rel="noopener">${t("directions")}</a>`;
+}
+function checkoutRetryAddresses() {
+  if (typeof loadAccountAddresses !== "function") return;
+  accountAddresses.error = false;
+  loadAccountAddresses(true).then(() => { if (state.screen === "checkout") renderKeepScroll(); });
+  if (state.screen === "checkout") renderKeepScroll();
+}
+function checkoutAddAddress() {
+  state.checkoutAddressSheet = false;
+  state.addressReturnScreen = "checkout";
+  startAddAddress();
+}
+function openCheckoutAddressSheet() { state.checkoutAddressSheet = true; renderKeepScroll(); }
+function closeCheckoutAddressSheet() { state.checkoutAddressSheet = false; renderKeepScroll(); }
+/** Choose another saved address without leaving checkout. */
+function pickCheckoutAddress(id) {
+  const selected = state.savedAddresses.find(row => row.id === id);
+  if (!state.isLoggedIn || !selected) return;
+  state.checkoutAddressSheet = false;
+  if (!validDeliveryPin(selected)) { state.addressReturnScreen = "checkout"; return editAddress(id); }
+  state.checkoutAddressId = id;
+  state.checkoutPinConfirmedId = id;
+  state.checkoutPinConfirmedVersion = selected.updatedAt;
+  clearDeliveryQuote();
+  renderKeepScroll();
+}
+/** Bottom sheet: the saved addresses, one tap to deliver to another. */
+function checkoutAddressSheetMarkup() {
+  if (!state.checkoutAddressSheet || state.orderType !== "delivery" || !state.isLoggedIn) return "";
+  const current = selectedDeliveryAddress();
+  return `<div class="cx-sheet" role="dialog" aria-modal="true" aria-labelledby="cxAddrSheetTitle">
+    <button type="button" class="cx-sheet-backdrop" onclick="closeCheckoutAddressSheet()" aria-label="${cartCopy("Close","إغلاق")}"></button>
+    <div class="cx-sheet-panel">
+      <div class="cx-sheet-grip" aria-hidden="true"></div>
+      <h3 id="cxAddrSheetTitle">${cartCopy("Deliver to", "التوصيل إلى")}</h3>
+      <div class="cx-sheet-list">
+        ${state.savedAddresses.map(address => `<button type="button" class="cx-sheet-row ${current && current.id === address.id ? "on" : ""}" onclick="pickCheckoutAddress('${escapeHtml(address.id)}')">
+          ${CHECKOUT_PIN_ICON}<span class="cx-addr-copy"><strong>${escapeHtml(homeAddressName(address))}</strong><small>${escapeHtml(pinAddressText(address))}</small></span>
+          <span class="cx-sheet-check" aria-hidden="true">${current && current.id === address.id ? "✓" : ""}</span>
+        </button>`).join("")}
+      </div>
+      ${state.savedAddresses.length < MAX_SAVED_ADDRESSES
+        ? `<button type="button" class="btn btn-ghost" onclick="checkoutAddAddress()">+ ${t("addNewAddress")}</button>`
+        : `<button type="button" class="btn btn-ghost" onclick="state.checkoutAddressSheet=false;go('savedAddressesPage')">${cartCopy("Manage addresses", "إدارة العناوين")}</button>`}
+    </div></div>`;
+}
+/** "Closed" under one order type only while another type can still be ordered. */
+function checkoutTypeClosedTag(type) {
+  if (orderTypeOpen(type) || !restaurantAcceptingOrders()) return "";
+  return `<small class="type-closed">${cartCopy("Closed", "مغلق")}</small>`;
+}
+function checkoutClosedLabel() {
+  const opens = orderingOpensText(orderingState(state.orderType).opens_at);
+  return opens ? cartCopy(`Opens ${opens}`, `يفتح ${opens}`) : cartCopy("Ordering is closed", "الطلبات مغلقة");
+}
+/** What is being ordered, just above the totals. */
+function checkoutOrderLinesMarkup() {
+  if (!state.cart.length) return "";
+  return `<div class="cx-co-order">
+    <div class="cx-co-head"><h3 class="checkout-section-title">${cartCopy("Your order", "طلبك")}</h3><button type="button" class="link" onclick="go('cart')">${cartCopy("Edit", "تعديل")}</button></div>
+    ${state.cart.map(line => { const item = itemById(line.id); return `<div class="cx-co-line"><span><b>${Number(line.qty) || 0}×</b> ${item ? loc(item, "name") : ""}</span><span>${money(roundMoney(line.price * line.qty))}</span></div>`; }).join("")}
+  </div>`;
 }
 
 function checkoutCustomerMarkup() {
@@ -1868,6 +1909,7 @@ function checkoutCustomerMarkup() {
 }
 
 function checkout() {
+  checkoutAutoConfirmAddress();
   const timingOptions = orderingLimitTimingOptions(checkoutTimingOptions());
   if (state.orderTiming !== "asap" && !timingOptions.some(([value]) => value === String(state.orderTiming))) state.orderTiming = "asap";
   const checkoutBusy = state.authBusy || state.orderSubmitting;
@@ -1894,6 +1936,8 @@ function checkout() {
         ${langSwitch()}
       </div>
 
+      ${orderingNoticeMarkup()}
+
       <h3 class="checkout-section-title">
         ${t("customerDetails")}
       </h3>
@@ -1911,83 +1955,28 @@ function checkout() {
           onclick="setCheckoutOrderType('delivery', this)"
           ${deliveryOffered() ? "" : `disabled aria-disabled="true" title="${cartCopy("Delivery is not available from this restaurant.", "التوصيل غير متاح من هذا المطعم.")}"`}
         >
-          ${t("delivery")}${orderTypeOpen('delivery') ? "" : `<small class="type-closed">${deliveryOffered() ? cartCopy("Closed", "مغلق") : cartCopy("Not available", "غير متاح")}</small>`}
+          ${t("delivery")}${!deliveryOffered() ? `<small class="type-closed">${cartCopy("Not available", "غير متاح")}</small>` : checkoutTypeClosedTag('delivery')}
         </button>
 
         <button
           class="${state.orderType === "takeaway" ? "active" : ""}"
           onclick="setCheckoutOrderType('takeaway', this)"
         >
-          ${t("takeaway")}${orderTypeOpen('takeaway') ? "" : `<small class="type-closed">${cartCopy("Closed", "مغلق")}</small>`}
+          ${t("takeaway")}${checkoutTypeClosedTag('takeaway')}
         </button>
 
         <button
           class="${state.orderType === "dinein" ? "active" : ""}"
           onclick="setCheckoutOrderType('dinein', this)"
         >
-          ${t("dineIn")}${orderTypeOpen('dinein') ? "" : `<small class="type-closed">${cartCopy("Closed", "مغلق")}</small>`}
+          ${t("dineIn")}${checkoutTypeClosedTag('dinein')}
         </button>
 
       </div>
 
-      ${
-        state.orderType === "delivery"
-          ? `
-            <div class="checkout-location-card">
-              <div class="checkout-location-head">
-                <h4>${t("deliveryTo")}</h4>
-                <button class="link" onclick="go('savedAddressesPage')">
-                  ${t("change")}
-                </button>
-              </div>
+      <div class="checkout-location-card${state.orderType === "delivery" && state.deliveryQuoteError ? " cx-addr-out" : ""}">${checkoutLocationInner()}</div>
 
-              <p>
-                ${checkoutDeliveryAddressHtml()}
-              </p>
-              ${deliveryQuoteMarkup()}
-            </div>
-          `
-          : state.orderType === "takeaway"
-          ? `
-            <div class="checkout-location-card">
-              <h4>${t("pickupFrom")}</h4>
-
-              <p>
-                ${escapeHtml(branchDisplayName(state.lang))}<br>
-                ${loc(RESTAURANT, "address")}
-              </p>
-
-              <a
-                class="link"
-                href="${RESTAURANT.maps}"
-                target="_blank"
-                rel="noopener"
-              >
-                ${t("directions")}
-              </a>
-            </div>
-          `
-          : `
-            <div class="checkout-location-card">
-              <h4>${t("diningAt")}</h4>
-
-              <p>
-                ${escapeHtml(branchDisplayName(state.lang))}<br>
-                ${loc(RESTAURANT, "address")}
-              </p>
-
-              <a
-                class="link"
-                href="${RESTAURANT.maps}"
-                target="_blank"
-                rel="noopener"
-              >
-                ${t("directions")}
-              </a>
-            </div>
-          `
-      }
-
+      ${orderTypeOpen() ? `
       <h3 class="checkout-section-title checkout-time-title">
         ${t("whenOrder")}
       </h3>
@@ -2012,11 +2001,11 @@ function checkout() {
       <p class="checkout-time-note">
         ${timingSub}
       </p>
-
-      ${orderingNoticeMarkup()}
+      ` : ""}
 
       ${typeof rewardsCheckoutMarkup === "function" ? rewardsCheckoutMarkup() : ""}
 
+      ${checkoutOrderLinesMarkup()}
       <div class="breakdown checkout-total-card">${cartSummaryMarkup()}</div>
 
       <div class="cx-cta-bar">
@@ -2026,11 +2015,11 @@ function checkout() {
         onclick="placeOrder()"
         ${orderTypeOpen() && !checkoutBusy && (state.orderType !== "delivery" || !state.isLoggedIn || !state.checkoutPinConfirmedId || (currentDeliveryQuote()?.eligible === true && !state.deliveryQuoteBusy)) ? "" : "disabled aria-disabled=\"true\""}
       >
-        ${!orderTypeOpen() ? (orderingState(state.orderType).reason === "unavailable" ? cartCopy("Ordering is not available", "الطلب غير متاح") : cartCopy("Ordering is closed", "الطلبات مغلقة")) : checkoutBusy ? t("processingOrder") : t("placeOrder")}
+        ${!orderTypeOpen() ? (orderingState(state.orderType).reason === "unavailable" ? cartCopy("Ordering is not available", "الطلب غير متاح") : checkoutClosedLabel()) : checkoutBusy ? t("processingOrder") : t("placeOrder")}
       </button>
       </div>
 
-    </section>`;
+    </section>${checkoutAddressSheetMarkup()}`;
 }
 
 function confirmation() {
