@@ -111,7 +111,8 @@ test('the smart cart dock is hidden when empty and shows the last items, count a
 test('changed files have new cache keys; one Place Order button; a message stays clear of the main button', () => {
   const html = read('index.html'), app = read('js/app.js'), css = read('css/theme.css');
   assert.ok(html.includes('js/theme.js?v=20261006-cx3b"'));
-  for (const file of ['css/theme.css', 'js/app.js', 'js/data.js']) assert.ok(html.includes(`${file}?v=20261006-cx3c"`), file);
+  for (const file of ['js/app.js', 'js/data.js']) assert.ok(html.includes(`${file}?v=20261006-cx3c"`), file);
+  assert.ok(html.includes('css/theme.css?v=20261006-cx3d"'));
   assert.equal(app.split('onclick="placeOrder()"').length, 2);
   assert.ok(css.includes('.phone:has(.cx-cta-bar) .toast'));
   assert.ok(css.includes('.cx-cart-bar { display: none; }'));   // desktop website mode keeps its own layout
@@ -193,4 +194,14 @@ test('bars are pinned to the bottom on short screens and the item photo is edge 
   assert.ok(part.includes('.cx-cart-bar:not([hidden]) { margin-top: auto;'));
   assert.ok(part.includes('.sticky-actions.cx-add-bar { margin-top: auto; }'));
   assert.ok(part.includes('margin-top: calc(-1 * var(--cx-pad-t, 20px));'));
+});
+
+test('type: no text style in the theme layer is below 11px, the floor is 12px and Arabic keeps its letters joined', () => {
+  const css = read('css/theme.css');
+  const part = css.slice(css.indexOf('17. Type:'), css.indexOf('12. Light theme'));
+  assert.ok(part.includes('--cx-type-label: 12px') && part.includes('--cx-type-body: 14px'));
+  for (const m of css.matchAll(/font-size:\s*([\d.]+)px/g)) assert.ok(Number(m[1]) >= 11, m[0]);
+  assert.ok(part.includes('body.is-ar') && part.includes('letter-spacing: 0;'));
+  assert.ok(part.includes('#app .item p { font-size: var(--cx-type-body)'));
+  assert.ok(read('index.html').includes('user-scalable=no'));     // the reason the floor exists
 });

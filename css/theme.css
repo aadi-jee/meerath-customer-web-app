@@ -62,8 +62,9 @@ body {
   --card: #191613;
   --line: #2e2822;
   --line-soft: #26211c;
-  --muted: #a09787;
+  --muted: #b3aa9b;
 }
+:root[data-style="heritage"] body.light-theme { --muted: #605c56; }
 :root[data-style="heritage"] body.dark-theme .phone { background: var(--bg); }
 :root[data-style="heritage"] body.dark-theme .nav { background: rgba(13, 11, 9, 0.98); }
 
@@ -430,7 +431,7 @@ body.light-theme {
 .cx-ph.cx-ph-special { aspect-ratio: 4 / 3; border-radius: 10px; }
 #app .cat .cx-ph.cx-ph-cat { display: grid; aspect-ratio: 16 / 10; margin: 0; }
 .cx-ph.cx-ph-cart { width: 64px; height: 64px; border-radius: 10px; }
-.cx-ph.cx-ph-item { width: 88px; height: 88px; }
+.cx-ph.cx-ph-item { width: 100%; height: auto; aspect-ratio: 1 / 1; }   /* fills the photo column at every width */
 .cx-ph-tap { display: block; cursor: pointer; }
 .cx-ph.cx-ph-pair { aspect-ratio: 4 / 3; max-height: 92px; border-radius: 9px; }
 #app .detail-screen > .cx-ph.cx-ph-hero { display: grid; height: 220px; border-radius: 0; border-width: 0 0 1px; }
@@ -472,6 +473,69 @@ body.light-theme {
 @keyframes cx-rise-in {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- 17. Type: a floor of 12px, reading text at 14px, calmer titles --------
+   Pinch-zoom is off by the owner's decision, so nothing may be too small to read.
+   Sizes come from one short scale instead of dozens of near-identical values. */
+:root {
+  --cx-type-label: 12px;      /* badges, tab labels, the smallest text allowed */
+  --cx-type-caption: 12.5px;  /* secondary lines under a title */
+  --cx-type-body: 14px;       /* descriptions */
+  --cx-type-item: 16px;       /* an item's name */
+  --cx-type-section: 19px;    /* section headings */
+}
+#app .badge,
+#app .history-status,
+#app .order-type-badge,
+#app .default-address-badge,
+#app .choice-badge,
+#app .confirmation-type,
+#app .cart-top-badge,
+#app .step,
+#app .banner small,
+#app .signin-terms,
+#app .emoji-row button,
+#app .splash-lang .lang-switch button,
+#app .checkout-order-types button .type-closed,
+#app .thanks-kicker,
+#app .signed-reward-stat span,
+#app .saved-address-actions button { font-size: var(--cx-type-label); }
+#app .pairing-card .badge,
+#app .pairing-card .reco-why,
+#app .pairing-card > .btn.pairing-add { font-size: 11.5px; }   /* narrow cards: the floor is eased by half a pixel */
+#app .cart-count-badge { font-size: 11px; }
+#app .more-item-text span,
+#app .support-item div span,
+#app .support-note,
+#app .account-reward-copy small,
+#app .signin-mobile-note,
+#app .signed-profile-copy > span,
+#app .signed-profile-copy small,
+#app .signed-edit-btn,
+#app .saved-address-copy small,
+#app .active-order-head > div > span,
+#app .active-order-items h4,
+#app .history-order-top > div > span,
+#app .history-order-meta > span,
+#app .checkout-time-note,
+#app .checkout-time-options button,
+#app .account-orders-refresh,
+#app .reco-why,
+#app .home-screen .mode-note { font-size: var(--cx-type-caption); }
+#app .checkout-order-types button { font-size: 13px; }
+#app .item p { font-size: var(--cx-type-body); line-height: 1.4; }
+#app .item h4 { font-size: var(--cx-type-item); letter-spacing: -0.005em; }
+#app .detail-screen > p:not(.price) { font-size: 15px; line-height: 1.5; }
+#app .h-row h3 { font-size: var(--cx-type-section); font-weight: 600; letter-spacing: -0.012em; }
+#app > .screen > .topbar > h2 { font-weight: 600; letter-spacing: -0.018em; }
+#app .detail-screen > h2 { font-weight: 600; letter-spacing: -0.018em; }
+body.is-ar #app .h-row h3,
+body.is-ar #app > .screen > .topbar > h2,
+body.is-ar #app .detail-screen > h2,
+body.is-ar #app .item h4 { letter-spacing: 0; }   /* Arabic letters must stay joined */
+@media (max-width: 1024px) {
+  .nav button, .nav .nav-label { font-size: var(--cx-type-label); }
 }
 
 /* ---- 12. Light theme: nothing dark left behind ---------------------------- */
