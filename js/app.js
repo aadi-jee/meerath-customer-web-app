@@ -3323,20 +3323,23 @@ function savedAddressesPage() {
       <button
         class="btn btn-primary add-address-btn"
         onclick="startAddAddress()"
-        ${addressBusy || state.savedAddresses.length >= 10 ? "disabled" : ""}
+        ${addressBusy || state.savedAddresses.length >= MAX_SAVED_ADDRESSES ? "disabled" : ""}
       >
         + ${t("addNewAddress")}
       </button>
 
-      ${state.savedAddresses.length >= 10 ? `<small class="address-limit-note">${t("addressLimitReached")}</small>` : ""}
+      ${state.savedAddresses.length >= MAX_SAVED_ADDRESSES ? `<small class="address-limit-note">${t("addressLimitReached")}</small>` : ""}
 
     </section>`;
 }
 
+/** A customer keeps at most this many addresses; a fourth needs one edited or removed first. */
+const MAX_SAVED_ADDRESSES = 3;
 async function saveAddress() {
   if (!state.isLoggedIn || accountAddresses.mutating) return;
-  if(!validDeliveryPin(deliveryLocation.draft)||!deliveryLocation.confirmed){
-    toast(cartCopy("Confirm your location pin first.","أكد موقعك على الخريطة أولاً."));return;
+  if (!state.editingAddressId && state.savedAddresses.length >= MAX_SAVED_ADDRESSES) { toast(t("addressLimitReached")); return; }
+  if(!validDeliveryPin(deliveryLocation.draft)){
+    toast(cartCopy("Choose your location on the map first.","حدد موقعك على الخريطة أولاً."));return;
   }
   if(state.addressDirections.trim().length>300)return;
   const addressData={type:state.addressType,...deliveryLocation.draft,directions:state.addressDirections.trim()};
@@ -3368,6 +3371,7 @@ async function saveAddress() {
   go(state.addressReturnScreen === "checkout" ? "checkout" : "savedAddressesPage");
 }
 function startAddAddress() {
+  if (state.savedAddresses.length >= MAX_SAVED_ADDRESSES) { toast(t("addressLimitReached")); return; }
   resetDeliveryLocation();
   state.editingAddressId = null;
   state.addressType = "home";
@@ -3431,6 +3435,7 @@ function addAddressPage() {
         ${langSwitch()}
       </div>
 
+      ${pinFormMarkup(`
       <label class="address-form-label">
         ${t("addressType")}
       </label>
@@ -3459,16 +3464,18 @@ function addAddressPage() {
         </button>
 
       </div>
+      `)}
 
-      ${pinFormMarkup()}
-
-      <button
-        class="btn btn-primary save-address-btn"
-        onclick="saveAddress()"
-        ${typeof accountAddresses !== "undefined" && accountAddresses.mutating ? "disabled" : ""}
-      >
-      ${state.editingAddressId ? t("updateAddress") : t("saveAddress")}
-      </button>
+      <div class="cx-cta-bar cx-address-bar">
+        <button
+          id="cx-save-address"
+          class="btn btn-primary save-address-btn"
+          onclick="saveAddress()"
+          data-ready="${state.editingAddressId ? t("updateAddress") : t("saveAddress")}"
+          data-wait="${cartCopy("Set your pin on the map", "حدد موقعك على الخريطة")}"
+          ${(typeof accountAddresses !== "undefined" && accountAddresses.mutating) || !deliveryPinReady() ? "disabled" : ""}
+        >${deliveryPinReady() ? (state.editingAddressId ? t("updateAddress") : t("saveAddress")) : cartCopy("Set your pin on the map", "حدد موقعك على الخريطة")}</button>
+      </div>
 
     </section>`;
 }

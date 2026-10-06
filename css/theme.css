@@ -820,6 +820,49 @@ body.light-theme .toggle { border-color: #d8d3ca; }
   #app img, .btn, .icon-btn, .add, .special-add, .cat { transition: none; }
 }
 
+/* ---- 19. Address screen (every theme): one screen, one button -------------- */
+.cx-pin-map-wrap { position: relative; }
+.cx-pin-map-wrap > #delivery-pin-map { margin: 0; }
+.cx-locate {
+  position: absolute;
+  top: 12px;
+  inset-inline-end: 12px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  color: #1a1a1a;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+}
+.cx-locate svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.cx-locate svg circle:first-child { fill: currentColor; stroke: none; }
+#delivery-pin-status {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--cx-hairline);
+  border-radius: var(--cx-radius-md);
+  background: var(--cx-surface);
+  color: var(--muted);
+  font-size: var(--cx-type-body, 14px);
+  line-height: 1.45;
+}
+#delivery-pin-status.cx-pin-set { color: var(--text); font-weight: 600; border-color: color-mix(in srgb, var(--cx-action) 45%, var(--cx-hairline)); }
+.add-address-screen .address-type-toggle { margin-bottom: 4px; }
+.cx-address-bar > .btn:disabled { opacity: 0.55; }
+@media (max-width: 1024px) {
+  #delivery-pin-map { height: min(36vh, 300px); min-height: 210px; }
+  #app > .add-address-screen { display: flex; flex-direction: column; }
+  #app > .add-address-screen > * { flex-shrink: 0; }
+  #app > .add-address-screen > .cx-address-bar { margin-top: auto; padding-top: 12px; padding-bottom: calc(8px + var(--safe)); }
+  .add-address-topbar { margin-bottom: 14px; }
+}
+
 /* Every theme: the delivery line turns into a clear warning when the chosen
    address is outside the delivery area. */
 #app .home-screen .mode-note.mode-note-warn { color: var(--danger); font-weight: 600; }

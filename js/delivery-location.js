@@ -16,23 +16,34 @@ function deliveryPinLink(pin) {
 function pinAddressText(address) {
   return [address.label || (validDeliveryPin(address)?`${address.latitude.toFixed(6)}, ${address.longitude.toFixed(6)}`:[address.area,address.street,address.building,address.unit].filter(Boolean).join(', ')),address.directions].filter(Boolean).join(' · ');
 }
-function pinFormMarkup() {
+/* CX-4f: one screen, one button. Choosing the place (search, a tap on the map, dragging
+   the pin or "my location") IS the confirmation; "Save address" stays at the bottom. */
+function pinFormMarkup(middle='') {
   return `<div class="delivery-pin-form"><div id="delivery-place-search"></div>
-    <button type="button" class="btn btn-ghost" onclick="useDeliveryCurrentLocation()">${cartCopy('Use current location','استخدام موقعي الحالي')}</button>
-    <div id="delivery-pin-map" role="region" aria-label="${cartCopy('Delivery location map','خريطة موقع التوصيل')}"></div>
+    <div class="cx-pin-map-wrap"><div id="delivery-pin-map" role="region" aria-label="${cartCopy('Delivery location map','خريطة موقع التوصيل')}"></div>
+    <button type="button" class="cx-locate" onclick="useDeliveryCurrentLocation()" aria-label="${cartCopy('Use current location','استخدام موقعي الحالي')}" title="${cartCopy('Use current location','استخدام موقعي الحالي')}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"></path><circle cx="12" cy="12" r="7"></circle></svg></button></div>
     <p id="delivery-pin-status" role="status" aria-live="polite"></p>
-    <button type="button" class="btn btn-ghost" id="confirm-delivery-pin" onclick="confirmDeliveryPin()">${cartCopy('Confirm this pin','تأكيد هذا الموقع')}</button>
+    ${middle}
     <label class="address-form-label" for="rider-note">${cartCopy('Flat / building / nearby landmark (optional)','الشقة / المبنى / معلم قريب (اختياري)')}</label>
-    <textarea class="field" id="rider-note" maxlength="300" rows="3" oninput="state.addressDirections=this.value">${escapeHtml(state.addressDirections||'')}</textarea></div>`;
+    <textarea class="field" id="rider-note" maxlength="300" rows="2" oninput="state.addressDirections=this.value">${escapeHtml(state.addressDirections||'')}</textarea></div>`;
 }
+function deliveryPinReady() { return validDeliveryPin(deliveryLocation.draft); }
 function refreshDeliveryPinStatus(message='') {
   const el=document.getElementById('delivery-pin-status');
-  if(el) el.textContent=message || (deliveryLocation.draft
-    ? `${deliveryLocation.draft.label || `${deliveryLocation.draft.latitude.toFixed(6)}, ${deliveryLocation.draft.longitude.toFixed(6)}`} — ${deliveryLocation.confirmed?cartCopy('Pin confirmed','تم تأكيد الموقع'):cartCopy('Confirm this pin to continue','أكد الموقع للمتابعة')}`
-    : cartCopy('Search or move the pin to your entrance.','ابحث أو حرك العلامة إلى مدخل المبنى.'));
-  const button=document.getElementById('confirm-delivery-pin');
-  if(button)button.disabled=!validDeliveryPin(deliveryLocation.draft);
+  if(el){
+    el.textContent=message || (deliveryLocation.draft
+      ? (deliveryLocation.draft.label || `${deliveryLocation.draft.latitude.toFixed(6)}, ${deliveryLocation.draft.longitude.toFixed(6)}`)
+      : cartCopy('Search, tap the map or drag the pin to your entrance.','ابحث أو اضغط على الخريطة أو اسحب العلامة إلى مدخل المبنى.'));
+    if(el.classList)el.classList.toggle('cx-pin-set',!message&&deliveryPinReady());
+  }
+  const save=document.getElementById('cx-save-address');
+  if(save){
+    const busy=typeof accountAddresses!=='undefined'&&accountAddresses.mutating;
+    save.disabled=busy||!deliveryPinReady();
+    save.textContent=deliveryPinReady()?save.getAttribute('data-ready'):save.getAttribute('data-wait');
+  }
 }
+/* Kept for callers and tests: a chosen pin counts as confirmed. */
 function confirmDeliveryPin() {
   if(!validDeliveryPin(deliveryLocation.draft))return;
   deliveryLocation.confirmed=true;refreshDeliveryPinStatus();
@@ -66,14 +77,14 @@ async function mountDeliveryMap() {
     const restaurant=APP_CONFIG.maps?.restaurant;
     const center=existing?{lat:existing.latitude,lng:existing.longitude}:
       {lat:restaurant.latitude,lng:restaurant.longitude};
-    const map=new Map(element,{center,zoom:existing?17:14,mapId:APP_CONFIG.maps.mapId,streetViewControl:false,mapTypeControl:false});
+    const map=new Map(element,{center,zoom:existing?17:14,mapId:APP_CONFIG.maps.mapId,streetViewControl:false,mapTypeControl:false,fullscreenControl:false});
     const marker=new AdvancedMarkerElement({map,position:existing?center:null,gmpDraggable:true,title:cartCopy('Delivery entrance','مدخل التوصيل')});
     deliveryLocation.map=map;deliveryLocation.marker=marker;
     const geocoder=new Geocoder();
     const choose=async(lat,lng,label='')=>{
       if(!current()||!validDeliveryPin({latitude:lat,longitude:lng}))return;
       const lookup=++deliveryLocation.lookup;
-      deliveryLocation.draft={latitude:lat,longitude:lng,label:String(label).slice(0,180)};deliveryLocation.confirmed=false;
+      deliveryLocation.draft={latitude:lat,longitude:lng,label:String(label).slice(0,180)};deliveryLocation.confirmed=true;
       marker.position={lat,lng};map.panTo({lat,lng});refreshDeliveryPinStatus();
       if(!label)try{
         const result=await geocoder.geocode({location:{lat,lng}});

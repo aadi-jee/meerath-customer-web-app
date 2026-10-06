@@ -19,7 +19,7 @@ function environment(saved = '', brandEdit = source => source) {
     document: {documentElement: {dataset: {}}, getElementById: () => ({parentElement: {scrollTop: 0}}), querySelectorAll: () => [], querySelector: () => null}});
   vm.runInContext(brandEdit(read('js/brand-config.js')), c);
   if (saved) vm.runInContext(`localStorage.setItem(appStorageKey("structure"), ${JSON.stringify(saved)})`, c);
-  for (const file of ['js/data.js', 'js/ordering-hours.js', 'js/auth.js', 'js/content.js']) vm.runInContext(read(file), c);
+  for (const file of ['js/data.js', 'js/ordering-hours.js', 'js/auth.js', 'js/content.js', 'js/delivery-location.js']) vm.runInContext(read(file), c);
   const app = read('js/app.js');
   vm.runInContext(app.slice(0, app.lastIndexOf('\napplyDir();')), c);
   vm.runInContext(`toast = () => {}; render = () => {}; renderKeepScroll = () => {};
@@ -137,10 +137,31 @@ test('the delivery line (every theme): shown without an address, a warning outsi
   }
 });
 
+test('address screen: no separate confirm step; Save is one pinned button that waits for a pin', () => {
+  const run = environment();
+  run(`state.isLoggedIn = true; state.addressDirections = ''; state.addressType = 'home'; state.editingAddressId = null;
+       I18N.en.saveAddress = 'Save address'; I18N.en.updateAddress = 'Update address';`);
+  run('resetDeliveryLocation()');
+  let page = run('addAddressPage()');
+  assert.equal(page.includes('confirm-delivery-pin'), false);
+  assert.equal(page.includes('Confirm this pin'), false);
+  assert.match(page, /class="cx-cta-bar cx-address-bar">\s*<button\s+id="cx-save-address"[\s\S]*?disabled\s*>Set your pin on the map</);
+  assert.ok(page.indexOf('delivery-pin-map') < page.indexOf('address-type-toggle'));      // map first, then the type
+  assert.ok(page.indexOf('address-type-toggle') < page.indexOf('rider-note'));
+  run('resetDeliveryLocation({latitude: 24.7, longitude: 46.7, label: "King Fahd Rd"})');   // editing: the saved pin is enough
+  page = run('addAddressPage()');
+  assert.match(page, /id="cx-save-address"[\s\S]*?\n\s*>Save address</);
+  assert.equal(/id="cx-save-address"[^>]*disabled/.test(page), false);
+  assert.equal(read('js/app.js').includes('!deliveryLocation.confirmed'), false);
+  assert.equal(run('MAX_SAVED_ADDRESSES'), 3);                                          // a fourth needs one edited or removed
+  assert.equal(read('js/app.js').includes('length >= 10'), false);
+  assert.ok(read('js/i18n.js').includes('You can save up to 3 addresses'));
+});
+
 test('files changed in CX-4 have new cache keys and the classic rules are untouched', () => {
   const html = read('index.html'), css = read('css/theme.css'), spy = read('js/theme.js');
   assert.ok(html.includes('js/brand-config.js?v=20261006-cx4"'));
-  for (const file of ['js/app.js', 'css/theme.css']) assert.ok(html.includes(`${file}?v=20261006-cx4e"`), file);
+  for (const file of ['js/app.js', 'css/theme.css', 'js/delivery-location.js', 'js/i18n.js']) assert.ok(html.includes(`${file}?v=20261006-cx4f"`), file);
   assert.ok(html.includes('js/theme.js?v=20261006-cx4c"'));
   assert.ok(css.includes('#app > .home-screen > .home-topbar {\n    position: sticky;'));   // frozen header
   const added = css.slice(css.indexOf('18. STRUCTURE "scroll"'));
