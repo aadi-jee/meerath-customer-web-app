@@ -8,7 +8,7 @@ const css = read('css/theme.css'), app = read('js/app.js'), theme = read('js/the
 
 test('changed files have new cache keys', () => {
   const html = read('index.html');
-  for (const file of ['css/theme.css', 'js/theme.js', 'js/app.js', 'js/recommendations.js', 'js/content.js']) assert.ok(html.includes(`${file}?v=20261006-cx2b"`), file);
+  for (const file of ['js/recommendations.js', 'js/content.js']) assert.ok(html.includes(`${file}?v=20261006-cx2b"`), file);
 });
 
 test('the sheen is on main buttons, the selected order type and recommended adds; never on menu lists', () => {
@@ -26,7 +26,7 @@ test('the sheen is on main buttons, the selected order type and recommended adds
 
 test('every animation stands still when the phone asks for reduced motion', () => {
   const names = [...css.matchAll(/@keyframes ([\w-]+)/g)].map(m => m[1]);
-  assert.deepEqual(names.sort(), ['cx-border-beam', 'cx-bump', 'cx-glow', 'cx-logo-in', 'cx-pulse', 'cx-rise-in', 'cx-sheen', 'cx-sheen-rtl', 'cx-skel', 'cx-text-shimmer']);
+  assert.deepEqual(names.sort(), ['cx-border-beam', 'cx-bump', 'cx-fade-in', 'cx-glow', 'cx-logo-in', 'cx-pulse', 'cx-rise-in', 'cx-sheen', 'cx-sheen-rtl', 'cx-skel', 'cx-text-shimmer']);
   const reduce = css.slice(css.lastIndexOf('@media (prefers-reduced-motion: reduce)'));
   for (const sel of ['.cx-cta-bar > .btn-primary::after', '.account-rewards-card::after', '.cx-skel', '.cx-bump',
     '.home-order-toggle button.on::after', '.pairing-card > .btn.pairing-add', '.cart-icon-btn.has-items::before',

@@ -260,6 +260,7 @@ body.light-theme .history-status.account-status-negative {
 .home-order-toggle button.on,
 .checkout-order-types button.active,
 .pairing-card > .btn.pairing-add,
+.cx-cart-bar > .btn-primary,
 :root[data-style="heritage"] .account-rewards-card {
   position: relative;
   overflow: hidden;
@@ -270,6 +271,7 @@ body.light-theme .history-status.account-status-negative {
 .home-order-toggle button.on::after,
 .checkout-order-types button.active::after,
 .pairing-card > .btn.pairing-add:not(:disabled)::after,
+.cx-cart-bar > .btn-primary::after,
 :root[data-style="heritage"] .account-rewards-card::after {
   content: "";
   position: absolute;
@@ -305,6 +307,7 @@ body.light-theme .history-status.account-status-negative {
 [dir="rtl"] .home-order-toggle button.on::after,
 [dir="rtl"] .checkout-order-types button.active::after,
 [dir="rtl"] .pairing-card > .btn.pairing-add:not(:disabled)::after,
+[dir="rtl"] .cx-cart-bar > .btn-primary::after,
 [dir="rtl"]:root[data-style="heritage"] .account-rewards-card::after {
   animation-name: cx-sheen-rtl;
 }
@@ -491,6 +494,145 @@ body.light-theme .toggle { border-color: #d8d3ca; }
   background: var(--cx-action) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%231a1004' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.4l3 3 6-6.6'/%3E%3C/svg%3E") center / 76% no-repeat;
 }
 
+/* ==========================================================================
+   CX-3 - Ordering flow shared by every theme
+   ========================================================================== */
+
+/* ---- 14. Item screen: photo, sheet, quantity, "Add" with the amount ------- */
+.cx-sheet-edge { display: none; }
+.cx-qty {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--cx-hairline);
+  border-radius: 14px;
+  background: var(--bg-2);
+}
+.cx-qty button {
+  width: 42px;
+  align-self: stretch;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 20px;
+  cursor: pointer;
+}
+.cx-qty span { min-width: 24px; text-align: center; font-weight: 700; font-size: var(--cx-text-lg); }
+.detail-screen .sticky-actions.cx-add-bar { display: flex; align-items: stretch; gap: 10px; }
+.cx-add-bar > .btn-primary {
+  flex: 1 1 auto;
+  width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 0;
+}
+.cx-add-total { margin-inline-start: auto; font-weight: 700; }
+.cx-add-bar > .btn-primary .cx-add-label:not(:only-child) { margin-inline-end: auto; }
+.detail-screen .item-choice-group { margin: 16px 0 12px; }
+.detail-screen .item-choice-row { min-height: 46px; margin: 6px 0; padding: 9px 12px; }
+
+@media (min-width: 1025px) {
+  .cx-detail-topbar { margin-top: -48px; position: relative; }
+}
+@media (max-width: 1024px) {
+  #app > .detail-screen > .hero-img,
+  #app .detail-screen > .cx-ph.cx-ph-hero { height: min(44vh, 320px); }
+  /* Back and cart float over the photo and stay there while the customer scrolls */
+  #app > .detail-screen > .cx-detail-topbar {
+    position: absolute;
+    top: calc(10px + var(--safe-top));
+    left: var(--cx-pad-l, 18px);
+    right: var(--cx-pad-r, 18px);
+    margin: 0;
+    z-index: 25;
+  }
+  #app > .detail-screen > .cx-detail-topbar > .icon-btn,
+  body.light-theme #app > .detail-screen > .cx-detail-topbar > .icon-btn.has-items {
+    background: var(--cx-glass-strong) !important;   /* over a photo the button must stay solid in both themes */
+    -webkit-backdrop-filter: var(--cx-glass-blur);
+    backdrop-filter: var(--cx-glass-blur);
+    box-shadow: var(--cx-shadow-1);
+  }
+  /* The details rise over the photo like a sheet */
+  .cx-sheet-edge {
+    display: block;
+    position: relative;
+    height: 26px;
+    margin: -42px calc(-1 * var(--cx-pad-r, 18px)) 4px calc(-1 * var(--cx-pad-l, 18px));
+    border-radius: 24px 24px 0 0;
+    background: var(--bg);
+  }
+  .cx-sheet-edge::before {
+    content: "";
+    position: absolute;
+    top: 9px;
+    left: 50%;
+    width: 38px;
+    height: 4px;
+    margin-left: -19px;
+    border-radius: 999px;
+    background: var(--cx-hairline);
+  }
+  .detail-screen .sticky-actions.cx-add-bar {
+    bottom: calc(-1 * var(--cx-pad-b, 28px));
+    margin-bottom: calc(0px - var(--cx-pad-b, 28px));
+    padding: 10px 0 calc(10px + var(--safe));
+  }
+  .detail-screen.cx-enter > .hero-img { animation: cx-fade-in 0.35s var(--cx-ease) backwards; }
+  .detail-screen.cx-enter > :not(.hero-img):not(.topbar):not(.sticky-actions) { animation: cx-rise-in 0.4s var(--cx-ease) backwards; }
+}
+@keyframes cx-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---- 15. Cart bar while browsing ------------------------------------------ */
+.cx-cart-bar { display: none; }
+@media (max-width: 1024px) {
+  .cx-cart-bar:not([hidden]) {
+    display: block;
+    position: sticky;
+    bottom: calc(-1 * var(--cx-pad-b, 28px));
+    z-index: 15;
+    margin-top: 16px;
+    margin-bottom: calc(10px - var(--cx-pad-b, 28px));
+    padding-bottom: 10px;
+  }
+  .cx-cart-bar > .btn {
+    width: 100%;
+    min-height: 54px;
+    margin: 0;
+    padding-inline: 12px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: var(--cx-shadow-2);
+  }
+  .cx-cart-bar-count {
+    min-width: 30px;
+    height: 30px;
+    padding: 0 8px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: rgba(26, 16, 4, 0.2);
+    font-size: var(--cx-text-sm);
+    font-weight: 700;
+  }
+  .cx-cart-bar-label { flex: 1 1 auto; text-align: start; font-weight: 700; }
+  .cx-cart-bar-total { font-weight: 700; }
+}
+
+/* ---- 16. A message never covers the main button --------------------------- */
+@supports selector(:has(*)) {
+  .phone:has(.cx-cta-bar) .toast,
+  .phone:has(.cx-cart-bar:not([hidden])) .toast { bottom: calc(var(--nav) + var(--safe) + 112px); }
+  .phone:has(.detail-screen) .toast { bottom: calc(var(--safe) + 96px); }
+}
+
 /* ---- 13. Reduce motion: everything above stands still -------------------- */
 @media (prefers-reduced-motion: reduce) {
   .cx-cta-bar > .btn-primary::after,
@@ -499,7 +641,9 @@ body.light-theme .toggle { border-color: #d8d3ca; }
   .home-order-toggle button.on::after,
   .checkout-order-types button.active::after,
   .pairing-card > .btn.pairing-add::after,
+  .cx-cart-bar > .btn-primary::after,
   .account-rewards-card::after { display: none; }
+  .screen.cx-enter > * { animation: none !important; }
   .cx-skel, .cart-count-badge.cx-bump,
   .pairing-card > .btn.pairing-add b,
   .cart-icon-btn.has-items::before, .cart-icon-btn.has-items::after,

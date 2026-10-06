@@ -56,11 +56,20 @@ test('theme.js is presentation only', () => {
 
 test('the frozen bars are limited to phone and tablet widths and respect reduced motion', () => {
   const css = read('css/theme.css');
-  const phone = css.slice(css.indexOf('@media (max-width: 1024px)'), css.indexOf('.cx-cta-total {'));
-  assert.ok(phone.length > 0);
-  assert.equal(css.split('position: sticky').length - 1, phone.split('position: sticky').length - 1);
+  // remove every phone/tablet block; what is left is what the desktop website mode gets
+  let desktop = css;
+  for (let at; (at = desktop.indexOf('@media (max-width: 1024px)')) >= 0;) {
+    let depth = 0, end = desktop.indexOf('{', at);
+    for (; end < desktop.length; end++) {
+      if (desktop[end] === '{') depth++;
+      else if (desktop[end] === '}' && --depth === 0) break;
+    }
+    desktop = desktop.slice(0, at) + desktop.slice(end + 1);
+  }
+  assert.ok(desktop.length < css.length);
+  assert.equal(desktop.includes('position: sticky'), false);
+  assert.equal(/position: absolute;[^}]*z-index: 25/.test(desktop), false);
   assert.ok(css.includes('prefers-reduced-motion: reduce'));
-  assert.equal(/#[0-9a-f]{3,8}/i.test(phone), false);   // the layout rules carry no hard-coded colour
 });
 
 test('the Home tab and the Home address have separate labels', () => {

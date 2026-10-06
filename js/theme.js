@@ -68,10 +68,19 @@
     lastCartCount = count;
   }
 
+  // A screen plays its entrance once, when the customer arrives; a redraw of the same screen does not.
+  var lastScreenKey = "";
+  function markEntrance(screen) {
+    var key = screen.className.replace(/\s*cx-[\w-]+/g, "");
+    if (key !== lastScreenKey) screen.classList.add("cx-enter");
+    lastScreenKey = key;
+  }
+
   function measure() {
     queued = false;
     var screen = currentScreen();
     if (!screen) return;
+    markEntrance(screen);
     var style = getComputedStyle(screen);
     setVar(screen, "--cx-pad-l", style.paddingLeft);
     setVar(screen, "--cx-pad-r", style.paddingRight);

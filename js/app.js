@@ -12,6 +12,7 @@ const state = {
   subcategoryId: "",
   itemId: "",
   cartEditKey: null,
+  detailQty: 1,
   orderType: "dinein",
   cart: [],
   size: "regular",
@@ -153,6 +154,49 @@ function refreshDetailPrice() {
   const item = itemById(state.itemId);
   const el = typeof document !== "undefined" && document.getElementById("detail-price");
   if (item && el) el.innerHTML = detailPriceMarkup(item);
+  refreshDetailAddBar();
+}
+/** CX-3: quantity on the item screen. The price shown on the button is display only;
+ *  the cart and the server still work from the unit price. */
+function detailUnitPrice(item) {
+  return roundMoney(item.price + normalizeItemChoices(item, state).extraPrice);
+}
+function detailQtyMax(item) {
+  let max = 1;
+  while (max < 20 && canAddItem(item, max + 1)) max++;
+  return max;
+}
+function refreshDetailAddBar() {
+  if (typeof document === "undefined") return;
+  const item = itemById(state.itemId);
+  const total = document.getElementById("cxAddTotal"), qty = document.getElementById("cxAddQty");
+  if (!item) return;
+  if (qty) qty.textContent = state.detailQty;
+  if (total) total.textContent = money(roundMoney(detailUnitPrice(item) * state.detailQty));
+}
+function setDetailQty(delta) {
+  const item = itemById(state.itemId);
+  if (!item || state.cartEditKey) return;
+  const next = state.detailQty + delta;
+  if (next < 1) return;
+  if (next > detailQtyMax(item)) { toast(item.offer?.maxQty ? limitMessage(item) : cartCopy("That is the most you can add at once.", "هذا أقصى ما يمكن إضافته مرة واحدة.")); return; }
+  state.detailQty = next;
+  refreshDetailAddBar();
+}
+/** CX-3: one bar that follows the customer while browsing. */
+function cartBarMarkup() {
+  const count = cartCount();
+  if (!count) return `<div class="cx-cart-bar" hidden></div>`;
+  const subtotal = roundMoney(state.cart.reduce((sum, line) => sum + linePrice(line), 0));
+  return `<div class="cx-cart-bar"><button class="btn btn-primary" onclick="go('cart')" aria-label="${t("yourCart")}">
+      <span class="cx-cart-bar-count">${count > 99 ? "99+" : count}</span>
+      <span class="cx-cart-bar-label">${cartCopy("View cart", "عرض السلة")}</span>
+      <span class="cx-cart-bar-total">${money(subtotal)}</span>
+    </button></div>`;
+}
+function refreshCartBars() {
+  if (typeof document === "undefined") return;
+  document.querySelectorAll(".cx-cart-bar").forEach((bar) => { bar.outerHTML = cartBarMarkup(); });
 }
 // Batch V2 (247): the restaurant's own title for the choices, with "Required" once.
 function optionGroupTitle(options) {
@@ -717,6 +761,7 @@ function updateCartButtons() {
       badge.remove();
     }
   });
+  refreshCartBars();
 }
 
 function splash() {
@@ -1132,6 +1177,7 @@ function home() {
           .join("")}
       </div>
       ${typeof cateringCardMarkup === 'function' ? cateringCardMarkup() : ''}
+      ${cartBarMarkup()}
     </section>
     ${nav("home")}`;
 }
@@ -1150,6 +1196,7 @@ function menu() {
             `<button class="cat cat-photo" onclick="go('listing',{categoryId:'${c.id}'})">${hasOwnPhoto(c) ? `<img src="${c.image}" alt="${loc(c, "name")}" loading="lazy" />` : photoPlaceholder("cx-ph-cat")}${loc(c, "name")}</button>`
         ).join("")}
       </div>
+      ${cartBarMarkup()}
     </section>
     ${nav("menu")}`;
 }
@@ -1181,6 +1228,7 @@ function listing() {
           <button class="add ${canOrderItem(i) && !canAddItem(i) ? "offer-add-blocked" : ""}" ${canOrderItem(i) ? "" : "disabled"} onclick="quickAdd('${i.id}')">${t("add")}</button>
         </article>`).join("")}
       </div>
+      ${cartBarMarkup()}
     </section>${nav("menu")}`;
 }
 
@@ -1204,13 +1252,14 @@ function detail() {
   return `
     <section class="screen detail-screen">
       ${hasOwnPhoto(i) ? `<img class="hero-img" src="${i.image}" alt="${dish}" />` : photoPlaceholder("hero-img cx-ph-hero")}
-      <div class="topbar" style="margin-top:-48px;position:relative">
+      <div class="topbar cx-detail-topbar">
         ${back(editing ? "cart" : itemBackScreen())}
         ${cartButton()}
       </div>
+      <div class="cx-sheet-edge" aria-hidden="true"></div>
       ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
       <h2>${dish}</h2>
-      <div class="stars">${t("kitchen")}</div>
+      <div class="stars">${(c => c ? loc(c, "name") : t("kitchen"))(CATEGORIES.find(c => c.id === i.category))}</div>
       <p style="color:var(--muted);font-size:14px">${loc(i, "desc")}</p>
       <p class="price" id="detail-price" style="margin:12px 0;font-size:20px">${detailPriceMarkup(i)}</p>
       ${offerLimitMarkup(i)}
@@ -1228,9 +1277,14 @@ function detail() {
         </div>
       </div>
       ${typeof itemRecommendationsMarkup === "function" ? itemRecommendationsMarkup(i) : ""}
-      <div class="sticky-actions single-action">
+      <div class="sticky-actions single-action cx-add-bar">
+  ${!editing && allowed ? `<div class="cx-qty" role="group" aria-label="${cartCopy("Quantity", "الكمية")}">
+    <button type="button" aria-label="${cartCopy("Decrease quantity", "تقليل الكمية")}" onclick="setDetailQty(-1)">−</button>
+    <span id="cxAddQty" aria-live="polite">${state.detailQty}</span>
+    <button type="button" aria-label="${cartCopy("Increase quantity", "زيادة الكمية")}" onclick="setDetailQty(1)">+</button>
+  </div>` : ""}
   <button class="btn btn-primary" ${allowed ? "" : "disabled"} onclick="addFromDetail()">
-    ${editing ? cartCopy("Update cart", "تحديث السلة") : canOrderItem(i) ? (allowed ? t("addToCart") : cartCopy("Offer limit reached", "تم بلوغ حد العرض")) : menuText("unavailable")}
+    <span class="cx-add-label">${editing ? cartCopy("Update cart", "تحديث السلة") : canOrderItem(i) ? (allowed ? t("addToCart") : cartCopy("Offer limit reached", "تم بلوغ حد العرض")) : menuText("unavailable")}</span>${!editing && allowed ? `<span class="cx-add-total" id="cxAddTotal">${money(roundMoney(detailUnitPrice(i) * state.detailQty))}</span>` : ""}
   </button>
 </div>
     </section>`;
@@ -1247,6 +1301,7 @@ function openCartItem(index) {
   state.choice = line.choice ?? null;
   state.spice = line.spice;
   state.extras = [...(line.extras || [])];
+  state.detailQty = 1;
   go("detail");
 }
 function cartRowClick(event, index) {
@@ -3771,6 +3826,7 @@ function openItem(id) {
   // Batch V2: the restaurant's default choice starts selected.
   prepareChoices(item, {size:"regular", choice:defaultChoiceId(item), extras:[]});
   state.spice = "medium";
+  state.detailQty = 1;
   go("detail");
 }
 function renderKeepScroll() {
@@ -3872,10 +3928,14 @@ function addFromDetail() {
     go("cart");
     return;
   }
-  if (addToCart(itemById(state.itemId))) {
+  const qty = Number.isSafeInteger(state.detailQty) && state.detailQty > 0 ? state.detailQty : 1;
+  if (addToCart(itemById(state.itemId), qty)) {
     // Batch C: a suggestion opened to choose options counts once it reaches the cart.
     if (typeof recoAddedFromDetail === "function") recoAddedFromDetail(state.itemId);
-    go("cart");
+    state.detailQty = 1;
+    // CX-3: back to where the customer was browsing; the cart bar there shows the new total.
+    const from = itemBackScreen();
+    go(["home", "menu", "listing", "offers"].includes(from) ? from : "cart");
   }
 }
 
