@@ -26,7 +26,7 @@ test('the sheen is on main buttons, the selected order type and recommended adds
 
 test('every animation stands still when the phone asks for reduced motion', () => {
   const names = [...css.matchAll(/@keyframes ([\w-]+)/g)].map(m => m[1]);
-  assert.deepEqual(names.sort(), ['cx-border-beam', 'cx-bump', 'cx-fade-in', 'cx-glow', 'cx-logo-in', 'cx-pulse', 'cx-rise-in', 'cx-sheen', 'cx-sheen-rtl', 'cx-skel', 'cx-text-shimmer']);
+  assert.deepEqual(names.sort(), ['cx-border-beam', 'cx-bump', 'cx-dock-in', 'cx-dock-pulse', 'cx-edge-light', 'cx-fade-in', 'cx-glow', 'cx-logo-in', 'cx-pulse', 'cx-rise-in', 'cx-sheen', 'cx-sheen-rtl', 'cx-skel', 'cx-stack-insert', 'cx-text-shimmer']);
   const reduce = css.slice(css.lastIndexOf('@media (prefers-reduced-motion: reduce)'));
   for (const sel of ['.cx-cta-bar > .btn-primary::after', '.account-rewards-card::after', '.cx-skel', '.cx-bump',
     '.home-order-toggle button.on::after', '.pairing-card > .btn.pairing-add', '.cart-icon-btn.has-items::before',
@@ -41,8 +41,8 @@ test('an item or category without a photo shows a placeholder icon the size of t
   assert.ok(app.includes('function hasOwnPhoto(row)'));
   assert.equal(app.includes('"no-photo"'), false);
   assert.equal(app.includes('cx-no-photo'), false);              // every card keeps the same shape
-  // the helper + specials + home and menu categories + category list + item screen + cart
-  assert.equal(app.split('photoPlaceholder(').length - 1, 7);
+  // the helper + specials + home and menu categories + category list + item screen + cart + cart dock
+  assert.equal(app.split('photoPlaceholder(').length - 1, 8);
   for (const file of ['js/recommendations.js', 'js/content.js']) assert.ok(read(file).includes('!hasOwnPhoto(i) ? photoPlaceholder('), file);
   assert.equal(/photoPlaceholder\([^)]*\$\{/.test(app), false);   // the icon takes no data from the menu
 });

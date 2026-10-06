@@ -183,16 +183,27 @@ function setDetailQty(delta) {
   state.detailQty = next;
   refreshDetailAddBar();
 }
-/** CX-3: one bar that follows the customer while browsing. */
+/** CX-3b: the smart cart dock. It rises from the bottom bar while the customer browses and shows
+ *  what is in the cart (last items added), how many, the items subtotal, and one way in. */
 function cartBarMarkup() {
   const count = cartCount();
-  if (!count) return `<div class="cx-cart-bar" hidden></div>`;
+  if (!count) return `<div class="cx-cart-bar" hidden data-count="0" data-total="0"></div>`;
   const subtotal = roundMoney(state.cart.reduce((sum, line) => sum + linePrice(line), 0));
-  return `<div class="cx-cart-bar"><button class="btn btn-primary" onclick="go('cart')" aria-label="${t("yourCart")}">
-      <span class="cx-cart-bar-count">${count > 99 ? "99+" : count}</span>
-      <span class="cx-cart-bar-label">${cartCopy("View cart", "عرض السلة")}</span>
-      <span class="cx-cart-bar-total">${money(subtotal)}</span>
+  const thumbs = state.cart.slice(-3).reverse().map((line) => hasOwnPhoto(line)
+    ? `<span class="cx-dock-thumb"><img src="${line.image}" alt="" /></span>`
+    : `<span class="cx-dock-thumb">${photoPlaceholder("cx-ph-dock")}</span>`).join("");
+  return `<div class="cx-cart-bar" data-count="${count}" data-total="${subtotal}"><button class="cx-dock-btn" onclick="go('cart')" aria-label="${cartCopy("View cart", "عرض السلة")}">
+      <span class="cx-dock-stack" aria-hidden="true">${thumbs}</span>
+      <span class="cx-dock-copy"><small>${itemsCountLabel(count)}</small><strong class="cx-dock-total">${money(subtotal)}</strong></span>
+      <span class="cx-dock-cta">${cartCopy("View cart", "عرض السلة")}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span>
     </button></div>`;
+}
+/** With the dock on screen the dock itself answers "added"; elsewhere the short message does. */
+function cartDockAnswers() {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function" ||
+      !window.matchMedia("(max-width: 1024px)").matches) return false;
+  if (["home", "menu", "listing"].includes(state.screen)) return true;
+  return state.screen === "detail" && !state.cartEditKey && ["home", "menu", "listing"].includes(itemBackScreen());
 }
 function refreshCartBars() {
   if (typeof document === "undefined") return;
@@ -477,7 +488,7 @@ function addToCart(item, qty = 1) {
       spice,
       extras,
     });
-  toast(t("added"));
+  if (!cartDockAnswers()) toast(t("added"));
   saveCartDraft();
   updateCartButtons();
   if (["listing","detail","offers"].includes(state.screen)) renderKeepScroll();

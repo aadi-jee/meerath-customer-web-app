@@ -93,22 +93,54 @@ test('editing a cart line has no quantity control and keeps the line quantity', 
   assert.equal(run('state.cart.length === 1 && state.cart[0].qty === 2'), true);
 });
 
-test('the browsing cart bar is hidden when empty and shows count and items subtotal otherwise', () => {
+test('the smart cart dock is hidden when empty and shows the last items, count and items subtotal otherwise', () => {
   const run = environment();
   run('ready();');
-  assert.ok(run('cartBarMarkup()').includes('hidden'));
+  assert.ok(run('cartBarMarkup()').includes('class="cx-cart-bar" hidden'));
   run('addToCart(ITEMS[0], 3);');
   const bar = run('cartBarMarkup()');
-  assert.equal(bar.includes('hidden'), false);
-  assert.ok(bar.includes('>3<') && bar.includes(run('money(54)')));
+  assert.equal(bar.includes('class="cx-cart-bar" hidden'), false);
+  assert.ok(bar.includes('data-count="3"') && bar.includes('data-total="54"') && bar.includes(run('money(54)')));
+  assert.equal(bar.split('class="cx-dock-thumb"').length - 1, 1);            // one line in the cart, one thumbnail
+  assert.equal(bar.split('onclick=').length - 1, 1);                           // one way in
+  assert.equal(/price|unit/i.test(bar.replace(/cx-[\w-]+/g, '')), false);
   for (const screen of ['home', 'menu', 'listing']) assert.ok(run(`${screen}()`).includes('cx-cart-bar'), screen);
   for (const screen of ['detail', 'cart']) assert.equal(run(`state.itemId=id;${screen}()`).includes('cx-cart-bar'), false, screen);
 });
 
 test('changed files have new cache keys; one Place Order button; a message stays clear of the main button', () => {
   const html = read('index.html'), app = read('js/app.js'), css = read('css/theme.css');
-  for (const file of ['css/theme.css', 'js/theme.js', 'js/app.js']) assert.ok(html.includes(`${file}?v=20261006-cx3"`), file);
+  for (const file of ['css/theme.css', 'js/theme.js', 'js/app.js']) assert.ok(html.includes(`${file}?v=20261006-cx3b"`), file);
   assert.equal(app.split('onclick="placeOrder()"').length, 2);
   assert.ok(css.includes('.phone:has(.cx-cta-bar) .toast'));
   assert.ok(css.includes('.cx-cart-bar { display: none; }'));   // desktop website mode keeps its own layout
+});
+
+test('the dock shows at most three thumbnails, newest first', () => {
+  const run = environment();
+  run(`ready(); for (let n = 0; n < 5; n++) { const item = {id:'extra-'+n, name:'Extra '+n, price:10, basePrice:10, available:true, offer:null, image:'https://img.test/'+n+'.png', options:[]}; ITEMS.push(item); addToCart(item); }`);
+  const bar = run('cartBarMarkup()');
+  assert.equal(bar.split('class="cx-dock-thumb"').length - 1, 3);
+  assert.ok(bar.indexOf('img.test/4.png') < bar.indexOf('img.test/3.png') && bar.indexOf('img.test/3.png') < bar.indexOf('img.test/2.png'));
+  assert.equal(bar.includes('img.test/0.png'), false);
+});
+
+test('the short "added" message is kept wherever there is no dock', () => {
+  const run = environment();
+  assert.equal(run(`ready(); state.screen='home'; cartDockAnswers()`), false);     // no phone-width check available: keep the message
+  run(`window.matchMedia = () => ({matches: true});`);
+  assert.equal(run(`state.screen='home'; cartDockAnswers()`), true);
+  assert.equal(run(`state.screen='listing'; cartDockAnswers()`), true);
+  assert.equal(run(`state.screen='offers'; cartDockAnswers()`), false);
+  assert.equal(run(`state.screen='cart'; cartDockAnswers()`), false);
+  run(`window.matchMedia = () => ({matches: false});`);
+  assert.equal(run(`state.screen='home'; cartDockAnswers()`), false);              // desktop website mode has no dock
+});
+
+test('the dock animates in the theme layer only; the amount shown always ends as the app wrote it', () => {
+  const theme = read('js/theme.js'), css = read('css/theme.css');
+  assert.ok(theme.includes('p >= 1 ? finalText'));
+  assert.ok(theme.includes('prefers-reduced-motion: reduce'));
+  assert.ok(css.includes(':has(> .cx-cart-bar:not([hidden])) > .topbar .cart-icon-btn'));
+  assert.ok(css.includes('.cx-cart-bar, .cx-dock-thumb { animation: none !important; }'));
 });

@@ -76,6 +76,42 @@
     lastScreenKey = key;
   }
 
+  // Smart cart dock: slide up on first arrival, answer an "add" with one pulse,
+  // a new thumbnail and a count-up of the amount. The final text is always the app's own.
+  var dockCount = null, dockTotal = 0, dockRun = 0;
+  function calm() {
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }
+  function countUp(el, from, to, finalText) {
+    var run = ++dockRun, started = null, span = 520;
+    if (!/\d/.test(finalText) || from === to) return;
+    function frame(now) {
+      if (run !== dockRun || !el.isConnected) return;
+      if (started === null) started = now;
+      var p = Math.min(1, (now - started) / span), eased = 1 - Math.pow(1 - p, 3);
+      var text = p >= 1 ? finalText : finalText.replace(/\d[\d.,]*/, (from + (to - from) * eased).toFixed(2));
+      if (el.textContent !== text) el.textContent = text;
+      if (p < 1) window.requestAnimationFrame(frame);
+    }
+    window.requestAnimationFrame(frame);
+  }
+  function tendDock(screen) {
+    var dock = child(screen, ".cx-cart-bar");
+    if (!dock) return;                       // this screen has no dock: keep what we knew
+    var count = parseInt(dock.getAttribute("data-count"), 10) || 0;
+    var total = parseFloat(dock.getAttribute("data-total")) || 0;
+    if (dockCount !== null && !calm() && !dock.hidden && window.requestAnimationFrame) {
+      if (dockCount === 0 && count > 0) dock.classList.add("cx-dock-in");
+      if (count > dockCount) {
+        dock.classList.add("cx-dock-added");
+        var amount = dock.querySelector(".cx-dock-total");
+        if (amount && dockCount > 0) countUp(amount, dockTotal, total, amount.textContent);
+      }
+    }
+    dockCount = count;
+    dockTotal = total;
+  }
+
   function measure() {
     queued = false;
     var screen = currentScreen();
@@ -96,6 +132,7 @@
     }
     onScroll(screen);
     syncTotals(screen);
+    tendDock(screen);
     watchImages(screen);
     bumpCart();
   }

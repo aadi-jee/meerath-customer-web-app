@@ -260,7 +260,7 @@ body.light-theme .history-status.account-status-negative {
 .home-order-toggle button.on,
 .checkout-order-types button.active,
 .pairing-card > .btn.pairing-add,
-.cx-cart-bar > .btn-primary,
+.cx-dock-cta,
 :root[data-style="heritage"] .account-rewards-card {
   position: relative;
   overflow: hidden;
@@ -271,7 +271,7 @@ body.light-theme .history-status.account-status-negative {
 .home-order-toggle button.on::after,
 .checkout-order-types button.active::after,
 .pairing-card > .btn.pairing-add:not(:disabled)::after,
-.cx-cart-bar > .btn-primary::after,
+.cx-dock-cta::after,
 :root[data-style="heritage"] .account-rewards-card::after {
   content: "";
   position: absolute;
@@ -307,7 +307,7 @@ body.light-theme .history-status.account-status-negative {
 [dir="rtl"] .home-order-toggle button.on::after,
 [dir="rtl"] .checkout-order-types button.active::after,
 [dir="rtl"] .pairing-card > .btn.pairing-add:not(:disabled)::after,
-[dir="rtl"] .cx-cart-bar > .btn-primary::after,
+[dir="rtl"] .cx-dock-cta::after,
 [dir="rtl"]:root[data-style="heritage"] .account-rewards-card::after {
   animation-name: cx-sheen-rtl;
 }
@@ -589,7 +589,9 @@ body.light-theme .toggle { border-color: #d8d3ca; }
   to { opacity: 1; }
 }
 
-/* ---- 15. Cart bar while browsing ------------------------------------------ */
+/* ---- 15. Smart cart dock ----------------------------------------------------
+   A glass tray that rises from the bottom bar: item stack, count and subtotal,
+   and one orange pill. Only the edge light runs all the time. */
 .cx-cart-bar { display: none; }
 @media (max-width: 1024px) {
   .cx-cart-bar:not([hidden]) {
@@ -597,33 +599,109 @@ body.light-theme .toggle { border-color: #d8d3ca; }
     position: sticky;
     bottom: calc(-1 * var(--cx-pad-b, 28px));
     z-index: 15;
-    margin-top: 16px;
-    margin-bottom: calc(10px - var(--cx-pad-b, 28px));
-    padding-bottom: 10px;
+    margin: 18px calc(-1 * var(--cx-pad-r, 18px)) calc(0px - var(--cx-pad-b, 28px)) calc(-1 * var(--cx-pad-l, 18px));
   }
-  .cx-cart-bar > .btn {
+  .cx-dock-btn {
+    position: relative;
+    overflow: hidden;
     width: 100%;
-    min-height: 54px;
-    margin: 0;
-    padding-inline: 12px 18px;
+    min-height: 66px;
+    padding: 11px var(--cx-pad-r, 18px) 11px var(--cx-pad-l, 18px);
     display: flex;
     align-items: center;
     gap: 12px;
-    box-shadow: var(--cx-shadow-2);
+    border: 0;
+    border-top: 1px solid rgba(224, 177, 90, 0.34);
+    border-radius: 22px 22px 0 0;
+    background: var(--cx-glass-strong);
+    -webkit-backdrop-filter: var(--cx-glass-blur);
+    backdrop-filter: var(--cx-glass-blur);
+    box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.3);
+    color: var(--text);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
   }
-  .cx-cart-bar-count {
-    min-width: 30px;
-    height: 30px;
-    padding: 0 8px;
-    border-radius: 999px;
-    display: grid;
-    place-items: center;
-    background: rgba(26, 16, 4, 0.2);
+  /* edge light: a soft highlight travelling along the top edge */
+  .cx-dock-btn::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 34%;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0), var(--gold) 45%, rgba(255, 255, 255, 0.9) 50%, var(--gold) 55%, rgba(255, 255, 255, 0));
+    transform: translateX(-110%);
+    pointer-events: none;
+    animation: cx-edge-light 4.6s linear infinite;
+  }
+  [dir="rtl"] .cx-dock-btn::after { animation-direction: reverse; }
+  .cx-dock-stack { display: flex; flex: 0 0 auto; padding-inline-start: 10px; }
+  .cx-dock-thumb {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    margin-inline-start: -10px;
+    border-radius: 50%;
+    border: 2px solid var(--bg);
+    overflow: hidden;
+    background: var(--bg-2);
+    box-shadow: var(--cx-shadow-1);
+  }
+  .cx-dock-thumb:nth-child(1) { z-index: 3; }
+  .cx-dock-thumb:nth-child(2) { z-index: 2; }
+  .cx-dock-thumb > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cx-dock-thumb > .cx-ph.cx-ph-dock { width: 100%; height: 100%; border: 0; border-radius: 0; }
+  .cx-dock-thumb > .cx-ph.cx-ph-dock svg { width: 58%; }
+  .cx-dock-copy { flex: 1 1 auto; min-width: 0; display: grid; gap: 1px; }
+  .cx-dock-copy small { color: var(--muted); font-size: var(--cx-text-xs); text-transform: lowercase; }
+  .cx-dock-total { font-size: var(--cx-text-lg); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cx-dock-cta {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 42px;
+    padding: 0 12px 0 16px;
+    border-radius: var(--cx-radius-pill);
+    background: linear-gradient(180deg, var(--orange-2), var(--orange));
+    color: #1a1004;
     font-size: var(--cx-text-sm);
     font-weight: 700;
+    box-shadow: 0 6px 16px rgba(240, 138, 26, 0.26);
   }
-  .cx-cart-bar-label { flex: 1 1 auto; text-align: start; font-weight: 700; }
-  .cx-cart-bar-total { font-weight: 700; }
+  [dir="rtl"] .cx-dock-cta { padding: 0 16px 0 12px; }
+  .cx-dock-cta svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  [dir="rtl"] .cx-dock-cta svg { transform: scaleX(-1); }
+  .cx-dock-btn:active .cx-dock-cta { transform: scale(0.97); filter: brightness(1.08); }
+
+  /* moments: first arrival, something added */
+  .cx-cart-bar.cx-dock-in { animation: cx-dock-in 0.42s var(--cx-ease) backwards; }
+  .cx-cart-bar.cx-dock-added .cx-dock-btn { animation: cx-dock-pulse 0.9s var(--cx-ease); }
+  .cx-cart-bar.cx-dock-added .cx-dock-thumb:first-child { animation: cx-stack-insert 0.45s var(--cx-ease) backwards; }
+
+  /* one way into the cart: while the dock is up, the header button rests */
+  @supports selector(:has(*)) {
+    #app > .screen:has(> .cx-cart-bar:not([hidden])) > .topbar .cart-icon-btn,
+    #app > .screen:has(> .cx-cart-bar:not([hidden])) .cx-search-cart { display: none; }
+  }
+}
+@keyframes cx-edge-light {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(400%); }
+}
+@keyframes cx-dock-in {
+  from { transform: translateY(105%); }
+  to { transform: translateY(0); }
+}
+@keyframes cx-dock-pulse {
+  0% { box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(224, 177, 90, 0); }
+  35% { box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.3), 0 -6px 26px 2px rgba(224, 177, 90, 0.42); }
+  100% { box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(224, 177, 90, 0); }
+}
+@keyframes cx-stack-insert {
+  from { transform: translateX(-70%) scale(0.5); opacity: 0; }
+  to { transform: translateX(0) scale(1); opacity: 1; }
 }
 
 /* ---- 16. A message never covers the main button --------------------------- */
@@ -641,8 +719,10 @@ body.light-theme .toggle { border-color: #d8d3ca; }
   .home-order-toggle button.on::after,
   .checkout-order-types button.active::after,
   .pairing-card > .btn.pairing-add::after,
-  .cx-cart-bar > .btn-primary::after,
+  .cx-dock-cta::after,
+  .cx-dock-btn::after,
   .account-rewards-card::after { display: none; }
+  .cx-cart-bar, .cx-dock-thumb { animation: none !important; }
   .screen.cx-enter > * { animation: none !important; }
   .cx-skel, .cart-count-badge.cx-bump,
   .pairing-card > .btn.pairing-add b,
