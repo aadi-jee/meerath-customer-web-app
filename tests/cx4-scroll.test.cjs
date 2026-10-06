@@ -33,7 +33,7 @@ function environment(saved = '', brandEdit = source => source) {
       {id:I(2), category_id:C1, subcategory_id:S1, base_price:20, is_available:true, name_en:'Tikka', is_best_seller:true},
       {id:I(3), category_id:C2, base_price:9, is_available:true, name_en:'Naan'}];
     const payload = {version:1,offers_version:1,restaurant_id:R,
-      categories:[{id:C1,name_en:'Grill',sort_order:1},{id:C2,name_en:'Bread',sort_order:2},{id:C3,name_en:'Empty',sort_order:3}],
+      categories:[{id:C1,name_en:'Grill',sort_order:1,image_url:'https://img.test/grill.jpg'},{id:C2,name_en:'Bread',sort_order:2},{id:C3,name_en:'Empty',sort_order:3}],
       subcategories:[{id:S1,category_id:C1,name_en:'Chicken'}],items:rows,schedules:[],
       branches:[{id:B}],branch_items:rows.map(r => ({branch_id:B,menu_item_id:r.id,is_available:true}))};
     menuConnection.status='ready'; menuConnection.lastSuccess=Date.now(); menuConnection.payload=payload;
@@ -68,6 +68,11 @@ test('scroll Home lists the whole menu in Admin order with one row of buttons', 
   assert.equal(html.split('data-sec=').length - 1, 4);
   for (const name of ['Seekh', 'Tikka', 'Naan', 'Grill', 'Bread', 'Chicken']) assert.ok(html.includes(name), name);
   assert.equal(html.includes('>Empty<'), false);
+  // a category with its own photo gets a banner; one without keeps the plain heading
+  assert.equal(html.split('class="cx-banner"').length - 1, 1);
+  assert.match(html, /cx-banner-copy"><h3>Grill<\/h3><small>2 items/);
+  assert.match(html, /<h3>Bread<\/h3><small class="cx-sec-count">1 item</);
+  assert.match(html, /class="cx-sub"><span>Chicken<\/span><small>1</);
   assert.ok(html.includes('cx-cart-bar'));
   assert.equal(html.includes('cx-search-cart'), false);
   assert.equal(html.includes('cx-again'), false);                      // no earlier order on this device
@@ -107,7 +112,7 @@ test('Home carries no "Order again" or points card: those live under Orders and 
 test('files changed in CX-4 have new cache keys and the classic rules are untouched', () => {
   const html = read('index.html'), css = read('css/theme.css'), spy = read('js/theme.js');
   assert.ok(html.includes('js/brand-config.js?v=20261006-cx4"'));
-  for (const file of ['js/app.js', 'js/theme.js', 'css/theme.css']) assert.ok(html.includes(`${file}?v=20261006-cx4b"`), file);
+  for (const file of ['js/app.js', 'js/theme.js', 'css/theme.css']) assert.ok(html.includes(`${file}?v=20261006-cx4c"`), file);
   assert.ok(css.includes('#app > .home-screen > .home-topbar {\n    position: sticky;'));   // frozen header
   const added = css.slice(css.indexOf('18. STRUCTURE "scroll"'));
   // every rule that changes an existing element is scoped to the scroll structure

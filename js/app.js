@@ -1279,7 +1279,7 @@ function menuSections() {
       const inside = all.filter(i => i.subcategory === s.id);
       if (inside.length) groups.push({title: loc(s, "name"), items: inside});
     });
-    sections.push({key: `cat-${c.id}`, title: loc(c, "name"), kind: "list", groups});
+    sections.push({key: `cat-${c.id}`, title: loc(c, "name"), kind: "list", groups, count: all.length, image: hasOwnPhoto(c) ? c.image : ""});
   });
   return sections;
 }
@@ -1333,10 +1333,12 @@ function homeScroll() {
       ${menuFirstLoad() ? `<div class="scroll">${skeletonTiles("special", 3)}</div><div class="grid">${skeletonTiles("cat", 4)}</div>` : ""}
       ${!sections.length && menuReady() ? `<p class="menu-hint">${menuText("noItems")}</p>` : ""}
       ${sections.map(sec => `<section class="cx-sec" id="cx-sec-${sec.key}" data-sec="${sec.key}">
-        <div class="h-row"><h3>${sec.kind === "special" ? `<span class="cx-text-shimmer">${sec.title}</span>` : sec.title}</h3></div>
+        ${sec.image
+          ? `<div class="cx-banner"><img src="${sec.image}" alt="" loading="lazy" /><div class="cx-banner-copy"><h3>${sec.title}</h3><small>${itemsCountLabel(sec.count)}</small></div></div>`
+          : `<div class="h-row"><h3>${sec.kind === "special" ? `<span class="cx-text-shimmer">${sec.title}</span>` : sec.title}</h3>${sec.count ? `<small class="cx-sec-count">${itemsCountLabel(sec.count)}</small>` : ""}</div>`}
         ${sec.kind === "special"
           ? `<div class="scroll">${sec.items.map(specialCardMarkup).join("")}</div>`
-          : sec.groups.map(group => `${group.title ? `<h4 class="cx-sub">${group.title}</h4>` : ""}
+          : sec.groups.map(group => `${group.title ? `<h4 class="cx-sub"><span>${group.title}</span><small>${group.items.length}</small></h4>` : ""}
             <div class="menu-items-grid">${group.items.map(itemCardMarkup).join("")}</div>`).join("")}
       </section>`).join("")}
       ${typeof cateringCardMarkup === 'function' ? cateringCardMarkup() : ''}

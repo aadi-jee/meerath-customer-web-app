@@ -871,18 +871,69 @@ body.light-theme .toggle { border-color: #d8d3ca; }
 .cx-catbar-search { width: 24px; display: grid; place-items: center; }
 .cx-catbar-search svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 
-.cx-sec { margin-top: 26px; }
-.cx-sec > .h-row { margin-top: 0; }
-.cx-sec .cx-sub {
-  margin: 18px 0 10px;
-  font-size: var(--cx-type-label, 12px);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
+.cx-sec { margin-top: 34px; }
+.cx-sec > .h-row { margin-top: 0; align-items: baseline; }
+.cx-sec-count { font-size: var(--cx-type-caption, 12.5px); color: var(--muted); text-transform: lowercase; }
+
+/* Section banner: a slim photo of the category with its name over a dark scrim */
+.cx-banner {
+  position: relative;
+  height: 96px;
+  margin-bottom: 16px;
+  border-radius: var(--cx-radius-lg);
+  overflow: hidden;
+  background: var(--cx-surface);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
-html[dir="rtl"] .cx-sec .cx-sub { letter-spacing: 0; }
-.cx-sec > .h-row + .cx-sub { margin-top: 4px; }
+.cx-banner > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cx-banner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(10, 8, 7, 0.9) 0%, rgba(10, 8, 7, 0.62) 42%, rgba(10, 8, 7, 0.08) 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  border-radius: inherit;
+}
+html[dir="rtl"] .cx-banner::after { background: linear-gradient(270deg, rgba(10, 8, 7, 0.9) 0%, rgba(10, 8, 7, 0.62) 42%, rgba(10, 8, 7, 0.08) 100%); }
+.cx-banner-copy {
+  position: absolute;
+  z-index: 1;
+  inset-inline: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  gap: 4px;
+}
+.cx-banner-copy h3 { margin: 0; color: #fff; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.cx-banner-copy small { text-transform: lowercase; color: rgba(255, 255, 255, 0.8); font-size: var(--cx-type-caption, 12.5px); letter-spacing: 0.04em; }
+html[dir="rtl"] .cx-banner-copy h3, html[dir="rtl"] .cx-banner-copy small { letter-spacing: 0; }
+.cx-banner.cx-reveal { opacity: 0; transform: translateY(14px); }
+.cx-banner.cx-reveal.cx-in { opacity: 1; transform: none; transition: opacity var(--cx-slow) var(--cx-ease), transform var(--cx-slow) var(--cx-ease); }
+
+/* Sub-category heading: readable size, an accent bar in front, the count after */
+.cx-sec .cx-sub {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 24px 0 12px;
+  font-size: var(--cx-type-item, 16px);
+  font-weight: 700;
+  color: var(--text);
+}
+.cx-sec .cx-sub::before { content: ""; flex: 0 0 3px; height: 17px; border-radius: 3px; background: var(--cx-action); }
+.cx-sec .cx-sub small { font-size: var(--cx-type-caption, 12.5px); font-weight: 500; color: var(--muted); }
+.cx-sec > .h-row + .cx-sub, .cx-sec > .cx-banner + .cx-sub { margin-top: 4px; }
+
+/* One strong colour per screen: the cart button keeps the solid orange,
+   the many "Add" buttons become quiet outlined pills. */
+.cx-sec .item .add:not([disabled]) {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--cx-action) 60%, transparent);
+  color: var(--cx-action);
+  border-radius: var(--cx-radius-pill);
+  box-shadow: none;
+}
+.cx-sec .item .add:not([disabled]):active { background: color-mix(in srgb, var(--cx-action) 16%, transparent); }
 
 .cx-preview-note { margin-top: 22px; }
 

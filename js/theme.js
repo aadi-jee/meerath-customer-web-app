@@ -69,6 +69,29 @@
     }
   }
 
+  // CX-4c slide-up reveal: a category banner still below the screen rises into place
+  // as it arrives. Banners already in view are left alone (no flicker after "Add").
+  var revealer = null;
+  function tendBanners(screen) {
+    if (calm() || typeof IntersectionObserver !== "function") return;
+    var fresh = screen.querySelectorAll(".cx-banner:not([data-cx-seen])");
+    if (!fresh.length) return;
+    if (!revealer) revealer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("cx-in");
+        revealer.unobserve(entry.target);
+      });
+    }, {threshold: 0.2});
+    var bottom = screen.getBoundingClientRect().bottom;
+    fresh.forEach(function (banner) {
+      banner.setAttribute("data-cx-seen", "1");
+      if (banner.getBoundingClientRect().top < bottom) return;
+      banner.classList.add("cx-reveal");
+      revealer.observe(banner);
+    });
+  }
+
   function syncTotals(screen) {
     var source = screen.querySelector(".breakdown .total span:last-child");
     if (!source) return;
@@ -171,6 +194,7 @@
     syncTotals(screen);
     tendDock(screen);
     watchImages(screen);
+    tendBanners(screen);
     bumpCart();
   }
   function schedule() {
