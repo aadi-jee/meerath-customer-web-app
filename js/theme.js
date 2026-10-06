@@ -30,6 +30,43 @@
         search.getBoundingClientRect().top <= screen.getBoundingClientRect().top + padTop + stickAt + 0.5;
       screen.classList.toggle("cx-search-stuck", stuck);
     }
+    spyMenu(screen);
+  }
+
+  // CX-4 scroll-spy: the row of category buttons marks the section being read
+  // and keeps that button in view.
+  function spyMenu(screen) {
+    var bar = child(screen, ".cx-catbar");
+    if (!bar) return;
+    var top = screen.getBoundingClientRect().top;
+    var barBox = bar.getBoundingClientRect();
+    var padTop = parseFloat(getComputedStyle(screen).paddingTop) || 0;
+    var stickAt = parseFloat(getComputedStyle(bar).top) || 0;
+    screen.classList.toggle("cx-cat-stuck", screen.scrollTop > 6 && barBox.top <= top + padTop + stickAt + 0.5);
+    var sections = screen.querySelectorAll("[data-sec]");
+    if (!sections.length) return;
+    var key = sections[0].getAttribute("data-sec");
+    var jump = window.cxMenuJump;
+    if (jump && Date.now() < jump.until) key = jump.key;
+    else if (screen.scrollTop + screen.clientHeight >= screen.scrollHeight - 2 && screen.scrollTop > 6) key = sections[sections.length - 1].getAttribute("data-sec");
+    else {
+      var line = barBox.bottom + 28;
+      for (var i = 0; i < sections.length; i++) {
+        if (sections[i].getBoundingClientRect().top <= line) key = sections[i].getAttribute("data-sec");
+      }
+    }
+    var chips = bar.querySelectorAll("[data-chip]");
+    for (var n = 0; n < chips.length; n++) {
+      var chip = chips[n], on = chip.getAttribute("data-chip") === key;
+      if (on === chip.classList.contains("on") && bar.getAttribute("data-cx-on") === key) continue;
+      chip.classList.toggle("on", on);
+      chip.setAttribute("aria-selected", on ? "true" : "false");
+      if (on && bar.getAttribute("data-cx-on") !== key) {
+        bar.setAttribute("data-cx-on", key);
+        var left = bar.scrollLeft + chip.getBoundingClientRect().left - barBox.left - (barBox.width - chip.offsetWidth) / 2;
+        if (bar.scrollTo) bar.scrollTo({left: left, behavior: calm() ? "auto" : "smooth"});
+      }
+    }
   }
 
   function syncTotals(screen) {

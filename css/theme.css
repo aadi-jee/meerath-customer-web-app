@@ -819,3 +819,119 @@ body.light-theme .toggle { border-color: #d8d3ca; }
   .splash > .splash-brand-logo, .splash > p, .splash > .btn { animation: none; }
   #app img, .btn, .icon-btn, .add, .special-add, .cat { transition: none; }
 }
+
+/* =====================================================================
+   18. STRUCTURE "scroll" (CX-4): Home is the menu.
+   Everything here is scoped to html[data-structure="scroll"]; the classic
+   structure is not touched by this section.
+   ===================================================================== */
+.cx-catbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  margin: 18px calc(-1 * var(--cx-pad-r, 18px)) 0 calc(-1 * var(--cx-pad-l, 18px));
+  padding: 8px var(--cx-pad-r, 18px) 8px var(--cx-pad-l, 18px);
+  scroll-padding-inline: var(--cx-pad-l, 18px);
+}
+.cx-catbar::-webkit-scrollbar { display: none; }
+.cx-chip, .cx-catbar-search {
+  flex: 0 0 auto;
+  min-height: 44px;
+  border-radius: var(--cx-radius-pill);
+  border: 1px solid var(--cx-hairline);
+  background: var(--cx-surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--cx-type-body, 14px);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--cx-base) var(--cx-ease), color var(--cx-base) var(--cx-ease), border-color var(--cx-base) var(--cx-ease);
+}
+.cx-chip { padding: 0 16px; }
+.cx-chip.on { background: var(--cx-action); border-color: var(--cx-action); color: #1a1206; }
+.cx-catbar-search { width: 44px; display: grid; place-items: center; padding: 0; }
+.cx-catbar-search svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+
+.cx-sec { margin-top: 26px; }
+.cx-sec > .h-row { margin-top: 0; }
+.cx-sec .cx-sub {
+  margin: 18px 0 10px;
+  font-size: var(--cx-type-label, 12px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+html[dir="rtl"] .cx-sec .cx-sub { letter-spacing: 0; }
+.cx-sec > .h-row + .cx-sub { margin-top: 4px; }
+
+.cx-home-extras { display: grid; gap: 10px; margin-top: 16px; }
+.cx-again, .cx-points {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 14px;
+  text-align: start;
+  font: inherit;
+  color: var(--text);
+  background: var(--cx-surface);
+  border: 1px solid var(--cx-hairline);
+  border-radius: var(--cx-radius-md);
+  cursor: pointer;
+}
+.cx-again-icon, .cx-points-icon {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--cx-action) 16%, transparent);
+  color: var(--cx-action);
+}
+.cx-points-icon { background: color-mix(in srgb, var(--cx-reward) 18%, transparent); color: var(--cx-reward); }
+.cx-again-icon svg, .cx-points-icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cx-again-copy, .cx-points-copy { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.cx-again-copy strong, .cx-points-copy strong { font-size: var(--cx-text-md); font-weight: 700; }
+.cx-again-copy small, .cx-points-copy small {
+  font-size: var(--cx-type-caption, 12.5px);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cx-again-go { flex: 0 0 auto; font-size: 22px; line-height: 1; color: var(--muted); }
+html[dir="rtl"] .cx-again-go { transform: scaleX(-1); }
+.cx-preview-note { margin-top: 22px; }
+
+/* the moving announcement line fades out at both edges instead of being cut */
+html[data-structure="scroll"] .home-announcement .announcement-viewport {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent);
+}
+
+@media (max-width: 1024px) {
+  /* one frozen row only: the category buttons. The search box scrolls away. */
+  html[data-structure="scroll"] #app > .home-screen > .home-search-wrap { position: relative; top: auto; }
+  html[data-structure="scroll"] #app > .home-screen > .home-search-wrap::before { display: none; }
+  html[data-structure="scroll"] #app > .home-screen > .cx-catbar {
+    position: sticky;
+    top: calc(var(--safe-top) - var(--cx-pad-t, 20px));
+    z-index: 20;
+    isolation: isolate;
+  }
+  html[data-structure="scroll"] #app > .home-screen.cx-cat-stuck > .cx-catbar {
+    background: var(--cx-glass-strong);
+    -webkit-backdrop-filter: var(--cx-glass-blur);
+    backdrop-filter: var(--cx-glass-blur);
+    border-bottom: 1px solid var(--cx-hairline);
+    padding-top: calc(8px + var(--safe-top));
+    margin-top: calc(18px - var(--safe-top));
+  }
+}

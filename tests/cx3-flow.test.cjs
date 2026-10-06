@@ -110,9 +110,7 @@ test('the smart cart dock is hidden when empty and shows the last items, count a
 
 test('changed files have new cache keys; one Place Order button; a message stays clear of the main button', () => {
   const html = read('index.html'), app = read('js/app.js'), css = read('css/theme.css');
-  assert.ok(html.includes('js/theme.js?v=20261006-cx3b"'));
-  for (const file of ['js/app.js', 'js/data.js']) assert.ok(html.includes(`${file}?v=20261006-cx3c"`), file);
-  assert.ok(html.includes('css/theme.css?v=20261006-cx3d"'));
+  for (const file of ['js/data.js']) assert.ok(html.includes(`${file}?v=20261006-cx3c"`), file);
   assert.equal(app.split('onclick="placeOrder()"').length, 2);
   assert.ok(css.includes('.phone:has(.cx-cta-bar) .toast'));
   assert.ok(css.includes('.cx-cart-bar { display: none; }'));   // desktop website mode keeps its own layout

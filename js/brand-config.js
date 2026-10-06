@@ -34,6 +34,9 @@ const APP_CONFIG = Object.freeze({
     // CX-1: a theme is a structure (screen layout) plus a style (look).
     // Unknown names fall back to classic + heritage.
     theme: Object.freeze({structure: "classic", style: "heritage"}),
+    // CX-4: while true, Account > Appearance offers the other structures on THIS device only
+    // (nothing changes for anyone else). Set to false before launch.
+    themePreview: true,
     colors: Object.freeze({
       dark: Object.freeze({primary: "#f08a1a", primaryStrong: "#ff9f2e", accent: "#e0b15a"}),
       light: Object.freeze({primary: "#c76600", primaryStrong: "#e87908", accent: "#8a5b0a"}),
@@ -129,12 +132,19 @@ function brandShortName(lang = "en") {
   return lang === "ar" ? APP_CONFIG.brand.shortNameAr : APP_CONFIG.brand.shortName;
 }
 
-const THEME_STRUCTURES = Object.freeze(["classic"]);
+const THEME_STRUCTURES = Object.freeze(["classic", "scroll"]);
 const THEME_STYLES = Object.freeze(["heritage"]);
+/** The structure this device is previewing, or "" (only while brand.themePreview is on). */
+function previewStructure() {
+  if (!APP_CONFIG.brand || APP_CONFIG.brand.themePreview !== true) return "";
+  const saved = readAppStorage("structure");
+  return THEME_STRUCTURES.includes(saved) ? saved : "";
+}
 function brandTheme() {
   const chosen = (APP_CONFIG.brand && APP_CONFIG.brand.theme) || {};
+  const preview = previewStructure();
   return {
-    structure: THEME_STRUCTURES.includes(chosen.structure) ? chosen.structure : THEME_STRUCTURES[0],
+    structure: preview || (THEME_STRUCTURES.includes(chosen.structure) ? chosen.structure : THEME_STRUCTURES[0]),
     style: THEME_STYLES.includes(chosen.style) ? chosen.style : THEME_STYLES[0],
   };
 }

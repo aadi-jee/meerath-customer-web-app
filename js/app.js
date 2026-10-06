@@ -363,6 +363,12 @@ function go(screen, extra = {}) {
     validateMenuCart().then(ok => { if (ok && checkOfferCartRules()) { Object.assign(state, extra, {screen}); render(); } });
     return;
   }
+  // CX-4: in the scroll structure Home is the menu; "menu" and a category are places on it.
+  if (structureIs("scroll") && (screen === "menu" || screen === "listing")) {
+    const wanted = extra && extra.categoryId !== undefined ? extra.categoryId : (screen === "listing" ? state.categoryId : "");
+    homeJumpTarget = wanted && CATEGORIES.some(c => c.id === wanted) ? `cat-${wanted}` : "menu";
+    screen = "home";
+  }
   if (screen === "listing" && extra.categoryId !== undefined && extra.categoryId !== state.categoryId) state.subcategoryId = "";
   Object.assign(state, extra, { screen });
   // A returning customer goes straight to Home next time (the welcome screen is shown once).
@@ -579,9 +585,24 @@ function nav(active) {
     `,
   };
 
+  const rewardsIcon = `
+      <svg viewBox="0 0 24 24" class="nav-icon" aria-hidden="true">
+        <path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-3-5.3 3 1.1-6L3.4 9.4l6-.8z"></path>
+      </svg>
+    `;
+  const offersIcon = `
+      <svg viewBox="0 0 24 24" class="nav-icon" aria-hidden="true">
+        <path d="M3 12.5V4h8.5l9 9-8.5 8.5z"></path>
+        <circle cx="7.5" cy="8.5" r="1.2"></circle>
+      </svg>
+    `;
+  if (structureIs("scroll") && ["rewards", "offers"].includes(state.screen)) active = state.screen;
   const items = [
     ["home", icons.home, "home"],
-    ["menu", icons.menu, "menu"],
+    // CX-4: Home is the menu in the scroll structure, so its place goes to Rewards.
+    // With points switched off for the restaurant, the place goes to Offers instead.
+    !structureIs("scroll") ? ["menu", icons.menu, "menu"]
+      : (typeof rewardsOn === "function" && rewardsOn() ? ["rewards", rewardsIcon, "rewards"] : ["offers", offersIcon, "offers"]),
     ["track", icons.orders, "orders"],
     ["more", icons.more, "more"],
     ["account", icons.account, "account"],
@@ -605,6 +626,10 @@ function nav(active) {
 // ---------------------------------------------------------------------
 const NAV_WIDE_ONLY = ["detail", "checkout", "signInPage", "otpPage", "profileSetupPage", "addAddressPage", "supportRequest", "cateringPage"];
 function navTabFor(screen) {
+  if (structureIs("scroll")) {
+    if (["home", "listing", "detail", "cart", "checkout", "menu"].includes(screen)) return "home";
+    if (screen === "rewards") return "rewards";
+  }
   if (["listing", "detail", "cart", "checkout", "menu"].includes(screen)) return "menu";
   if (["confirmation", "track"].includes(screen)) return "track";
   if (["account", "rewards", "signInPage", "otpPage", "profileSetupPage", "savedAddressesPage", "addAddressPage",
@@ -1163,21 +1188,7 @@ function home() {
       <div class="scroll">
         ${!specials.length && menuReady() ? `<p class="menu-hint">${menuText("noSpecials")}</p>` : ""}
         ${menuFirstLoad() ? skeletonTiles("special", 3) : ""}
-        ${specials
-          .map(
-            (i) => `
-          <article class="special-card">
-            <button class="special-open" onclick="openItem('${i.id}')" aria-label="${loc(i, "name")}">
-              ${hasOwnPhoto(i) ? `<img src="${i.image}" alt="" loading="lazy" />` : photoPlaceholder("cx-ph-special")}
-              ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
-              <h4>${loc(i, "name")}</h4>
-            </button>
-            <button class="special-add" onclick="quickAdd('${i.id}')" aria-label="${t("add")} ${loc(i, "name")}">
-              <span>${itemHasPrice(i) ? money(i.price) : priceSoonLabel()}</span><b aria-hidden="true">+</b>
-            </button>
-          </article>`
-          )
-          .join("")}
+        ${specials.map(specialCardMarkup).join("")}
       </div>
       <div class="h-row"><h3>${t("categories")}</h3></div>
       <div class="grid">
@@ -1217,6 +1228,174 @@ function menu() {
     ${nav("menu")}`;
 }
 
+/** One menu item as a card: used by the category screen and by the scroll menu. */
+function itemCardMarkup(i) {
+  return `
+        <article class="item ${canOrderItem(i) ? "" : "menu-unavailable"}">
+          ${hasOwnPhoto(i) ? `<img src="${i.image}" alt="${loc(i, "name")}" loading="lazy" onclick="openItem('${i.id}')" />` : `<span class="cx-ph-tap" onclick="openItem('${i.id}')">${photoPlaceholder("cx-ph-item")}</span>`}
+          <div onclick="openItem('${i.id}')">
+            ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
+            ${i.bestSeller ? `<span class="badge">${t("bestSeller")}</span>` : ""}
+            <h4>${loc(i,"name")}</h4><p>${loc(i,"desc")}</p>
+            <div class="price">${itemPriceMarkup(i)}</div>
+            ${offerLimitMarkup(i)}
+            ${!i.available ? `<small class="menu-availability">${menuText("unavailable")}</small>` : ""}
+          </div>
+          <button class="add ${canOrderItem(i) && !canAddItem(i) ? "offer-add-blocked" : ""}" ${canOrderItem(i) ? "" : "disabled"} onclick="quickAdd('${i.id}')">${t("add")}</button>
+        </article>`;
+}
+
+// ---------------------------------------------------------------------
+// CX-4: the "scroll" structure. Home is the whole menu in one scroll, with
+// one row of category buttons that follows the customer.
+// ---------------------------------------------------------------------
+function structureIs(name) {
+  return typeof brandTheme === "function" && brandTheme().structure === name;
+}
+let homeJumpTarget = "";      // where Home should open: "menu", "cat-<id>" or ""
+let homeScrollMemory = 0;     // where the customer was on Home before opening an item or the cart
+let lastDrawnScreen = "";
+function setPreviewStructure(name) {
+  if (!APP_CONFIG.brand.themePreview || !THEME_STRUCTURES.includes(name)) return;
+  try { localStorage.setItem(appStorageKey("structure"), name); } catch (_) {}
+  homeScrollMemory = 0;
+  if (typeof document !== "undefined" && document.documentElement) document.documentElement.dataset.structure = brandTheme().structure;
+  go("home");
+}
+/** The sections of the scroll menu, in the order the restaurant set in Admin. */
+function menuSections() {
+  const sections = [];
+  const specials = ITEMS.filter(i => i.special && i.available);
+  if (specials.length) sections.push({key: "special", title: t("todaysSpecial"), kind: "special", items: specials});
+  const best = ITEMS.filter(i => i.bestSeller && i.available).slice(0, 8);
+  if (best.length) sections.push({key: "best", title: cartCopy("Best Sellers", "الأكثر مبيعاً"), kind: "list", groups: [{title: "", items: best}]});
+  CATEGORIES.forEach(c => {
+    const all = ITEMS.filter(i => i.category === c.id);
+    if (!all.length) return;
+    const groups = [];
+    const loose = all.filter(i => !i.subcategory);
+    if (loose.length) groups.push({title: "", items: loose});
+    SUBCATEGORIES.filter(s => s.category === c.id).forEach(s => {
+      const inside = all.filter(i => i.subcategory === s.id);
+      if (inside.length) groups.push({title: loc(s, "name"), items: inside});
+    });
+    sections.push({key: `cat-${c.id}`, title: loc(c, "name"), kind: "list", groups});
+  });
+  return sections;
+}
+function specialCardMarkup(i) {
+  return `
+          <article class="special-card">
+            <button class="special-open" onclick="openItem('${i.id}')" aria-label="${loc(i, "name")}">
+              ${hasOwnPhoto(i) ? `<img src="${i.image}" alt="" loading="lazy" />` : photoPlaceholder("cx-ph-special")}
+              ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
+              <h4>${loc(i, "name")}</h4>
+            </button>
+            <button class="special-add" onclick="quickAdd('${i.id}')" aria-label="${t("add")} ${loc(i, "name")}">
+              <span>${itemHasPrice(i) ? money(i.price) : priceSoonLabel()}</span><b aria-hidden="true">+</b>
+            </button>
+          </article>`;
+}
+function orderAgainMarkup() {
+  const last = state.orderHistory && state.orderHistory[0];
+  if (!last || !Array.isArray(last.items) || !last.items.length) return "";
+  const count = last.items.reduce((n, line) => n + (Number(line.qty) || 0), 0);
+  const names = last.items.slice(0, 2).map(line => { const item = itemById(line.id); return item ? loc(item, "name") : ""; }).filter(Boolean).join(", ");
+  return `<button class="cx-again" onclick="reorderFromHistory('${escapeHtml(last.id)}')">
+      <span class="cx-again-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.6-5.9"></path><path d="M4 4v4.5h4.5"></path></svg></span>
+      <span class="cx-again-copy"><strong>${cartCopy("Order again", "اطلب مجدداً")}</strong><small>${itemsCountLabel(count)}${names ? ` · ${names}` : ""}</small></span>
+      <span class="cx-again-go" aria-hidden="true">›</span>
+    </button>`;
+}
+function rewardsStripMarkup() {
+  if (typeof rewardsOn !== "function" || !rewardsOn()) return "";
+  const signedIn = state.isLoggedIn && typeof rewardsBalance === "function";
+  return `<button class="cx-points" onclick="go('${signedIn ? "rewards" : "signInPage"}')">
+      <span class="cx-points-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-3-5.3 3 1.1-6L3.4 9.4l6-.8z"></path></svg></span>
+      <span class="cx-points-copy"><strong>${signedIn ? `${rewardsBalance()} ${cartCopy("points", "نقطة")}` : cartCopy("Earn points on every order", "اكسب نقاطاً مع كل طلب")}</strong>
+        <small>${signedIn ? (typeof brandedRewardsLabel === "function" ? brandedRewardsLabel() : t("rewards")) : t("signInCreate")}</small></span>
+      <span class="cx-again-go" aria-hidden="true">›</span>
+    </button>`;
+}
+function homeScroll() {
+  homeDeliverySync();
+  const sections = menuSections();
+  const extras = `${orderAgainMarkup()}${rewardsStripMarkup()}`;
+  return `
+    <section class="screen home-screen cx-scroll-home">
+      <div class="topbar home-topbar">
+        <div class="home-brand-location">
+          <img class="home-brand-logo" src="${APP_CONFIG.brand.logo}" alt="${escapeHtml(APP_CONFIG.brand.logoAlt)}" />
+          <div class="loc" id="homeOrderLocation">${homeLocationMarkup()}</div>
+        </div>
+        <div class="top-actions">${langSwitch()}${cartButton()}</div>
+      </div>
+      <div id="appAnnouncementSlot">${typeof announcementMarkup === 'function' ? announcementMarkup() : ''}</div>
+      ${orderingStripMarkup()}
+      <div class="home-search-wrap">
+        <div class="cx-search-row">
+        <div class="home-search-box">
+          <svg class="home-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+          <input type="search" value="${escapeHtml(state.searchQuery)}" placeholder="${t("search")}" autocomplete="off" spellcheck="false" oninput="updateHomeSearch(this.value)" />
+        </div>
+        </div>
+        <div id="homeSearchResults" class="home-search-results ${state.searchQuery.trim() ? "show" : ""}">${homeSearchResultsMarkup()}</div>
+      </div>
+      <div class="toggle home-order-toggle">
+        <button class="${state.orderType === "dinein" ? "on" : ""}" onclick="setHomeOrderType('dinein', this)">${t("dineIn")}</button>
+        <button class="${state.orderType === "takeaway" ? "on" : ""}" onclick="setHomeOrderType('takeaway', this)">${t("takeaway")}</button>
+        <button class="${state.orderType === "delivery" ? "on" : ""}" onclick="setHomeOrderType('delivery', this)" ${deliveryOffered() ? "" : `disabled aria-disabled="true"`}>${t("delivery")}</button>
+      </div>
+      <div id="homeOrderNote" class="mode-note" style="${homeDeliveryNoteVisible() ? "" : "display:none"}">${t("deliveryScope")}</div>
+      ${homeBannersMarkup()}
+      ${extras ? `<div class="cx-home-extras">${extras}</div>` : ""}
+      <div class="cx-catbar" id="cxMenuTop" role="tablist" aria-label="${t("categories")}">
+        <button class="cx-catbar-search" onclick="menuJump('search')" aria-label="${t("search")}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></button>
+        ${menuFirstLoad() ? "" : sections.map((sec, n) => `<button class="cx-chip ${n === 0 ? "on" : ""}" data-chip="${sec.key}" onclick="menuJump('${sec.key}')">${sec.title}</button>`).join("")}
+      </div>
+      ${menuFirstLoad() ? `<div class="scroll">${skeletonTiles("special", 3)}</div><div class="grid">${skeletonTiles("cat", 4)}</div>` : ""}
+      ${!sections.length && menuReady() ? `<p class="menu-hint">${menuText("noItems")}</p>` : ""}
+      ${sections.map(sec => `<section class="cx-sec" id="cx-sec-${sec.key}" data-sec="${sec.key}">
+        <div class="h-row"><h3>${sec.kind === "special" ? `<span class="cx-text-shimmer">${sec.title}</span>` : sec.title}</h3></div>
+        ${sec.kind === "special"
+          ? `<div class="scroll">${sec.items.map(specialCardMarkup).join("")}</div>`
+          : sec.groups.map(group => `${group.title ? `<h4 class="cx-sub">${group.title}</h4>` : ""}
+            <div class="menu-items-grid">${group.items.map(itemCardMarkup).join("")}</div>`).join("")}
+      </section>`).join("")}
+      ${typeof cateringCardMarkup === 'function' ? cateringCardMarkup() : ''}
+      ${cartBarMarkup()}
+    </section>
+    ${nav("home")}`;
+}
+/** Bring a place on Home into view: "search", "menu" or a section key. */
+function menuJump(key, smooth = true) {
+  if (typeof document === "undefined") return;
+  const screen = document.querySelector("#app > .screen");
+  if (!screen || typeof screen.scrollTo !== "function") return;
+  if (key === "search") {
+    screen.scrollTo({top: 0, behavior: smooth ? "smooth" : "auto"});
+    const input = screen.querySelector(".home-search-box input");
+    if (input) setTimeout(() => input.focus({preventScroll: true}), smooth ? 350 : 0);
+    return;
+  }
+  // The row of buttons shows the asked section at once, not every section passed on the way.
+  if (key !== "menu" && typeof window !== "undefined") window.cxMenuJump = {key, until: Date.now() + 900};
+  const bar = screen.querySelector(".cx-catbar");
+  const target = key === "menu" ? bar : document.getElementById(`cx-sec-${key}`);
+  if (!target) return;
+  const barHeight = bar ? bar.offsetHeight : 0;
+  const top = key === "menu" ? target.offsetTop + 2 : target.offsetTop - barHeight - 10;
+  screen.scrollTo({top: Math.max(0, top), behavior: smooth ? "smooth" : "auto"});
+}
+/** After Home is drawn: open at the asked place, or where the customer left it. */
+function homeAfterDraw(cameFrom) {
+  if (!structureIs("scroll") || state.screen !== "home" || typeof document === "undefined") return;
+  const screen = document.querySelector("#app > .screen");
+  if (!screen) return;
+  if (homeJumpTarget) { const key = homeJumpTarget; homeJumpTarget = ""; menuJump(key, false); return; }
+  if (["detail", "cart", "checkout"].includes(cameFrom) && homeScrollMemory > 0) screen.scrollTop = homeScrollMemory;
+}
+
 function listing() {
   const cat = CATEGORIES.find(c => c.id === state.categoryId);
   // CX-3c: a sub-category with nothing in it is not offered as a choice.
@@ -1232,19 +1411,7 @@ function listing() {
       </div>` : ""}
       <div class="menu-items-grid">
       ${!items.length && menuReady() ? `<p class="menu-hint">${menuText("noItems")}</p>` : ""}
-      ${items.map(i => `
-        <article class="item ${canOrderItem(i) ? "" : "menu-unavailable"}">
-          ${hasOwnPhoto(i) ? `<img src="${i.image}" alt="${loc(i, "name")}" loading="lazy" onclick="openItem('${i.id}')" />` : `<span class="cx-ph-tap" onclick="openItem('${i.id}')">${photoPlaceholder("cx-ph-item")}</span>`}
-          <div onclick="openItem('${i.id}')">
-            ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
-            ${i.bestSeller ? `<span class="badge">${t("bestSeller")}</span>` : ""}
-            <h4>${loc(i,"name")}</h4><p>${loc(i,"desc")}</p>
-            <div class="price">${itemPriceMarkup(i)}</div>
-            ${offerLimitMarkup(i)}
-            ${!i.available ? `<small class="menu-availability">${menuText("unavailable")}</small>` : ""}
-          </div>
-          <button class="add ${canOrderItem(i) && !canAddItem(i) ? "offer-add-blocked" : ""}" ${canOrderItem(i) ? "" : "disabled"} onclick="quickAdd('${i.id}')">${t("add")}</button>
-        </article>`).join("")}
+      ${items.map(itemCardMarkup).join("")}
       </div>
       ${cartBarMarkup()}
     </section>${nav("menu")}`;
@@ -3573,6 +3740,14 @@ function appearanceSettingsPage() {
             ${state.appearance === "system" ? "✓" : ""}
           </span>
         </button>
+        ${APP_CONFIG.brand.themePreview === true ? `
+        <p class="language-settings-intro cx-preview-note">${cartCopy("Layout preview (this device only)", "معاينة التخطيط (هذا الجهاز فقط)")}</p>
+        ${[["classic", cartCopy("Classic", "كلاسيكي"), cartCopy("Home, then Menu and categories", "الرئيسية ثم القائمة والأقسام")],
+           ["scroll", cartCopy("Scroll menu", "قائمة متصلة"), cartCopy("Home is the whole menu in one scroll", "الرئيسية هي القائمة كاملة")]].map(([name, title, text]) => `
+        <button class="language-setting-item ${brandTheme().structure === name ? "active" : ""}" onclick="setPreviewStructure('${name}')">
+          <div><strong>${title}</strong><span>${text}</span></div>
+          <span class="language-check">${brandTheme().structure === name ? "✓" : ""}</span>
+        </button>`).join("")}` : ""}
 
       </div>
 
@@ -3810,7 +3985,15 @@ function render() {
     $app().style.paddingBottom = "20px";
     return;
   }
+  // CX-4: remember where the customer was on Home before leaving it.
+  const cameFrom = lastDrawnScreen;
+  if (cameFrom === "home" && state.screen !== "home" && typeof document !== "undefined" && typeof document.querySelector === "function") {
+    const leaving = document.querySelector("#app > .screen");
+    if (leaving) homeScrollMemory = leaving.scrollTop || 0;
+  }
+  if (structureIs("scroll")) map.home = homeScroll;
   $app().innerHTML = (map[state.screen] || home)();
+  lastDrawnScreen = state.screen;
   // Batch N: every screen keeps the navigation. On a phone the focused steps
   // (item, checkout, sign-in, new address) show it only on a wide screen.
   if (state.screen !== "splash" && typeof $app().querySelector === "function" && !$app().querySelector(".nav")) {
@@ -3829,6 +4012,7 @@ function render() {
     NAV_WIDE_ONLY.includes(state.screen)
       ? "20px"
       : "";
+  homeAfterDraw(cameFrom);
 }
 
 function openItem(id) {
@@ -3850,7 +4034,7 @@ function openItem(id) {
 function renderKeepScroll() {
   const currentScreen = document.querySelector("#app > .screen");
   const currentScroll = currentScreen ? currentScreen.scrollTop : 0;
-  const horizontal = currentScreen ? [...currentScreen.querySelectorAll('.menu-subcategories,.banner-track,.scroll')].map(el => el.scrollLeft) : [];
+  const horizontal = currentScreen ? [...currentScreen.querySelectorAll('.menu-subcategories,.banner-track,.scroll,.cx-catbar')].map(el => el.scrollLeft) : [];
   const focused = document.activeElement;
   const controls = currentScreen ? [...currentScreen.querySelectorAll('input,textarea,select,button,a')] : [];
   const focusIndex = controls.indexOf(focused);
@@ -3862,7 +4046,7 @@ function renderKeepScroll() {
   const newScreen = document.querySelector("#app > .screen");
   if (newScreen) {
     newScreen.scrollTop = currentScroll;
-    newScreen.querySelectorAll('.menu-subcategories,.banner-track,.scroll')
+    newScreen.querySelectorAll('.menu-subcategories,.banner-track,.scroll,.cx-catbar')
       .forEach((el,index) => { el.scrollLeft = horizontal[index] || 0; });
     const next = [...newScreen.querySelectorAll('input,textarea,select,button,a')][focusIndex];
     // A removed cart row may shift indices; never move focus to a different action.
