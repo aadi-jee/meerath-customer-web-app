@@ -97,18 +97,18 @@ test('Menu and category links land on Home; Rewards takes the Menu tab', () => {
   assert.equal(run('state.screen'), 'cart');                           // other screens are not redirected
 });
 
-test('"Order again" appears only when this device has an earlier order', () => {
+test('Home carries no "Order again" or points card: those live under Orders and Rewards', () => {
   const run = environment('scroll');
-  run(`state.orderHistory = [{id:'o1', orderType:'takeaway', items:[{id:I(1), qty:2}, {id:I(3), qty:1}]}]`);
+  run(`state.orderHistory = [{id:'o1', orderType:'takeaway', items:[{id:I(1), qty:2}]}]; rewardsOn = () => true;`);
   const html = run('homeScroll()');
-  assert.ok(html.includes("reorderFromHistory('o1')"));
-  assert.ok(html.includes('Seekh, Naan'));
+  for (const gone of ['cx-again', 'cx-points', 'reorderFromHistory']) assert.equal(html.includes(gone), false, gone);
 });
 
 test('files changed in CX-4 have new cache keys and the classic rules are untouched', () => {
   const html = read('index.html'), css = read('css/theme.css'), spy = read('js/theme.js');
-  for (const file of ['js/brand-config.js', 'js/app.js', 'js/theme.js', 'css/theme.css'])
-    assert.ok(html.includes(`${file}?v=20261006-cx4"`), file);
+  assert.ok(html.includes('js/brand-config.js?v=20261006-cx4"'));
+  for (const file of ['js/app.js', 'js/theme.js', 'css/theme.css']) assert.ok(html.includes(`${file}?v=20261006-cx4b"`), file);
+  assert.ok(css.includes('#app > .home-screen > .home-topbar {\n    position: sticky;'));   // frozen header
   const added = css.slice(css.indexOf('18. STRUCTURE "scroll"'));
   // every rule that changes an existing element is scoped to the scroll structure
   for (const line of added.split('\n').filter(l => /\.(home-search-wrap|home-announcement|home-screen)/.test(l)))

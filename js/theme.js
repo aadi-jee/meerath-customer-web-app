@@ -160,7 +160,7 @@
     setVar(screen, "--cx-pad-t", style.paddingTop);
     setVar(screen, "--cx-pad-b", style.paddingBottom);
     var bar = child(screen, ".topbar");
-    var row = child(screen, ".orders-tabs, .menu-subcategories");
+    var row = child(screen, ".orders-tabs, .menu-subcategories, .cx-catbar");
     screen.classList.toggle("cx-has-subrow", !!(bar && row));
     if (bar && row) {
       var barTop = parseFloat(getComputedStyle(bar).top) || 0;

@@ -1296,31 +1296,9 @@ function specialCardMarkup(i) {
             </button>
           </article>`;
 }
-function orderAgainMarkup() {
-  const last = state.orderHistory && state.orderHistory[0];
-  if (!last || !Array.isArray(last.items) || !last.items.length) return "";
-  const count = last.items.reduce((n, line) => n + (Number(line.qty) || 0), 0);
-  const names = last.items.slice(0, 2).map(line => { const item = itemById(line.id); return item ? loc(item, "name") : ""; }).filter(Boolean).join(", ");
-  return `<button class="cx-again" onclick="reorderFromHistory('${escapeHtml(last.id)}')">
-      <span class="cx-again-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.6-5.9"></path><path d="M4 4v4.5h4.5"></path></svg></span>
-      <span class="cx-again-copy"><strong>${cartCopy("Order again", "اطلب مجدداً")}</strong><small>${itemsCountLabel(count)}${names ? ` · ${names}` : ""}</small></span>
-      <span class="cx-again-go" aria-hidden="true">›</span>
-    </button>`;
-}
-function rewardsStripMarkup() {
-  if (typeof rewardsOn !== "function" || !rewardsOn()) return "";
-  const signedIn = state.isLoggedIn && typeof rewardsBalance === "function";
-  return `<button class="cx-points" onclick="go('${signedIn ? "rewards" : "signInPage"}')">
-      <span class="cx-points-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-3-5.3 3 1.1-6L3.4 9.4l6-.8z"></path></svg></span>
-      <span class="cx-points-copy"><strong>${signedIn ? `${rewardsBalance()} ${cartCopy("points", "نقطة")}` : cartCopy("Earn points on every order", "اكسب نقاطاً مع كل طلب")}</strong>
-        <small>${signedIn ? (typeof brandedRewardsLabel === "function" ? brandedRewardsLabel() : t("rewards")) : t("signInCreate")}</small></span>
-      <span class="cx-again-go" aria-hidden="true">›</span>
-    </button>`;
-}
 function homeScroll() {
   homeDeliverySync();
   const sections = menuSections();
-  const extras = `${orderAgainMarkup()}${rewardsStripMarkup()}`;
   return `
     <section class="screen home-screen cx-scroll-home">
       <div class="topbar home-topbar">
@@ -1348,7 +1326,6 @@ function homeScroll() {
       </div>
       <div id="homeOrderNote" class="mode-note" style="${homeDeliveryNoteVisible() ? "" : "display:none"}">${t("deliveryScope")}</div>
       ${homeBannersMarkup()}
-      ${extras ? `<div class="cx-home-extras">${extras}</div>` : ""}
       <div class="cx-catbar" id="cxMenuTop" role="tablist" aria-label="${t("categories")}">
         <button class="cx-catbar-search" onclick="menuJump('search')" aria-label="${t("search")}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></button>
         ${menuFirstLoad() ? "" : sections.map((sec, n) => `<button class="cx-chip ${n === 0 ? "on" : ""}" data-chip="${sec.key}" onclick="menuJump('${sec.key}')">${sec.title}</button>`).join("")}
@@ -1383,8 +1360,10 @@ function menuJump(key, smooth = true) {
   const bar = screen.querySelector(".cx-catbar");
   const target = key === "menu" ? bar : document.getElementById(`cx-sec-${key}`);
   if (!target) return;
+  // where the row of buttons rests once it is frozen (below the frozen header)
+  const rest = bar ? (parseFloat(getComputedStyle(screen).paddingTop) || 0) + (parseFloat(getComputedStyle(bar).top) || 0) : 0;
   const barHeight = bar ? bar.offsetHeight : 0;
-  const top = key === "menu" ? target.offsetTop + 2 : target.offsetTop - barHeight - 10;
+  const top = key === "menu" ? target.offsetTop - rest + 2 : target.offsetTop - rest - barHeight - 10;
   screen.scrollTo({top: Math.max(0, top), behavior: smooth ? "smooth" : "auto"});
 }
 /** After Home is drawn: open at the asked place, or where the customer left it. */
