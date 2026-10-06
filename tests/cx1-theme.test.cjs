@@ -67,7 +67,10 @@ test('the frozen bars are limited to phone and tablet widths and respect reduced
     desktop = desktop.slice(0, at) + desktop.slice(end + 1);
   }
   assert.ok(desktop.length < css.length);
-  assert.equal(desktop.includes('position: sticky'), false);
+  // on desktop nothing freezes in the classic structure; the scroll structure may freeze its category row
+  for (const rule of desktop.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (rule[2].includes('position: sticky')) assert.ok(rule[1].includes('html[data-structure="scroll"]'), rule[1].trim());
+  }
   assert.equal(/position: absolute;[^}]*z-index: 25/.test(desktop), false);
   assert.ok(css.includes('prefers-reduced-motion: reduce'));
 });

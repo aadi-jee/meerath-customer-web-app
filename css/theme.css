@@ -1114,3 +1114,18 @@ html[data-structure="scroll"] .home-announcement .announcement-viewport {
     backdrop-filter: var(--cx-glass-blur);
   }
 }
+
+/* Website mode (laptop): the category row freezes at the top of the page too. */
+@media (min-width: 1025px) {
+  html[data-structure="scroll"] #app > .home-screen > .cx-catbar {
+    position: sticky;
+    top: calc(-1 * var(--cx-pad-t, 34px));
+    z-index: 21;
+    margin-top: 14px;
+  }
+  html[data-structure="scroll"] #app > .home-screen.cx-cat-stuck > .cx-catbar {
+    background: var(--cx-glass-strong);
+    -webkit-backdrop-filter: var(--cx-glass-blur);
+    backdrop-filter: var(--cx-glass-blur);
+  }
+}

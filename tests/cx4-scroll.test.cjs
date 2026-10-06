@@ -197,7 +197,9 @@ test('checkout: the saved address is already chosen in one line; Change opens a 
 test('files changed in CX-4 have new cache keys and the classic rules are untouched', () => {
   const html = read('index.html'), css = read('css/theme.css'), spy = read('js/theme.js');
   assert.ok(html.includes('js/brand-config.js?v=20261006-cx4"'));
-  for (const file of ['js/app.js', 'css/theme.css']) assert.ok(html.includes(`${file}?v=20261006-cx4g"`), file);
+  assert.ok(html.includes('js/app.js?v=20261006-cx4g"'));
+  assert.ok(html.includes('css/theme.css?v=20261006-cx4h"'));
+  assert.match(css, /@media \(min-width: 1025px\) \{\n  html\[data-structure="scroll"\] #app > \.home-screen > \.cx-catbar \{\n    position: sticky;/);   // laptop too
   for (const file of ['js/delivery-location.js', 'js/i18n.js']) assert.ok(html.includes(`${file}?v=20261006-cx4f"`), file);
   assert.ok(html.includes('js/theme.js?v=20261006-cx4c"'));
   assert.ok(css.includes('#app > .home-screen > .home-topbar {\n    position: sticky;'));   // frozen header
