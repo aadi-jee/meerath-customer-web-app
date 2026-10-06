@@ -1002,6 +1002,7 @@ body.light-theme .toggle { border-color: #d8d3ca; }
 .cx-chip.on { color: var(--text); }
 .cx-chip.on::after { transform: scaleX(1); }
 .cx-catbar-search { width: 24px; display: grid; place-items: center; }
+.cx-catbar-cart { display: none; }   /* laptop only; phones use the cart dock */
 .cx-catbar-search svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 
 .cx-sec { margin-top: 34px; }
@@ -1123,6 +1124,37 @@ html[data-structure="scroll"] .home-announcement .announcement-viewport {
     z-index: 21;
     margin-top: 14px;
   }
+  /* the cart stays within reach at the end of the frozen row, with its amount */
+  html[data-structure="scroll"] #app > .home-screen > .cx-catbar > .cx-catbar-cart {
+    position: sticky;
+    inset-inline-end: 0;
+    margin-inline-start: auto;
+    flex: 0 0 auto;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 0 16px;
+    border: 1px solid var(--cx-hairline);
+    border-radius: var(--cx-radius-pill);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--cx-type-body, 14px);
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow: -18px 0 18px 6px var(--bg);
+  }
+  html[data-structure="scroll"][dir="rtl"] #app > .home-screen > .cx-catbar > .cx-catbar-cart { box-shadow: 18px 0 18px 6px var(--bg); }
+  html[data-structure="scroll"] #app > .home-screen > .cx-catbar > .cx-catbar-cart.has-items {
+    background: var(--cx-action);
+    border-color: var(--cx-action);
+    color: #1a1206;
+  }
+  html[data-structure="scroll"] #app > .home-screen > .cx-catbar > .cx-catbar-cart svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  html[data-structure="scroll"] #app > .home-screen > .cx-catbar > .cx-catbar-cart svg circle { fill: currentColor; stroke: none; }
   html[data-structure="scroll"] #app > .home-screen.cx-cat-stuck > .cx-catbar {
     background: var(--cx-glass-strong);
     -webkit-backdrop-filter: var(--cx-glass-blur);

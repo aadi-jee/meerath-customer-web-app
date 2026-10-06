@@ -75,6 +75,10 @@ test('scroll Home lists the whole menu in Admin order with one row of buttons', 
   assert.match(html, /class="cx-sub"><span>Chicken<\/span><small>1</);
   assert.ok(html.includes('cx-cart-bar'));
   assert.equal(html.includes('cx-search-cart'), false);
+  assert.match(html, /class="cx-catbar-cart " onclick="go\('cart'\)"[\s\S]*?<span>Cart<\/span>/);          // laptop: cart in the frozen row
+  run(`state.cart = [{id: I(1), qty: 2, price: 18, extras: []}]`);
+  assert.match(run('catbarCartMarkup()'), /cx-catbar-cart has-items[\s\S]*2 items · SAR 36\.00/);
+  run(`state.cart = []`);
   assert.equal(html.includes('cx-again'), false);                      // no earlier order on this device
   assert.equal(html.includes("go('menu')"), false);
 });
@@ -197,8 +201,9 @@ test('checkout: the saved address is already chosen in one line; Change opens a 
 test('files changed in CX-4 have new cache keys and the classic rules are untouched', () => {
   const html = read('index.html'), css = read('css/theme.css'), spy = read('js/theme.js');
   assert.ok(html.includes('js/brand-config.js?v=20261006-cx4"'));
-  assert.ok(html.includes('js/app.js?v=20261006-cx4g"'));
-  assert.ok(html.includes('css/theme.css?v=20261006-cx4h"'));
+  for (const file of ['css/theme.css']) assert.ok(html.includes(`${file}?v=20261006-cx4i"`), file);
+  assert.ok(html.includes('js/app.js?v=20261006-b1"'));   // Batch B1 (table mode) changed app.js
+  assert.ok(css.includes('.cx-catbar-cart { display: none; }'));                       // phones keep the cart dock
   assert.match(css, /@media \(min-width: 1025px\) \{\n  html\[data-structure="scroll"\] #app > \.home-screen > \.cx-catbar \{\n    position: sticky;/);   // laptop too
   for (const file of ['js/delivery-location.js', 'js/i18n.js']) assert.ok(html.includes(`${file}?v=20261006-cx4f"`), file);
   assert.ok(html.includes('js/theme.js?v=20261006-cx4c"'));

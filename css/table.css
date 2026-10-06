@@ -1,0 +1,134 @@
+/* Batch B1 (373): QR table ordering. The "Table 7" card takes the place of the
+   Dine-in / Takeaway / Delivery choice on Home and in the checkout.
+   Neutral surface on purpose: orange stays for actions, gold for offers and rewards. */
+.table-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--cx-radius-md, 14px);
+  box-shadow: var(--cx-shadow-1, 0 4px 14px rgba(0, 0, 0, 0.18));
+  color: var(--text);
+}
+.table-chip-checkout { flex-wrap: wrap; margin-bottom: 20px; padding: 13px 14px; }
+.table-chip-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+.table-chip-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.table-chip-copy { flex: 1 1 auto; min-width: 0; text-align: start; }
+.table-chip-copy small {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.table-chip-copy strong {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.table-chip-note {
+  flex: 1 1 100%;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: start;
+}
+/* A calm "you are connected to this table" light. */
+.table-chip-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-inline-end: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(61, 204, 122, 0.16);
+  vertical-align: 1px;
+}
+.table-chip-leave {
+  flex: 0 0 auto;
+  max-width: 38%;
+  min-height: 44px;
+  padding: 0 2px;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: end;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.table-chip-leave:active { color: var(--text); }
+
+/* "Leave Table 7?" */
+.table-chip-ask { flex-wrap: wrap; align-items: center; }
+.table-chip-ask .table-chip-copy { flex: 1 1 100%; }
+.table-chip-ask .table-chip-copy strong { font-size: 15px; }
+.table-chip-ask .table-chip-copy small { white-space: normal; font-weight: 500; margin-top: 2px; }
+.table-chip-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex: 1 1 100%; }
+.table-chip-actions button {
+  min-height: 44px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.table-chip-actions .table-chip-go { border-color: var(--orange); color: var(--orange); }
+
+/* While the server is asked which table this is. */
+.table-chip-wait .table-chip-copy strong { color: var(--muted); font-size: 15px; font-weight: 600; }
+.table-chip-wait .table-chip-icon { animation: table-chip-wait 1.4s ease-in-out infinite; }
+@keyframes table-chip-wait { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .table-chip-wait .table-chip-icon { animation: none; } }
+
+body.light-theme .table-chip { border-color: #d8d3ca; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06); }
+body.light-theme .table-chip-icon { background: #f4f2ee; border-color: #e3e0d8; }
+body.light-theme .table-chip-actions button { border-color: #d8d3ca; }
+body.light-theme .table-chip-actions .table-chip-go { border-color: var(--orange); }
+
+/* Desktop website mode: the card sits where the order-type choice sits, beside the search box. */
+@media (min-width: 1025px) {
+  .home-screen .table-chip-home { width: 42%; margin-top: -78px; margin-inline-start: auto; margin-bottom: 16px; }
+  .table-chip-checkout { max-width: 720px; }
+}

@@ -68,6 +68,9 @@ editingAddressId: null,
 let cartLineSequence = 0;
 function newCartKey() { return "line-" + (++cartLineSequence); }
 function cartCopy(en, ar) { return state.lang === "ar" ? ar : en; }
+/* Batch B1: QR table ordering lives in table.js. null / "" when the customer is not at a table. */
+function tableOn() { return typeof tableActive === "function" ? tableActive() : null; }
+function tableChip(place) { return typeof tableChipMarkup === "function" ? tableChipMarkup(place) : ""; }
 // Batch H: restaurantAcceptingOrders / orderTypeOpen / restaurantClosedMessage live in ordering-hours.js (the server decides).
 let cartDraftRestored = false;
 function saveCartDraft() {
@@ -99,6 +102,7 @@ function restoreCartDraft() {
     });
     if (['delivery','takeaway','dinein'].includes(draft.orderType)) state.orderType=draft.orderType;
   } catch (_) { /* Ignore malformed drafts; never trust stored prices or HTML. */ }
+  if (typeof tableEnforce === "function") tableEnforce();   // Batch B1: at a table it stays dine-in
 }
 function unavailableTimeMessage() {
   return cartCopy(
@@ -1004,6 +1008,7 @@ function deliveryOffered() {
   return typeof orderingState !== "function" || orderingState("delivery").reason !== "unavailable" || !featureOn("ordering");
 }
 function setHomeOrderType(type, button) {
+  if (tableOn()) return;   // Batch B1: at a table the order type is not a choice
   state.orderType = type;
   saveCartDraft();
   state.orderTiming = "asap";
@@ -1198,13 +1203,13 @@ function home() {
   </div>
 
 </div>
-      <div class="toggle home-order-toggle">
+      ${tableChip("home") || `<div class="toggle home-order-toggle">
   <button class="${state.orderType === "dinein" ? "on" : ""}" onclick="setHomeOrderType('dinein', this)">${t("dineIn")}</button>
 
   <button class="${state.orderType === "takeaway" ? "on" : ""}" onclick="setHomeOrderType('takeaway', this)">${t("takeaway")}</button>
 
   <button class="${state.orderType === "delivery" ? "on" : ""}" onclick="setHomeOrderType('delivery', this)" ${deliveryOffered() ? "" : `disabled aria-disabled="true" title="${cartCopy("Delivery is not available from this restaurant.", "التوصيل غير متاح من هذا المطعم.")}"`}>${t("delivery")}</button>
-</div>
+</div>`}
 
 ${homeOrderNoteMarkup()}
       ${homeBannersMarkup()}
@@ -1335,6 +1340,15 @@ function specialCardMarkup(i) {
             </button>
           </article>`;
 }
+/** Laptop only: the cart, with its amount, rides at the end of the frozen category row. */
+function catbarCartMarkup() {
+  const count = cartCount();
+  const subtotal = roundMoney(state.cart.reduce((sum, line) => sum + linePrice(line), 0));
+  return `<button type="button" class="cx-catbar-cart ${count ? "has-items" : ""}" onclick="go('cart')" aria-label="${cartCopy("View cart", "عرض السلة")}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2.2l2.3 11h10.4l2-8H6.4"></path><circle cx="9" cy="19" r="1.4"></circle><circle cx="17" cy="19" r="1.4"></circle></svg>
+      <span>${count ? `${itemsCountLabel(count)} · ${money(subtotal)}` : cartCopy("Cart", "السلة")}</span>
+    </button>`;
+}
 function homeScroll() {
   homeDeliverySync();
   const sections = menuSections();
@@ -1358,16 +1372,17 @@ function homeScroll() {
         </div>
         <div id="homeSearchResults" class="home-search-results ${state.searchQuery.trim() ? "show" : ""}">${homeSearchResultsMarkup()}</div>
       </div>
-      <div class="toggle home-order-toggle">
+      ${tableChip("home") || `<div class="toggle home-order-toggle">
         <button class="${state.orderType === "dinein" ? "on" : ""}" onclick="setHomeOrderType('dinein', this)">${t("dineIn")}</button>
         <button class="${state.orderType === "takeaway" ? "on" : ""}" onclick="setHomeOrderType('takeaway', this)">${t("takeaway")}</button>
         <button class="${state.orderType === "delivery" ? "on" : ""}" onclick="setHomeOrderType('delivery', this)" ${deliveryOffered() ? "" : `disabled aria-disabled="true"`}>${t("delivery")}</button>
-      </div>
+      </div>`}
       ${homeOrderNoteMarkup()}
       ${homeBannersMarkup()}
       <div class="cx-catbar" id="cxMenuTop" role="tablist" aria-label="${t("categories")}">
         <button class="cx-catbar-search" onclick="menuJump('search')" aria-label="${t("search")}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></button>
         ${menuFirstLoad() ? "" : sections.map((sec, n) => `<button class="cx-chip ${n === 0 ? "on" : ""}" data-chip="${sec.key}" onclick="menuJump('${sec.key}')">${sec.title}</button>`).join("")}
+        ${catbarCartMarkup()}
       </div>
       ${menuFirstLoad() ? `<div class="scroll">${skeletonTiles("special", 3)}</div><div class="grid">${skeletonTiles("cat", 4)}</div>` : ""}
       ${!sections.length && menuReady() ? `<p class="menu-hint">${menuText("noItems")}</p>` : ""}
@@ -1628,6 +1643,7 @@ function setCheckoutTiming(value, button) {
 }
 
 function setCheckoutOrderType(type, button) {
+  if (tableOn()) return;   // Batch B1
   state.orderType = type;
   saveCartDraft();
   state.orderTiming = "asap";
@@ -1948,7 +1964,7 @@ function checkout() {
         ${t("orderType")}
       </h3>
 
-      <div class="checkout-order-types">
+      ${tableChip("checkout") || `<div class="checkout-order-types">
 
         <button
           class="${state.orderType === "delivery" ? "active" : ""}"
@@ -1974,9 +1990,9 @@ function checkout() {
 
       </div>
 
-      <div class="checkout-location-card${state.orderType === "delivery" && state.deliveryQuoteError ? " cx-addr-out" : ""}">${checkoutLocationInner()}</div>
+      <div class="checkout-location-card${state.orderType === "delivery" && state.deliveryQuoteError ? " cx-addr-out" : ""}">${checkoutLocationInner()}</div>`}
 
-      ${orderTypeOpen() ? `
+      ${orderTypeOpen() && !tableChip("checkout") ? `
       <h3 class="checkout-section-title checkout-time-title">
         ${t("whenOrder")}
       </h3>
@@ -2022,6 +2038,10 @@ function checkout() {
     </section>${checkoutAddressSheetMarkup()}`;
 }
 
+/** Batch B1: " · Table 7" for the order's own cards (escaped in table.js). */
+function orderTableSuffix(order) {
+  return order && typeof tableOrderSuffix === "function" ? tableOrderSuffix(order.backendId, order.tableLabel) : "";
+}
 function confirmation() {
   const o = state.order;
 
@@ -2066,7 +2086,7 @@ function confirmation() {
           </p>
 
           <span class="confirmation-type">
-            ${t(typeKey)}
+            ${t(typeKey)}${orderTableSuffix(o)}
           </span>
           ${deliveryConfirmationMarkup(o)}
 
@@ -2134,7 +2154,7 @@ function confirmation() {
         </p>
 
         <span class="confirmation-type">
-          ${t(typeKey)}
+          ${t(typeKey)}${orderTableSuffix(o)}
         </span>
         ${deliveryConfirmationMarkup(o)}
 
@@ -2198,6 +2218,7 @@ function reorderFromHistory(id) {
   state.cart = order.items.map((item) => ({ ...item }));
   reconcileMenuCart();
   state.orderType = order.orderType || "dinein";
+  if (typeof tableEnforce === "function") tableEnforce();   // Batch B1
 
   go("cart");
 }
@@ -2292,7 +2313,7 @@ const idx = o ? customerStatusStep(o.status) : 0;
                               ? "takeaway"
                               : "delivery"
                           )
-                        }
+                        }${orderTableSuffix(o)}
                       </span>
                     </div>
 
@@ -3965,6 +3986,7 @@ ${typeof rewardsOn === "function" && rewardsOn() ? `
 
 
 function render() {
+  if (typeof tableEnforce === "function") tableEnforce();   // Batch B1: at a table every screen is drawn as dine-in, now
   saveCartDraft();
   applyDir();
   const map = {
@@ -4364,13 +4386,15 @@ function orderAttemptSave() {
   } catch (_) {}
 }
 function orderAttemptClear() { orderAttempt.key = null; orderAttempt.id = null; orderAttemptSave(); orderAttempt.key = null; }
-function orderAttemptId(cart, address) {
+function orderAttemptId(cart, address, table) {
   orderAttemptLoad();
   const key = JSON.stringify([
     state.orderType, state.orderTiming, typeof getScheduledFor === "function" ? getScheduledFor() : null, address || "",
     (state.customer.mobile || "").trim(), (state.customer.name || "").trim(), (state.customer.email || "").trim(),
     state.couponOn ? (state.voucher?.code || "") : "", state.redeemPoints || 0, state.notes || "",
     cart.map(l => [l.id, l.qty, l.size || null, l.choice || null, (l.extras || []).map(e => e.id || e.name || e).sort(), l.spice || "", l.notes || ""]),
+    // Batch B1: the same cart at another table is another order (nothing is added without a table).
+    ...(table && table.key ? [["table", table.key]] : []),
   ]);
   if (orderAttempt.key !== key || !orderAttempt.id) { orderAttempt.key = key; orderAttempt.id = crypto.randomUUID(); orderAttemptSave(); }
   return orderAttempt.id;
@@ -4378,6 +4402,9 @@ function orderAttemptId(cart, address) {
 
 async function createOrderAfterVerification() {
   if (!orderTypeOpen()) { toast(orderingClosedTitle() + ". " + restaurantClosedMessage(),7000); return; }
+  // Batch B1: a table scan that is still on its way is answered first; at a table it is dine-in, now
+  // (the hours of dine-in are checked again below, before the order is sent).
+  if (typeof tableSettled === "function") { await tableSettled(); tableEnforce(); }
   if (!(await validateMenuCart())) return;
   if (!checkOfferCartRules()) return;
   if (state.orderSubmitting) return;
@@ -4408,6 +4435,8 @@ async function createOrderAfterVerification() {
       return toast(cartCopy("Delivery fee changed. Please review the total and place your order again.","تغيرت رسوم التوصيل. راجع الإجمالي وأكد الطلب مجدداً."),6000);
     }
   }
+  const table = tableOn();   // Batch B1: the table this order is for (the same one for the id and the request)
+  if (table && typeof tableEnforce === "function") tableEnforce();
   if (state.orderSubmitting || !state.cart.length) return;
   if (!orderTypeOpen()) { toast(orderingClosedTitle() + ". " + restaurantClosedMessage(),7000); return; }
   // Gate 4 (280): the server takes orders from signed-in customers only.
@@ -4428,15 +4457,15 @@ async function createOrderAfterVerification() {
   // Gate 3: one id per cart as it stands. A retry after a lost answer sends
   // the same id and the server hands back the order it already made; a
   // changed cart gets a new id.
-  const clientOrderId = orderAttemptId(cart, address);
+  const clientOrderId = orderAttemptId(cart, address, table);
   /* A retry while the first request is still running meets the server's unique
      id; one quiet re-send a moment later then returns that order. */
   const submitOnce = async (payload) => {
-    try { return await submitCustomerOrder(payload); }
+    try { return await submitCustomerOrder(payload, table); }
     catch (error) {
       if (!/duplicate key|23505|client_order_id/i.test(String(error?.message || ""))) throw error;
       await new Promise(resolve => setTimeout(resolve, 1500));
-      return submitCustomerOrder(payload);
+      return submitCustomerOrder(payload, table);
     }
   };
   try {
@@ -4495,6 +4524,10 @@ async function createOrderAfterVerification() {
       createdAt: Date.parse(result.created_at),
       step: 0,
     };
+    if (table) {   // Batch B1: "Dine-in · Table 7" on the order's cards, also after a reload
+      state.order.tableLabel = tableClean(result.table_label, 12) || table.label;
+      tableRememberOrder(result.id, state.order.tableLabel);
+    }
     if(state.orderType==="delivery"){state.lastDeliveryAddressId=defaultAddress.id;state.checkoutPinConfirmedId=null;}
     orderAttemptClear();
     state.cart = [];
@@ -4522,7 +4555,14 @@ async function createOrderAfterVerification() {
       orderAttemptClear();
       go("checkout");
       setTimeout(() => toast(cartCopy("Please place your order again.", "يرجى تأكيد الطلب مرة أخرى."), 6000));
+    } else if (typeof tableRefused === "function" && tableRefused(rawMessage)) {
+      // Batch B1: the table's QR was switched off or replaced. Table mode ends, the cart stays,
+      // and the checkout comes back with the usual order types.
+      orderAttemptClear();
+      go("checkout");
+      setTimeout(() => toast(tableText("inactive"), 7000));
     } else if (error?.hint === "module_off") {
+      if (table && typeof tableRecheck === "function") tableRecheck();   // Batch B1: was it the tables that were switched off?
       // Batch E: ordering (or delivery) was switched off for this restaurant. The cart stays;
       // read the status again so the checkout shows the notice instead of another try.
       go("checkout");
@@ -4613,6 +4653,8 @@ try {
       orderTab: kept.orderTab ?? state.orderTab, itemFrom: kept.itemFrom});
   }
 } catch (_) {}
+// Batch B1: a table's QR (?t=) is read and taken out of the address before the first draw.
+if (typeof tableBoot === "function") tableBoot();
 render();
 
 bootstrapCustomerAuth();

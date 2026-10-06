@@ -436,7 +436,7 @@ const LEGACY_CUSTOMER_ORDER_HISTORY_STORAGE_KEY = "meerath-customer-order-histor
 const customerOrderConnection = { pending: null, timer: null };
 
 async function customerOrderRpc(name, params) {
-  const signedInOnly = ["oracy_create_customer_order_v1", "oracy_create_pin_delivery_order_v2"];
+  const signedInOnly = ["oracy_create_customer_order_v1", "oracy_create_pin_delivery_order_v2", "oracy_create_table_order_v1"];
   let accessToken = null;
   let tokenError = null;
   try {
@@ -478,6 +478,9 @@ async function customerOrderRpc(name, params) {
     let detail = null;
     try { detail = await response.json(); } catch (_) {}
     const refusal = new Error(customerRpcMessage(response.status, detail));
+    // Batch B1: the table scan tells "this server has no such function" (404) from a refusal.
+    refusal.status = response.status;
+    if (detail && typeof detail.code === "string") refusal.code = detail.code;
     // Batch E (283): a part of the app was switched off for this restaurant. Ask the
     // server for the status again, so the screen shows the notice instead of a retry.
     if (detail && detail.code === "P0001" && detail.hint === "module_off") {
@@ -503,8 +506,18 @@ function customerRpcMessage(status, detail) {
   return "Order service is unavailable. Please try again.";
 }
 
-async function submitCustomerOrder(order) {
+async function submitCustomerOrder(order, table) {
   const branchId = selectMenuBranch(menuConnection.payload?.branches || []);
+  // Batch B1 (373): an order from a table's QR. The key names the restaurant, the branch and the
+  // table; the server forces dine-in, now. A table of another branch is never sent.
+  if (table && table.key) {
+    if (table.branchId !== branchId) throw new Error(TABLE_INACTIVE_EN);
+    return customerOrderRpc("oracy_create_table_order_v1", {
+      p_key: table.key,
+      p_order: {...order, fulfillment_type: "dinein", schedule_type: "asap", order_timing: "asap", scheduled_for: null,
+        address: "", delivery_address_id: null, delivery_address_version: null, expected_delivery_fee: null},
+    });
+  }
   return customerOrderRpc(order.fulfillment_type === "delivery" ? "oracy_create_pin_delivery_order_v2" : MENU_CONFIG.rpc.createOrder, {
     p_restaurant_id: MENU_CONFIG.restaurantId,
     p_branch_id: branchId,
