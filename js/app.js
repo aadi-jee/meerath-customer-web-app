@@ -602,7 +602,7 @@ function nav(active) {
     // CX-4: Home is the menu in the scroll structure, so its place goes to Rewards.
     // With points switched off for the restaurant, the place goes to Offers instead.
     !structureIs("scroll") ? ["menu", icons.menu, "menu"]
-      : (typeof rewardsOn === "function" && rewardsOn() ? ["rewards", rewardsIcon, "rewards"] : ["offers", offersIcon, "offers"]),
+      : (rewardsTabOn() ? ["rewards", rewardsIcon, "rewards"] : ["offers", offersIcon, "offers"]),
     ["track", icons.orders, "orders"],
     ["more", icons.more, "more"],
     ["account", icons.account, "account"],
@@ -1249,6 +1249,21 @@ function itemCardMarkup(i) {
 // CX-4: the "scroll" structure. Home is the whole menu in one scroll, with
 // one row of category buttons that follows the customer.
 // ---------------------------------------------------------------------
+/**
+ * Whether the second tab is Rewards (else Offers). The answer must not change while
+ * the app is still asking the server, so until the points rules arrive it uses what
+ * this device learned last time (Rewards when it has never been told otherwise).
+ */
+function rewardsTabOn() {
+  if (!APP_CONFIG.features.rewards || typeof rewardsState === "undefined" || typeof rewardsOn !== "function") return false;
+  if (rewardsState.rules) {
+    const on = rewardsOn();
+    try { localStorage.setItem(appStorageKey("rewardsTab"), on ? "1" : "0"); } catch (_) {}
+    return on;
+  }
+  if (typeof loadRewardsRules === "function") loadRewardsRules();
+  return readAppStorage("rewardsTab") !== "0";
+}
 function structureIs(name) {
   return typeof brandTheme === "function" && brandTheme().structure === name;
 }

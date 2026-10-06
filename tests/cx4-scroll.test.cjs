@@ -88,10 +88,16 @@ test('Menu and category links land on Home; Rewards takes the Menu tab', () => {
   assert.equal(run('state.screen') + '|' + run('homeJumpTarget'), 'home|menu');
   run(`go('listing', {categoryId: 'gone'})`);
   assert.equal(run('homeJumpTarget'), 'menu');
+  // the second tab does not flip while the points rules are still loading
+  run('var rewardsState = {rules: null}; var loadRewardsRules = () => {}; rewardsOn = () => !!(rewardsState.rules && rewardsState.rules.enabled)');
   const bar = run('nav("home")');
-  assert.ok(bar.includes("go('offers')"));                              // points are off in this fixture
+  assert.ok(bar.includes("go('rewards')"));                             // not known yet: Rewards
   assert.equal(bar.includes("go('menu')"), false);
-  run('rewardsOn = () => true');
+  run('rewardsState.rules = {enabled: false}');
+  assert.ok(run('nav("home")').includes("go('offers')"));               // the restaurant has points off
+  run('rewardsState.rules = null');
+  assert.ok(run('nav("home")').includes("go('offers')"));               // remembered on this device
+  run('rewardsState.rules = {enabled: true}');
   assert.ok(run('nav("home")').includes("go('rewards')"));
   run(`state.screen = 'rewards'`);
   assert.match(run('nav("account")'), /class="active" onclick="go\('rewards'\)"/);
@@ -104,7 +110,7 @@ test('Menu and category links land on Home; Rewards takes the Menu tab', () => {
 
 test('Home carries no "Order again" or points card: those live under Orders and Rewards', () => {
   const run = environment('scroll');
-  run(`state.orderHistory = [{id:'o1', orderType:'takeaway', items:[{id:I(1), qty:2}]}]; rewardsOn = () => true;`);
+  run(`state.orderHistory = [{id:'o1', orderType:'takeaway', items:[{id:I(1), qty:2}]}];`);
   const html = run('homeScroll()');
   for (const gone of ['cx-again', 'cx-points', 'reorderFromHistory']) assert.equal(html.includes(gone), false, gone);
 });
@@ -112,7 +118,8 @@ test('Home carries no "Order again" or points card: those live under Orders and 
 test('files changed in CX-4 have new cache keys and the classic rules are untouched', () => {
   const html = read('index.html'), css = read('css/theme.css'), spy = read('js/theme.js');
   assert.ok(html.includes('js/brand-config.js?v=20261006-cx4"'));
-  for (const file of ['js/app.js', 'js/theme.js', 'css/theme.css']) assert.ok(html.includes(`${file}?v=20261006-cx4c"`), file);
+  assert.ok(html.includes('js/app.js?v=20261006-cx4d"'));
+  for (const file of ['js/theme.js', 'css/theme.css']) assert.ok(html.includes(`${file}?v=20261006-cx4c"`), file);
   assert.ok(css.includes('#app > .home-screen > .home-topbar {\n    position: sticky;'));   // frozen header
   const added = css.slice(css.indexOf('18. STRUCTURE "scroll"'));
   // every rule that changes an existing element is scoped to the scroll structure
