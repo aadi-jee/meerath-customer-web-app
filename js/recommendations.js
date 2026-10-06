@@ -178,7 +178,7 @@ function recoAddedFromDetail(itemId) {
 function recoCard(i, placement) {
   return `<article class="pairing-card">
       <button class="pairing-detail" onclick="openItem('${i.id}')" aria-label="${loc(i, "name")}">
-        <img src="${i.image}" alt="" loading="lazy"><span>${loc(i, "name")}</span></button>
+        ${typeof photoPlaceholder === "function" && !hasOwnPhoto(i) ? photoPlaceholder("cx-ph-pair") : `<img src="${i.image}" alt="" loading="lazy">`}<span>${loc(i, "name")}</span></button>
       ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
       ${i.recoSource === "auto" ? `<small class="reco-why">${recoCopy("Often ordered together", "يُطلب معه غالباً")}</small>` : ""}
       ${i.recoSource === "fill" ? `<small class="reco-why">${recoCopy("Complete your meal", "أكمل وجبتك")}</small>` : ""}
@@ -218,7 +218,7 @@ function nextTimeRecommendationsMarkup(order) {
     <div class="pairing-grid">${list.map(e => {
       const i = itemById(e.id);
       return `<article class="pairing-card"><button class="pairing-detail" onclick="openItem('${i.id}')" aria-label="${loc(i, "name")}">
-        <img src="${i.image}" alt="" loading="lazy"><span>${loc(i, "name")}</span></button>
+        ${typeof photoPlaceholder === "function" && !hasOwnPhoto(i) ? photoPlaceholder("cx-ph-pair") : `<img src="${i.image}" alt="" loading="lazy">`}<span>${loc(i, "name")}</span></button>
         <div class="pairing-price">${itemPriceMarkup(i)}</div></article>`;
     }).join("")}</div></section>`;
 }

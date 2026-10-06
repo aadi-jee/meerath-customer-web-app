@@ -78,7 +78,7 @@ function cartRecommendationsMarkup() {
   return `<section class="pairings"><h3>${cartCopy('Pairs well with your order','إضافات تناسب طلبك')}</h3>
     <div class="pairing-grid">${items.map(i => `<article class="pairing-card">
       <button class="pairing-detail" onclick="openItem('${i.id}')" aria-label="${loc(i,'name')}">
-        <img src="${i.image}" alt="" loading="lazy"><span>${loc(i,'name')}</span></button>
+        ${typeof photoPlaceholder === 'function' && !hasOwnPhoto(i) ? photoPlaceholder('cx-ph-pair') : `<img src="${i.image}" alt="" loading="lazy">`}<span>${loc(i,'name')}</span></button>
       <div class="pairing-price">${itemPriceMarkup(i)}</div>
       ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ''}
       <button class="btn btn-primary" onclick="addRecommended('${i.id}')">+ ${t('add')}</button>

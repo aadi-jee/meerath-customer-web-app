@@ -647,13 +647,13 @@ function offerLabel(offer) {
   const amount = offer.type === "percentage" ? `${offer.amount}%` : money(offer.amount);
   return state.lang === "ar" ? `خصم ${amount}` : `${amount} off`;
 }
-/** CX-2: an item or category without its own photo gets a monogram tile, never the logo. */
+/** CX-2: an item or category without its own photo gets a placeholder icon, never the logo. */
 function hasOwnPhoto(row) {
   return !!row && !!row.image && row.image !== APP_CONFIG.brand.logo;
 }
-function monogramTile(row, extraClass = "") {
-  const name = String((state.lang === "ar" ? row.nameAr || row.name : row.name) || "").trim();
-  return `<span class="cx-mono ${extraClass}" aria-hidden="true">${escapeHtml(Array.from(name)[0] || "")}</span>`;
+/** A quiet dish icon, the same size as the photo it stands in for. */
+function photoPlaceholder(extraClass = "") {
+  return `<span class="cx-ph ${extraClass}" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18.5h18"></path><path d="M5 18.5a7 7 0 0 1 14 0"></path><path d="M12 9V7.6"></path><circle cx="12" cy="6.4" r="1.1"></circle></svg></span>`;
 }
 /** CX-2: placeholders shown only while the first menu load is still running. */
 function menuFirstLoad() {
@@ -1098,7 +1098,7 @@ function home() {
   ${t("deliveryScope")}
 </div>
       ${homeBannersMarkup()}
-      <div class="h-row"><h3>${t("todaysSpecial")}</h3><button class="link" onclick="go('menu')">${t("seeAll")}</button></div>
+      <div class="h-row"><h3><span class="cx-text-shimmer">${t("todaysSpecial")}</span></h3><button class="link" onclick="go('menu')">${t("seeAll")}</button></div>
       <div class="scroll">
         ${!specials.length && menuReady() ? `<p class="menu-hint">${menuText("noSpecials")}</p>` : ""}
         ${menuFirstLoad() ? skeletonTiles("special", 3) : ""}
@@ -1107,7 +1107,7 @@ function home() {
             (i) => `
           <article class="special-card">
             <button class="special-open" onclick="openItem('${i.id}')" aria-label="${loc(i, "name")}">
-              ${hasOwnPhoto(i) ? `<img src="${i.image}" alt="" loading="lazy" />` : monogramTile(i, "cx-mono-special")}
+              ${hasOwnPhoto(i) ? `<img src="${i.image}" alt="" loading="lazy" />` : photoPlaceholder("cx-ph-special")}
               ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
               <h4>${loc(i, "name")}</h4>
             </button>
@@ -1125,7 +1125,7 @@ function home() {
           .map(
             (c) =>
               `<button class="cat cat-photo" onclick="go('listing',{categoryId:'${c.id}'})">
-  ${hasOwnPhoto(c) ? `<img src="${c.image}" alt="${loc(c, "name")}" loading="lazy" />` : monogramTile(c, "cx-mono-cat")}
+  ${hasOwnPhoto(c) ? `<img src="${c.image}" alt="${loc(c, "name")}" loading="lazy" />` : photoPlaceholder("cx-ph-cat")}
   <span class="cat-label">${loc(c, "name")}</span>
 </button>`
           )
@@ -1147,7 +1147,7 @@ function menu() {
         ${menuFirstLoad() ? skeletonTiles("cat", 6) : ""}
         ${CATEGORIES.map(
           (c) =>
-            `<button class="cat cat-photo" onclick="go('listing',{categoryId:'${c.id}'})">${hasOwnPhoto(c) ? `<img src="${c.image}" alt="${loc(c, "name")}" loading="lazy" />` : monogramTile(c, "cx-mono-cat")}${loc(c, "name")}</button>`
+            `<button class="cat cat-photo" onclick="go('listing',{categoryId:'${c.id}'})">${hasOwnPhoto(c) ? `<img src="${c.image}" alt="${loc(c, "name")}" loading="lazy" />` : photoPlaceholder("cx-ph-cat")}${loc(c, "name")}</button>`
         ).join("")}
       </div>
     </section>
@@ -1168,8 +1168,8 @@ function listing() {
       <div class="menu-items-grid">
       ${!items.length && menuReady() ? `<p class="menu-hint">${menuText("noItems")}</p>` : ""}
       ${items.map(i => `
-        <article class="item ${canOrderItem(i) ? "" : "menu-unavailable"} ${hasOwnPhoto(i) ? "" : "cx-no-photo"}">
-          ${hasOwnPhoto(i) ? `<img src="${i.image}" alt="${loc(i, "name")}" loading="lazy" onclick="openItem('${i.id}')" />` : ""}
+        <article class="item ${canOrderItem(i) ? "" : "menu-unavailable"}">
+          ${hasOwnPhoto(i) ? `<img src="${i.image}" alt="${loc(i, "name")}" loading="lazy" onclick="openItem('${i.id}')" />` : `<span class="cx-ph-tap" onclick="openItem('${i.id}')">${photoPlaceholder("cx-ph-item")}</span>`}
           <div onclick="openItem('${i.id}')">
             ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
             ${i.bestSeller ? `<span class="badge">${t("bestSeller")}</span>` : ""}
@@ -1203,7 +1203,7 @@ function detail() {
   const dish = loc(i, "name");
   return `
     <section class="screen detail-screen">
-      <img class="hero-img" src="${i.image}" alt="${dish}" />
+      ${hasOwnPhoto(i) ? `<img class="hero-img" src="${i.image}" alt="${dish}" />` : photoPlaceholder("hero-img cx-ph-hero")}
       <div class="topbar" style="margin-top:-48px;position:relative">
         ${back(editing ? "cart" : itemBackScreen())}
         ${cartButton()}
@@ -1272,7 +1272,7 @@ function cart() {
       const saved = roundMoney(Math.max(0, (l.basePrice ?? item?.basePrice ?? l.price) - l.price) * l.qty);
       return `<div class="cart-line cart-editable" data-cart-key="${escapeHtml(l.cartKey)}" onclick="cartRowClick(event,${idx})">
         <button class="cart-image-link" onclick="openCartItem(${idx})" aria-label="${cartCopy("Edit", "تعديل")} ${name}">
-          ${hasOwnPhoto(l) ? `<img src="${l.image}" alt="" />` : monogramTile(item || {name: ""}, "cx-mono-cart")}
+          ${hasOwnPhoto(l) ? `<img src="${l.image}" alt="" />` : photoPlaceholder("cx-ph-cart")}
         </button>
         <div class="cart-line-content">
           <button class="cart-name-link" onclick="openCartItem(${idx})"><h4>${name}</h4></button>

@@ -159,10 +159,12 @@ body.light-theme .history-status.account-status-negative {
   /* Frozen total and action at the bottom of cart and checkout */
   .cx-cta-bar {
     position: sticky;
-    bottom: 0;
+    /* like the top bars, measured from inside the screen padding: sit 8px above the bottom bar */
+    bottom: calc(-1 * var(--cx-pad-b, 28px));
     z-index: 15;
     margin-top: 16px;
-    padding: 10px 0;
+    margin-bottom: calc(8px - var(--cx-pad-b, 28px));
+    padding: 8px 0;
     isolation: isolate;
   }
   .cx-cta-bar::before {
@@ -179,7 +181,7 @@ body.light-theme .history-status.account-status-negative {
     border-top: 1px solid var(--cx-hairline);
     pointer-events: none;
   }
-  .checkout-screen .cx-cta-bar { padding-bottom: calc(10px + var(--safe)); }
+  .checkout-screen .cx-cta-bar { padding-bottom: calc(8px + var(--safe)); }
   .cx-cta-bar > .btn { width: 100%; margin-top: 0; }
 }
 .cx-cta-total {
@@ -187,7 +189,7 @@ body.light-theme .history-status.account-status-negative {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: var(--muted);
   font-size: var(--cx-text-sm);
 }
@@ -249,10 +251,15 @@ body.light-theme .history-status.account-status-negative {
   background-image: linear-gradient(135deg, rgba(224, 177, 90, 0.16), rgba(224, 177, 90, 0) 42%, rgba(224, 177, 90, 0.1));
 }
 
-/* ---- 7. Passing light (one main button per screen) ----------------------- */
+/* ---- 7. Sheen sweep / continuous shimmer ---------------------------------
+   Strongest on the one main button of a screen. The selected order type and
+   the "add" of a recommended dish carry a softer, slower one. */
 .cx-cta-bar > .btn-primary,
 .detail-screen .btn-primary[onclick="addFromDetail()"],
 .splash > .btn-primary,
+.home-order-toggle button.on,
+.checkout-order-types button.active,
+.pairing-card > .btn.pairing-add,
 :root[data-style="heritage"] .account-rewards-card {
   position: relative;
   overflow: hidden;
@@ -260,36 +267,129 @@ body.light-theme .history-status.account-status-negative {
 .cx-cta-bar > .btn-primary:not(:disabled)::after,
 .detail-screen .btn-primary[onclick="addFromDetail()"]:not(:disabled)::after,
 .splash > .btn-primary::after,
+.home-order-toggle button.on::after,
+.checkout-order-types button.active::after,
+.pairing-card > .btn.pairing-add:not(:disabled)::after,
 :root[data-style="heritage"] .account-rewards-card::after {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
-  width: 60%;
-  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.34) 50%, rgba(255, 255, 255, 0) 100%);
+  width: 55%;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0) 100%);
   transform: translateX(-130%);
   pointer-events: none;
-  animation: cx-sheen 5.6s var(--cx-ease) 1.2s infinite;
+  animation: cx-sheen 3.8s linear infinite;
 }
+.home-order-toggle button.on::after,
+.checkout-order-types button.active::after {
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.17) 50%, rgba(255, 255, 255, 0) 100%);
+  animation-duration: 5.4s;
+  animation-delay: -1.9s;
+}
+.pairing-card > .btn.pairing-add:not(:disabled)::after {
+  background: linear-gradient(105deg, rgba(240, 138, 26, 0) 0%, rgba(240, 138, 26, 0.3) 50%, rgba(240, 138, 26, 0) 100%);
+  animation-duration: 4.6s;
+  animation-delay: -0.8s;
+}
+.pairing-card > .btn.pairing-add:not(:disabled) b { animation: cx-pulse 2.6s ease-in-out infinite; }
 :root[data-style="heritage"] .account-rewards-card::after {
   z-index: -1;
   background: linear-gradient(105deg, rgba(224, 177, 90, 0) 0%, rgba(224, 177, 90, 0.2) 50%, rgba(224, 177, 90, 0) 100%);
-  animation-duration: 8s;
+  animation-duration: 7s;
 }
 [dir="rtl"] .cx-cta-bar > .btn-primary:not(:disabled)::after,
 [dir="rtl"] .detail-screen .btn-primary[onclick="addFromDetail()"]:not(:disabled)::after,
 [dir="rtl"] .splash > .btn-primary::after,
+[dir="rtl"] .home-order-toggle button.on::after,
+[dir="rtl"] .checkout-order-types button.active::after,
+[dir="rtl"] .pairing-card > .btn.pairing-add:not(:disabled)::after,
 [dir="rtl"]:root[data-style="heritage"] .account-rewards-card::after {
   animation-name: cx-sheen-rtl;
 }
 @keyframes cx-sheen {
-  0% { transform: translateX(-130%); }
-  22%, 100% { transform: translateX(300%); }
+  from { transform: translateX(-130%); }
+  to { transform: translateX(330%); }
 }
 @keyframes cx-sheen-rtl {
-  0% { transform: translateX(300%); }
-  22%, 100% { transform: translateX(-130%); }
+  from { transform: translateX(330%); }
+  to { transform: translateX(-130%); }
+}
+@keyframes cx-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.16); }
+}
+
+/* Cart button with something in it: animated gradient border + breathing glow.
+   The button itself never changes size. */
+@property --cx-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+.cart-icon-btn.has-items { position: relative; }
+.cart-icon-btn.has-items::before {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(from var(--cx-angle), rgba(224, 177, 90, 0) 0deg 235deg, var(--gold) 315deg, rgba(255, 255, 255, 0.85) 345deg, rgba(224, 177, 90, 0) 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: cx-border-beam 3.6s linear infinite;
+}
+.cart-icon-btn.has-items::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 16px 3px rgba(240, 138, 26, 0.5);
+  opacity: 0.12;
+  pointer-events: none;
+  animation: cx-glow 3s ease-in-out infinite;
+}
+@keyframes cx-border-beam { to { --cx-angle: 360deg; } }
+@keyframes cx-glow {
+  0%, 100% { opacity: 0.12; }
+  50% { opacity: 0.75; }
+}
+
+/* Text shimmer: a light passing through a few words */
+body {
+  --cx-shim-base: rgba(244, 241, 234, 0.86);
+  --cx-shim-peak: #ffffff;
+  --cx-shim-link-peak: #ffe3bd;
+}
+body.light-theme {
+  --cx-shim-base: #171717;
+  --cx-shim-peak: #c98a2b;
+  --cx-shim-link-peak: #f0a94e;
+}
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .cx-text-shimmer,
+  .catering-card .catering-quote-callout {
+    background-image: linear-gradient(100deg, var(--cx-shim-base) 0%, var(--cx-shim-base) 40%, var(--cx-shim-peak) 50%, var(--cx-shim-base) 60%, var(--cx-shim-base) 100%);
+    background-size: 240% 100%;
+    background-position: 100% 0;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: cx-text-shimmer 5s linear infinite;
+  }
+  .catering-card .catering-quote-callout {
+    --cx-shim-base: var(--orange);
+    --cx-shim-peak: var(--cx-shim-link-peak);
+    animation-duration: 6.2s;
+    animation-delay: -2.4s;
+  }
+}
+@keyframes cx-text-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -40% 0; }
 }
 
 /* ---- 8. Touch feedback --------------------------------------------------- */
@@ -310,24 +410,28 @@ body.light-theme .history-status.account-status-negative {
 #app img { transition: opacity var(--cx-slow) var(--cx-ease); }
 #app img.cx-img-wait { opacity: 0; }
 
-/* No photo: a monogram tile instead of the logo */
-.cx-mono {
+/* No photo: a placeholder icon in a tile the size of the photo */
+.cx-ph {
   display: grid;
   place-items: center;
   width: 100%;
   border-radius: 12px;
   background:
-    radial-gradient(120% 90% at 20% 10%, rgba(224, 177, 90, 0.16), rgba(224, 177, 90, 0) 60%),
+    radial-gradient(120% 90% at 18% 8%, rgba(224, 177, 90, 0.2), rgba(224, 177, 90, 0) 62%),
+    linear-gradient(rgba(224, 177, 90, 0.07), rgba(224, 177, 90, 0.07)),
     var(--bg-2);
   border: 1px solid var(--cx-hairline);
   color: var(--cx-reward);
-  font-weight: 700;
-  line-height: 1;
 }
-.cx-mono.cx-mono-special { aspect-ratio: 4 / 3; border-radius: 10px; font-size: 34px; }
-#app .cat .cx-mono.cx-mono-cat { display: grid; aspect-ratio: 16 / 10; margin: 0; font-size: 38px; line-height: 1; color: var(--cx-reward); }
-.cx-mono.cx-mono-cart { width: 64px; height: 64px; font-size: 24px; }
-.item.cx-no-photo { grid-template-columns: minmax(0, 1fr) auto; padding-inline-start: 14px; }
+.cx-ph svg { width: 42%; max-width: 56px; height: auto; opacity: 0.85; }
+.cx-ph.cx-ph-special { aspect-ratio: 4 / 3; border-radius: 10px; }
+#app .cat .cx-ph.cx-ph-cat { display: grid; aspect-ratio: 16 / 10; margin: 0; }
+.cx-ph.cx-ph-cart { width: 64px; height: 64px; border-radius: 10px; }
+.cx-ph.cx-ph-item { width: 88px; height: 88px; }
+.cx-ph-tap { display: block; cursor: pointer; }
+.cx-ph.cx-ph-pair { aspect-ratio: 4 / 3; max-height: 92px; border-radius: 9px; }
+#app .detail-screen > .cx-ph.cx-ph-hero { display: grid; height: 220px; border-radius: 0; border-width: 0 0 1px; }
+.cx-ph.cx-ph-hero svg { width: 22%; max-width: 96px; }
 
 /* Item description: two lines, the item screen has the full text */
 .menu-items-grid .item h4 + p {
@@ -342,7 +446,7 @@ body.light-theme .history-status.account-status-negative {
 .cx-skel {
   border-radius: 14px;
   border: 1px solid var(--cx-hairline);
-  background: linear-gradient(100deg, var(--card) 30%, var(--bg-2) 50%, var(--card) 70%);
+  background: linear-gradient(100deg, var(--card) 30%, var(--line) 50%, var(--card) 70%);
   background-size: 220% 100%;
   animation: cx-skel 1.4s linear infinite;
 }
@@ -367,13 +471,39 @@ body.light-theme .history-status.account-status-negative {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ---- 12. Reduce motion: everything above stands still -------------------- */
+/* ---- 12. Light theme: nothing dark left behind ---------------------------- */
+:root[data-style="heritage"] .points {
+  background:
+    linear-gradient(135deg, rgba(224, 177, 90, 0.26), rgba(224, 177, 90, 0) 68%),
+    var(--card);
+  border-color: rgba(224, 177, 90, 0.45);
+}
+:root[data-style="heritage"] .spice button.on { background: rgba(240, 138, 26, 0.14); }
+body.light-theme .btn-ghost,
+body.light-theme .home-order-toggle,
+body.light-theme .toggle { border-color: #d8d3ca; }
+/* A required add-on is ticked and locked: show it as chosen, not as switched off. */
+.item-choice-row input[type="checkbox"]:disabled:checked {
+  -webkit-appearance: none;
+  appearance: none;
+  opacity: 1;
+  border-radius: 5px;
+  background: var(--cx-action) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%231a1004' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.4l3 3 6-6.6'/%3E%3C/svg%3E") center / 76% no-repeat;
+}
+
+/* ---- 13. Reduce motion: everything above stands still -------------------- */
 @media (prefers-reduced-motion: reduce) {
   .cx-cta-bar > .btn-primary::after,
   .detail-screen .btn-primary::after,
   .splash > .btn-primary::after,
+  .home-order-toggle button.on::after,
+  .checkout-order-types button.active::after,
+  .pairing-card > .btn.pairing-add::after,
   .account-rewards-card::after { display: none; }
   .cx-skel, .cart-count-badge.cx-bump,
+  .pairing-card > .btn.pairing-add b,
+  .cart-icon-btn.has-items::before, .cart-icon-btn.has-items::after,
+  .cx-text-shimmer, .catering-card .catering-quote-callout,
   .splash > .splash-brand-logo, .splash > p, .splash > .btn { animation: none; }
   #app img, .btn, .icon-btn, .add, .special-add, .cat { transition: none; }
 }

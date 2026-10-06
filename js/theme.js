@@ -76,6 +76,7 @@
     setVar(screen, "--cx-pad-l", style.paddingLeft);
     setVar(screen, "--cx-pad-r", style.paddingRight);
     setVar(screen, "--cx-pad-t", style.paddingTop);
+    setVar(screen, "--cx-pad-b", style.paddingBottom);
     var bar = child(screen, ".topbar");
     var row = child(screen, ".orders-tabs, .menu-subcategories");
     screen.classList.toggle("cx-has-subrow", !!(bar && row));
