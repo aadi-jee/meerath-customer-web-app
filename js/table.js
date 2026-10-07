@@ -12,6 +12,7 @@ const TABLE_INACTIVE_EN = "This table QR is not active. Please ask our staff.";
 const TABLE_GUEST_SIGNIN_EN = "Please sign in with your mobile number to order from this table.";
 const TABLE_BUSY_EN = "Ordering is very busy right now. Please ask our staff.";
 const TABLE_NAME_EN = "Please enter your name to order.";
+const TABLE_PHONE_EN = "Please enter a valid mobile number.";   // Batch 388
 const TABLE_TEXT = {
   en: {
     table: "Table {label}",
@@ -27,8 +28,16 @@ const TABLE_TEXT = {
     whoLabel: "How would you like to order?",
     guestTitle: "Order as guest",
     guestSub: "Just your name. Quick and easy.",
+    guestSubFree: "No sign-in needed. Quick and easy.",
+    guestSubPhone: "Just your mobile number. Quick and easy.",
+    guestSubBoth: "Your name and mobile number. Quick and easy.",
     guestName: "Your name",
+    guestNameOptional: "Your name (optional)",
+    guestPhone: "Mobile number",
+    guestPhoneOptional: "Mobile number (optional)",
+    guestPhoneHint: "Only used to reach you about this order.",
     guestHint: "No mobile number needed.",
+    phoneNeeded: TABLE_PHONE_EN,
     guestNameError: "Please enter your name (at least 2 letters).",
     signInEarn: "Sign in and earn {points} points",
     signInPlain: "Sign in with your mobile number",
@@ -54,8 +63,16 @@ const TABLE_TEXT = {
     whoLabel: "كيف تود أن تطلب؟",
     guestTitle: "اطلب كضيف",
     guestSub: "اسمك فقط. سريع وسهل.",
+    guestSubFree: "بدون تسجيل دخول. سريع وسهل.",
+    guestSubPhone: "رقم جوالك فقط. سريع وسهل.",
+    guestSubBoth: "اسمك ورقم جوالك. سريع وسهل.",
     guestName: "اسمك",
+    guestNameOptional: "اسمك (اختياري)",
+    guestPhone: "رقم الجوال",
+    guestPhoneOptional: "رقم الجوال (اختياري)",
+    guestPhoneHint: "يُستخدم فقط للتواصل معك بخصوص هذا الطلب.",
     guestHint: "لا حاجة لرقم الجوال.",
+    phoneNeeded: "يرجى إدخال رقم جوال صحيح.",
     guestNameError: "يرجى إدخال اسمك (حرفان على الأقل).",
     signInEarn: "سجّل الدخول واكسب {points} نقطة",
     signInPlain: "سجّل الدخول برقم جوالك",
@@ -97,13 +114,20 @@ function tableLoad() {
         isMenuId(saved.branchId) && Number.isFinite(saved.at)) {
       tableMode.table = {key: saved.key, label, section: tableClean(saved.section, 40),
         branchId: saved.branchId, restaurantId: saved.restaurantId, at: saved.at, guestOrders: saved.guestOrders === true,
-        serviceCalls: saved.serviceCalls === true};
+        serviceCalls: saved.serviceCalls === true, ...tableGuestModes(saved.guestNameMode, saved.guestPhoneMode)};
     } else sessionStorage.removeItem(tableStorageKey());
   } catch (_) {}
+}
+/** Batch 388: what a guest is asked for, as the scan said. A database without 388 says nothing:
+ *  then it is as before 388 — the name is needed and no number is asked. */
+function tableGuestModes(name, phone) {
+  return {guestNameMode: name === "optional" ? "optional" : "required",
+    guestPhoneMode: phone === "optional" || phone === "required" ? phone : "hidden"};
 }
 function tableClear() {
   tableMode.table = null;
   tableMode.confirming = false;
+  tableGuest.phone = ""; tableGuest.phoneError = "";           // Batch 388: a typed number does not outlive the table
   tableStore();
   tableApplyLook();
 }
@@ -180,6 +204,9 @@ function tableBoot() {
       tableSkipSplash(); tableApplyLook(); tableEnforce();
       // Batch 1b: after a reload the card shows a call that is still running (table-calls.js loads after this file).
       setTimeout(() => { if (typeof tableCallsStart === "function") tableCallsStart(); }, 0);
+      // Batch 388: a reload asks the server once more what this table offers (the restaurant may have
+      // changed a setting since the scan). Quiet: no answer or a bad one changes nothing here.
+      setTimeout(tableRefreshSettings, 0);
     }
     return;
   }
@@ -229,7 +256,8 @@ async function tableScan(key, attempt = 1) {
   }
   tableMode.table = {key, label, section: tableClean(answer.section, 40), branchId: answer.branch_id,
     restaurantId: answer.restaurant_id, at: Date.now(), guestOrders: answer.guest_orders === true,
-    serviceCalls: answer.service_calls === true};   // Batch 1b (382): staff can be called from this table
+    serviceCalls: answer.service_calls === true,   // Batch 1b (382): staff can be called from this table
+    ...tableGuestModes(answer.guest_name_mode, answer.guest_phone_mode)};
   tableMode.confirming = false;
   tableStore();
   tableApplyLook();
@@ -237,6 +265,27 @@ async function tableScan(key, attempt = 1) {
   tableRedraw();
   if (typeof toast === "function") toast(tableText("ordering", {label}), 3200);
   if (typeof tableCallsStart === "function") tableCallsStart();   // Batch 1b: is a call already running at this table?
+}
+/** Batch 388: reads the table's settings again for the remembered key and takes over what changed
+ *  (guest fields, guest orders, calling staff, the label). It never ends table mode and never shows
+ *  a message: the server decides again when an order or a call is sent. */
+async function tableRefreshSettings() {
+  const table = tableActive();
+  if (!table || tableMode.pending || tableMode.refreshing) return;
+  tableMode.refreshing = true;
+  try {
+    const answer = await customerOrderRpc("oracy_table_scan_v1", {p_key: table.key});
+    const label = tableClean(answer && answer.table_label, 12);
+    if (tableMode.table !== table || !answer || answer.ok !== true || !label ||
+        answer.restaurant_id !== table.restaurantId || answer.branch_id !== table.branchId) return;
+    const before = JSON.stringify(table);
+    Object.assign(table, {label, section: tableClean(answer.section, 40), guestOrders: answer.guest_orders === true,
+      serviceCalls: answer.service_calls === true, ...tableGuestModes(answer.guest_name_mode, answer.guest_phone_mode)});
+    if (JSON.stringify(table) === before) return;
+    tableGuest.error = ""; tableGuest.phoneError = "";
+    tableStore();
+    tableRedraw();
+  } catch (_) { /* no answer: what is remembered stays */ } finally { tableMode.refreshing = false; }
 }
 /** The server refused the key while taking the order: table mode ends, the cart stays. */
 function tableRefused(message) {
@@ -335,7 +384,17 @@ if (typeof window !== "undefined") {
  * "Order as guest" (one field) or "Sign in and earn points" (the usual mobile + OTP way).
  * The server decides again when the order is sent; a signed-in visitor never gets here. */
 const TABLE_GUEST_ID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const tableGuest = {choice: "", name: null, id: "", error: ""};
+const tableGuest = {choice: "", name: null, id: "", error: "", phone: "", phoneError: ""};
+/** Batch 388: the number as the server tests it — spaces, dashes, dots and round brackets removed,
+ *  then an optional + and 9 to 15 digits; at most 40 characters as typed. "" = not a valid number. */
+function tableGuestPhoneClean(value) {
+  const typed = String(value ?? "").trim();
+  if (!typed || typed.length > 40) return "";
+  const bare = typed.replace(/[\s\-.()]/g, "");
+  return /^\+?[0-9]{9,15}$/.test(bare) ? bare : "";
+}
+function tableGuestNameMode() { const table = tableActive(); return table && table.guestNameMode === "optional" ? "optional" : "required"; }
+function tableGuestPhoneMode() { const table = tableActive(); return table && ["optional", "required"].includes(table.guestPhoneMode) ? table.guestPhoneMode : "hidden"; }
 /** The name as it will be sent: no control or invisible characters, single spaces, at most 80. */
 function tableGuestClean(value) {
   return String(value ?? "").replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, " ")
@@ -369,7 +428,7 @@ function tableGuestMode() { return tableGuestOffered() && tableGuest.choice !== 
 function tableChoose(choice) {
   if (!tableGuestOffered()) return;
   tableGuest.choice = choice === "signin" ? "signin" : "guest";
-  tableGuest.error = "";
+  tableGuest.error = ""; tableGuest.phoneError = "";
   if (tableGuest.choice === "guest" && typeof state !== "undefined" && state.couponOn) {
     state.couponOn = false; state.voucher = null; state.coupon = "";
     if (typeof toast === "function") toast(tableText("couponRemoved"), 4500);
@@ -390,30 +449,60 @@ function tableGuestNameInput(value) {
   const field = document.getElementById("tableGuestName");
   if (field && field.classList) { field.classList.remove("invalid"); field.removeAttribute("aria-invalid"); }
 }
-function tableGuestShowError(text) {
-  tableGuest.error = text;
+/** Batch 388: the number lives in this page's memory only: never prefilled, never stored. */
+function tableGuestPhoneInput(value) {
+  tableGuest.phone = String(value ?? "").slice(0, 40);
+  if (!tableGuest.phoneError) return;
+  tableGuest.phoneError = "";
+  if (typeof document === "undefined" || typeof document.querySelector !== "function") return;
+  const note = document.querySelector(".table-guest-phone-error");
+  if (note && typeof note.remove === "function") note.remove();
+  const field = document.getElementById("tableGuestPhone");
+  if (field && field.classList) { field.classList.remove("invalid"); field.removeAttribute("aria-invalid"); }
+}
+/** Shows an error under the name (where = "name") or under the number (where = "phone"). */
+function tableGuestShowError(text, where = "name") {
+  if (where === "phone") tableGuest.phoneError = text; else tableGuest.error = text;
   if (typeof state !== "undefined" && state.screen === "checkout") {
     if (typeof renderKeepScroll === "function") renderKeepScroll(); else if (typeof render === "function") render();
   }
   if (typeof document === "undefined" || typeof document.getElementById !== "function") return;
-  const field = document.getElementById("tableGuestName");
+  const field = document.getElementById(where === "phone" ? "tableGuestPhone" : "tableGuestName");
   if (field && typeof field.focus === "function") { field.focus(); if (typeof field.scrollIntoView === "function") field.scrollIntoView({block: "center"}); }
 }
-/** Place Order as a guest: the name must be 2 to 80 characters. */
+/** Batch 388: what the form holds, judged by the restaurant's settings as last heard:
+ *  {name, phone} when it can be sent, or {error, where}. The server judges again. */
+function tableGuestForm() {
+  const name = tableGuestClean(tableGuestNameValue());
+  // a name that is given must be a real one in both modes; an empty one is fine only when optional
+  if (name.length < 2 && (name.length > 0 || tableGuestNameMode() === "required")) return {error: tableText("guestNameError"), where: "name"};
+  const mode = tableGuestPhoneMode();
+  if (mode === "hidden") return {name, phone: ""};
+  const typed = String(tableGuest.phone || "").trim();
+  const phone = tableGuestPhoneClean(typed);
+  if ((typed && !phone) || (!typed && mode === "required")) return {error: tableText("phoneNeeded"), where: "phone"};
+  return {name, phone: phone ? typed : ""};
+}
+/** Place Order as a guest: the form must be complete for what the restaurant asks. */
 function tableGuestNameOk() {
-  if (tableGuestClean(tableGuestNameValue()).length >= 2) return true;
-  tableGuestShowError(tableText("guestNameError"));
+  const form = tableGuestForm();
+  if (!form.error) return true;
+  tableGuestShowError(form.error, form.where);
+  // What is remembered may be older than the restaurant's setting: ask again, so that an old
+  // "required" cannot keep refusing an order the server would take.
+  tableRefreshSettings();
   return false;
 }
-/** What goes to the server for this guest ({name, id}), or null when the order is not a guest order. */
+/** What goes to the server for this guest ({name, id, phone}), or null when the order is not a guest order. */
 function tableGuestOrder() {
   if (!tableGuestMode()) return null;
-  const name = tableGuestClean(tableGuestNameValue());
-  return name.length >= 2 ? {name, id: tableGuestId()} : null;
+  const form = tableGuestForm();
+  return form.error ? null : {name: form.name, id: tableGuestId(), phone: form.phone};
 }
 function tableGuestDone(guest) {
+  tableGuest.error = ""; tableGuest.phoneError = "";
+  if (!guest.name) return;                                     // an order without a name leaves the remembered one alone
   tableGuest.name = guest.name;
-  tableGuest.error = "";
   try { localStorage.setItem(appStorageKey("guest-name"), guest.name); } catch (_) {}
 }
 /** The server's own words for a guest order. True = it was one of them and has been shown. */
@@ -431,7 +520,19 @@ function tableGuestRefusal(message) {
     return true;
   }
   if (text === TABLE_NAME_EN) {
+    // The server wants a name: whatever was remembered, the field is a required one from now on.
+    if (tableMode.table && tableMode.table.guestNameMode !== "required") { tableMode.table.guestNameMode = "required"; tableStore(); }
     setTimeout(() => tableGuestShowError(tableText("nameNeeded")), 0);
+    return true;
+  }
+  if (text === TABLE_PHONE_EN) {
+    // Batch 388: the server wants a (valid) number. If the field was not even shown, or shown as
+    // optional and left empty, the remembered setting was old: the field is shown and needed now.
+    const table = tableMode.table;
+    if (table && (table.guestPhoneMode === "hidden" || !String(tableGuest.phone || "").trim()) && table.guestPhoneMode !== "required") {
+      table.guestPhoneMode = "required"; tableStore();
+    }
+    setTimeout(() => tableGuestShowError(tableText("phoneNeeded"), "phone"), 0);
     return true;
   }
   return false;
@@ -451,19 +552,32 @@ function tableGuestMarkup(mobileEntry) {
   const guestOn = tableGuest.choice !== "signin";
   const earn = tableGuestEarn();
   const error = guestOn ? tableGuest.error : "";
+  // Batch 388: what the restaurant asks a guest for
+  const nameMode = tableGuestNameMode(), phoneMode = tableGuestPhoneMode();
+  const nameLabel = tableText(nameMode === "optional" ? "guestNameOptional" : "guestName");
+  const phoneLabel = tableText(phoneMode === "optional" ? "guestPhoneOptional" : "guestPhone");
+  const phoneError = guestOn ? tableGuest.phoneError : "";
+  const sub = tableText(nameMode === "required" ? (phoneMode === "required" ? "guestSubBoth" : "guestSub")
+    : phoneMode === "required" ? "guestSubPhone" : "guestSubFree");
   return `<div class="table-who" role="radiogroup" aria-label="${escapeHtml(tableText("whoLabel"))}">
     <div class="table-who-card table-who-guest${guestOn ? " on" : ""}">
       <button type="button" class="table-who-head" role="radio" aria-checked="${guestOn}" onclick="tableChoose('guest')">
         <span class="table-who-radio" aria-hidden="true"></span>
-        <span class="table-who-copy"><strong>${escapeHtml(tableText("guestTitle"))}</strong><small>${escapeHtml(tableText("guestSub"))}</small></span>
+        <span class="table-who-copy"><strong>${escapeHtml(tableText("guestTitle"))}</strong><small>${escapeHtml(sub)}</small></span>
       </button>
       ${guestOn ? `<div class="table-who-body">
         <input class="field table-guest-name${error ? " invalid" : ""}" id="tableGuestName" type="text" maxlength="80"
           autocomplete="given-name" autocapitalize="words" enterkeyhint="done" dir="auto"
-          placeholder="${escapeHtml(tableText("guestName"))}" aria-label="${escapeHtml(tableText("guestName"))}"
+          placeholder="${escapeHtml(nameLabel)}" aria-label="${escapeHtml(nameLabel)}"
           ${error ? `aria-invalid="true"` : ""} value="${escapeHtml(tableGuestNameValue())}" oninput="tableGuestNameInput(this.value)" />
         ${error ? `<p class="table-guest-error" role="alert">${escapeHtml(error)}</p>` : ""}
-        <p class="table-guest-hint">${escapeHtml(tableText("guestHint"))}</p>
+        ${phoneMode === "hidden" ? `<p class="table-guest-hint">${escapeHtml(tableText("guestHint"))}</p>` : `
+        <input class="field table-guest-name table-guest-phone${phoneError ? " invalid" : ""}" id="tableGuestPhone" type="tel" inputmode="tel" maxlength="40"
+          autocomplete="off" enterkeyhint="done" dir="ltr"
+          placeholder="${escapeHtml(phoneLabel)}" aria-label="${escapeHtml(phoneLabel)}"
+          ${phoneError ? `aria-invalid="true"` : ""} value="${escapeHtml(tableGuest.phone)}" oninput="tableGuestPhoneInput(this.value)" />
+        ${phoneError ? `<p class="table-guest-error table-guest-phone-error" role="alert">${escapeHtml(phoneError)}</p>` : ""}
+        <p class="table-guest-hint">${escapeHtml(tableText("guestPhoneHint"))}</p>`}
       </div>` : ""}
     </div>
     <div class="table-who-card table-who-signin${earn ? " table-who-gold" : ""}${guestOn ? "" : " on"}">
@@ -486,4 +600,5 @@ function tableGuestCouponNote() {
 if (typeof window !== "undefined") {
   window.tableChoose = tableChoose;
   window.tableGuestNameInput = tableGuestNameInput;
+  window.tableGuestPhoneInput = tableGuestPhoneInput;
 }

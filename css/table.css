@@ -366,3 +366,7 @@ body.light-theme #tableCallSheet .table-call-note { background: #fff; border-col
 @media (prefers-reduced-motion: reduce) {
   .table-call-bell, .table-call-bell.on svg, .table-call-state, .table-call-state i { animation: none; transition: none; }
 }
+
+/* Batch 388: the guest's mobile number, when the restaurant asks for it (under the name). */
+#app .table-guest-phone { margin-top: 10px; text-align: start; }
+[dir="rtl"] #app .table-guest-phone { text-align: end; }

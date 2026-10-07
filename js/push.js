@@ -123,6 +123,8 @@ function pushCardMarkup(order) {
   // Only server-issued ids ever reach the button's handler.
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!order?.id || !uuid.test(order.id) || (order.token && !uuid.test(order.token))) return "";
+  // Batch 388: at a table the order comes to the guest; the card is not shown there (every screen draws it from here).
+  if (typeof tableActive === "function" && tableActive()) return "";
   if (!pushAllowed()) return `<div data-push-card="1" hidden></div>`;
   const args = `'${order.id}','${order.token || ""}'`;
   if (!pushSupported()) {

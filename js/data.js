@@ -25,7 +25,8 @@ const VOUCHERS = [
   { id: "v3", title: "SAR 25 off", titleAr: "خصم 25 ر.س", cost: 200 },
 ];
 const menuConnection = { status: "loading", lastSuccess: 0, error: "", payload: null,
-  fingerprint: "", pending: null, started: false, pendingRender: false };
+  fingerprint: "", pending: null, started: false, pendingRender: false,
+  pendingAt: 0, run: 0, retried: false, retry: null };          // Batch 388: see refreshMenu
 const MENU_COPY = {
   en: { loading: "Loading menu…", error: "Menu could not be updated. Please try again.",
     empty: "The menu is being updated. Please check again shortly.", retry: "Retry", unavailable: "Unavailable now",
@@ -351,9 +352,20 @@ function refreshMenuUI() {
   menuConnection.pendingRender = false;
   renderKeepScroll();
 }
+/* Batch 388: three things made "Menu could not be updated" stay on a page whose menu was fine
+ * (seen at a table, where the phone is locked between courses and comes back with a menu older
+ * than its 90 seconds):
+ *  1. a screen drawn while the menu was too old showed the banner, and a refresh that then
+ *     succeeded with an unchanged menu did not draw the screen again — so the banner stayed;
+ *  2. a request frozen with the page was still "the one running" on return, so no new one was sent;
+ *  3. a refresh that failed in the first moment back was only tried again 30 seconds later. */
+const MENU_STUCK_MS = 15000;      // the request itself gives up after 12 s; older than this it was frozen with the page
+const MENU_RETRY_MS = 3000;
 async function refreshMenu() {
-  if (menuConnection.pending) return menuConnection.pending;
-  menuConnection.pending = (async () => {
+  if (menuConnection.pending && Date.now() - menuConnection.pendingAt < MENU_STUCK_MS) return menuConnection.pending;
+  const run = ++menuConnection.run;
+  menuConnection.pendingAt = Date.now();
+  const mine = menuConnection.pending = (async () => {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 12000);
     const previous = menuConnection.status;
     try {
@@ -366,22 +378,31 @@ async function refreshMenu() {
         throw new Error(`Menu API ${response.status}: ${detail}`);
       }
       const payload = await response.json();
+      if (run !== menuConnection.run) return {ok:false, cartChanged:false};   // a newer request has taken over
+      const tooOld = !menuReady();        // a screen drawn until now may be showing the banner
       const result = applyMenuPayload(payload);
       menuConnection.payload = payload; menuConnection.status = "ready";
       // Batch H: the menu names the branch; read its ordering hours at once (not on the next retry).
       if (typeof orderingHours !== "undefined" && !orderingHours.status && typeof loadOrderingHours === "function") loadOrderingHours();
       menuConnection.lastSuccess = Date.now(); menuConnection.error = "";
+      menuConnection.retried = false;
       if (typeof requestCustomerContent === 'function') requestCustomerContent();
-      if (result.changed || result.cartChanged || previous !== "ready") refreshMenuUI();
+      if (result.changed || result.cartChanged || previous !== "ready" || tooOld) refreshMenuUI();
       return {ok:true, cartChanged:result.cartChanged};
     } catch(error) {
+      if (run !== menuConnection.run) return {ok:false, cartChanged:false};   // an old request must not undo a newer answer
       menuConnection.status = "error"; menuConnection.error = String(error.message || error);
       console.warn(`${APP_CONFIG.brand.shortName} menu:`, menuConnection.error);
       if (previous !== "error") refreshMenuUI();
+      // One quick second try (a phone just unlocked often loses its first request), then the usual rhythm.
+      if (!menuConnection.retried && !menuConnection.retry && !(typeof document !== "undefined" && document.hidden)) {
+        menuConnection.retried = true;
+        menuConnection.retry = setTimeout(() => { menuConnection.retry = null; refreshMenu(); }, MENU_RETRY_MS);
+      }
       return {ok:false, cartChanged:false};
     } finally { clearTimeout(timer); }
   })();
-  try { return await menuConnection.pending; } finally { menuConnection.pending = null; }
+  try { return await mine; } finally { if (menuConnection.pending === mine) menuConnection.pending = null; }
 }
 function menuStatusMarkup() {
   const key = menuConnection.status === "loading" ? "loading" : !menuReady() ? "error" : !ITEMS.length ? "empty" : "";
@@ -409,7 +430,10 @@ function startMenuSync() {
     const hoursChanged = nowAccepting !== acceptingOrders;
     acceptingOrders = nowAccepting;
     if (!menuReady()) {
-      if (menuConnection.status === "ready") { menuConnection.status = "error"; refreshMenuUI(); }
+      // Batch 388: not while a refresh is on its way (the page just came back): its answer decides.
+      if (menuConnection.status === "ready" && !(menuConnection.pending && Date.now() - menuConnection.pendingAt < MENU_STUCK_MS)) {
+        menuConnection.status = "error"; refreshMenuUI();
+      }
       return;
     }
     const result = applyMenuPayload(menuConnection.payload);
@@ -520,7 +544,9 @@ async function submitCustomerOrder(order, table, guest) {
         delivery_address_id, delivery_address_version, expected_delivery_fee, order_timing, suggested_eta, ...rest} = order;
       return customerOrderRpc("oracy_create_table_guest_order_v1", {
         p_key: table.key,
-        p_order: {...rest, customer_name: guest.name, guest_id: guest.id, fulfillment_type: "dinein", schedule_type: "asap", scheduled_for: null},
+        // Batch 388: the name may be empty and a mobile number may be asked, as the restaurant set it.
+        p_order: {...rest, customer_name: guest.name, guest_id: guest.id, ...(guest.phone ? {guest_phone: guest.phone} : {}),
+          fulfillment_type: "dinein", schedule_type: "asap", scheduled_for: null},
       });
     }
     return customerOrderRpc("oracy_create_table_order_v1", {
