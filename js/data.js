@@ -506,12 +506,22 @@ function customerRpcMessage(status, detail) {
   return "Order service is unavailable. Please try again.";
 }
 
-async function submitCustomerOrder(order, table) {
+async function submitCustomerOrder(order, table, guest) {
   const branchId = selectMenuBranch(menuConnection.payload?.branches || []);
   // Batch B1 (373): an order from a table's QR. The key names the restaurant, the branch and the
   // table; the server forces dine-in, now. A table of another branch is never sent.
   if (table && table.key) {
     if (table.branchId !== branchId) throw new Error(TABLE_INACTIVE_EN);
+    // Batch B1g (376): a guest at the table orders with a name only. No phone, e-mail, voucher or
+    // points leave the device, and no sign-in is needed (this function is NOT in signedInOnly).
+    if (guest && guest.id && typeof state !== "undefined" && !state.isLoggedIn) {
+      const {customer_phone, customer_email, customer_registered, coupon_code, redeem_points, address,
+        delivery_address_id, delivery_address_version, expected_delivery_fee, order_timing, suggested_eta, ...rest} = order;
+      return customerOrderRpc("oracy_create_table_guest_order_v1", {
+        p_key: table.key,
+        p_order: {...rest, customer_name: guest.name, guest_id: guest.id, fulfillment_type: "dinein", schedule_type: "asap", scheduled_for: null},
+      });
+    }
     return customerOrderRpc("oracy_create_table_order_v1", {
       p_key: table.key,
       p_order: {...order, fulfillment_type: "dinein", schedule_type: "asap", order_timing: "asap", scheduled_for: null,

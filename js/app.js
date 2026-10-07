@@ -71,6 +71,8 @@ function cartCopy(en, ar) { return state.lang === "ar" ? ar : en; }
 /* Batch B1: QR table ordering lives in table.js. null / "" when the customer is not at a table. */
 function tableOn() { return typeof tableActive === "function" ? tableActive() : null; }
 function tableChip(place) { return typeof tableChipMarkup === "function" ? tableChipMarkup(place) : ""; }
+/* Batch B1g: true while a visitor at a table is ordering as a guest (name only): no voucher, no points. */
+function tableGuestOn() { return typeof tableGuestMode === "function" && tableGuestMode(); }
 // Batch H: restaurantAcceptingOrders / orderTypeOpen / restaurantClosedMessage live in ordering-hours.js (the server decides).
 let cartDraftRestored = false;
 function saveCartDraft() {
@@ -1301,6 +1303,7 @@ let homeScrollMemory = 0;     // where the customer was on Home before opening a
 let lastDrawnScreen = "";
 function setPreviewStructure(name) {
   if (!APP_CONFIG.brand.themePreview || !THEME_STRUCTURES.includes(name)) return;
+  if (typeof tableStructure === "function" && tableStructure()) return;   // Batch B1g: at a table the layout is not a choice
   try { localStorage.setItem(appStorageKey("structure"), name); } catch (_) {}
   homeScrollMemory = 0;
   if (typeof document !== "undefined" && document.documentElement) document.documentElement.dataset.structure = brandTheme().structure;
@@ -1570,7 +1573,7 @@ function cart() {
     }).join("")}
     ${cartRecommendationsMarkup()}
     <textarea class="field" rows="2" placeholder="${t("cookingNotes")}" oninput="state.notes=this.value">${escapeHtml(state.notes)}</textarea>
-    ${typeof addonTarget === "function" && addonTarget() ? addonCartMarkup() : `<div id="couponBox">${couponBoxMarkup()}</div>
+    ${typeof addonTarget === "function" && addonTarget() ? addonCartMarkup() : `${tableGuestOn() ? tableGuestCouponNote() : `<div id="couponBox">${couponBoxMarkup()}</div>`}
     <div class="breakdown" id="cartBreakdown" style="margin-top:14px">${cartSummaryMarkup()}</div>
     ${orderingStripMarkup()}
     <div class="cx-cta-bar">
@@ -1915,13 +1918,15 @@ function checkoutCustomerMarkup() {
   }
   const rawMobile = String(state.customer.mobile || "").replace(/\D/g, "");
   const mobile = rawMobile.startsWith("966") ? `0${rawMobile.slice(3)}` : rawMobile;
-  return `<p class="checkout-mobile-intro">${t("checkoutMobileIntro")}</p>
+  const mobileEntry = `<p class="checkout-mobile-intro">${t("checkoutMobileIntro")}</p>
     <div class="mobile-field-wrap checkout-mobile-field">
       <span class="country-code">+966</span>
       <input class="field mobile-input" type="tel" inputmode="numeric" maxlength="10"
         autocomplete="tel" placeholder="${t("mobilePlaceholder")}" value="${escapeHtml(mobile)}"
         oninput="state.customer.mobile=this.value.replace(/[^0-9]/g,'')" />
     </div>`;
+  // Batch B1g (376): at a table that takes guest orders the visitor chooses: a name only, or sign in.
+  return typeof tableGuestOffered === "function" && tableGuestOffered() ? tableGuestMarkup(mobileEntry) : mobileEntry;
 }
 
 function checkout() {
@@ -2019,7 +2024,7 @@ function checkout() {
       </p>
       ` : ""}
 
-      ${typeof rewardsCheckoutMarkup === "function" ? rewardsCheckoutMarkup() : ""}
+      ${typeof rewardsCheckoutMarkup === "function" && !(typeof tableGuestOffered === "function" && tableGuestOffered()) ? rewardsCheckoutMarkup() : ""}
 
       ${checkoutOrderLinesMarkup()}
       <div class="breakdown checkout-total-card">${cartSummaryMarkup()}</div>
@@ -3776,7 +3781,7 @@ function appearanceSettingsPage() {
             ${state.appearance === "system" ? "✓" : ""}
           </span>
         </button>
-        ${APP_CONFIG.brand.themePreview === true ? `
+        ${APP_CONFIG.brand.themePreview === true && !(typeof tableStructure === "function" && tableStructure()) ? `
         <p class="language-settings-intro cx-preview-note">${cartCopy("Layout preview (this device only)", "معاينة التخطيط (هذا الجهاز فقط)")}</p>
         ${[["classic", cartCopy("Classic", "كلاسيكي"), cartCopy("Home, then Menu and categories", "الرئيسية ثم القائمة والأقسام")],
            ["scroll", cartCopy("Scroll menu", "قائمة متصلة"), cartCopy("Home is the whole menu in one scroll", "الرئيسية هي القائمة كاملة")]].map(([name, title, text]) => `
@@ -4332,6 +4337,8 @@ async function placeOrder() {
     return toast(t("cartIsEmpty"));
   }
 
+  // Batch B1g (376): a guest at the table needs a name, not a mobile number.
+  if (tableGuestOn()) return tableGuestNameOk() ? createOrderAfterVerification() : undefined;
   const phone = normalizeSaudiMobile(state.isLoggedIn ? state.customerPhone || state.customer.mobile : state.customer.mobile);
   if (!phone) {
     toast(t("invalidMobile"));
@@ -4386,15 +4393,18 @@ function orderAttemptSave() {
   } catch (_) {}
 }
 function orderAttemptClear() { orderAttempt.key = null; orderAttempt.id = null; orderAttemptSave(); orderAttempt.key = null; }
-function orderAttemptId(cart, address, table) {
+function orderAttemptId(cart, address, table, guest) {
   orderAttemptLoad();
   const key = JSON.stringify([
     state.orderType, state.orderTiming, typeof getScheduledFor === "function" ? getScheduledFor() : null, address || "",
-    (state.customer.mobile || "").trim(), (state.customer.name || "").trim(), (state.customer.email || "").trim(),
-    state.couponOn ? (state.voucher?.code || "") : "", state.redeemPoints || 0, state.notes || "",
+    // Batch B1g: a guest is known by the device's guest id; the name is not part of the attempt
+    // (a corrected name must not make a second order) and a guest has no voucher or points.
+    ...(guest ? ["", "", "", "", 0] : [(state.customer.mobile || "").trim(), (state.customer.name || "").trim(), (state.customer.email || "").trim(),
+    state.couponOn ? (state.voucher?.code || "") : "", state.redeemPoints || 0]), state.notes || "",
     cart.map(l => [l.id, l.qty, l.size || null, l.choice || null, (l.extras || []).map(e => e.id || e.name || e).sort(), l.spice || "", l.notes || ""]),
     // Batch B1: the same cart at another table is another order (nothing is added without a table).
     ...(table && table.key ? [["table", table.key]] : []),
+    ...(guest ? [["guest", guest.id]] : []),
   ]);
   if (orderAttempt.key !== key || !orderAttempt.id) { orderAttempt.key = key; orderAttempt.id = crypto.randomUUID(); orderAttemptSave(); }
   return orderAttempt.id;
@@ -4440,7 +4450,11 @@ async function createOrderAfterVerification() {
   if (state.orderSubmitting || !state.cart.length) return;
   if (!orderTypeOpen()) { toast(orderingClosedTitle() + ". " + restaurantClosedMessage(),7000); return; }
   // Gate 4 (280): the server takes orders from signed-in customers only.
-  if (!state.isLoggedIn) { go("checkout"); return toast(t("signInRequired")); }
+  // Batch B1g (376): except a guest at a table whose restaurant allows it (name + the device's guest id).
+  const guest = table && !state.isLoggedIn && typeof tableGuestOrder === "function" ? tableGuestOrder() : null;
+  if (!guest) {
+    if (!state.isLoggedIn) { go("checkout"); return toast(t("signInRequired")); }
+  }
   state.orderSubmitting = true;
   if (state.screen === "checkout") renderKeepScroll();
   const cart = state.cart.map((line) => ({ ...line, extras:[...(line.extras || [])] }));
@@ -4457,15 +4471,15 @@ async function createOrderAfterVerification() {
   // Gate 3: one id per cart as it stands. A retry after a lost answer sends
   // the same id and the server hands back the order it already made; a
   // changed cart gets a new id.
-  const clientOrderId = orderAttemptId(cart, address, table);
+  const clientOrderId = orderAttemptId(cart, address, table, guest);
   /* A retry while the first request is still running meets the server's unique
      id; one quiet re-send a moment later then returns that order. */
   const submitOnce = async (payload) => {
-    try { return await submitCustomerOrder(payload, table); }
+    try { return await submitCustomerOrder(payload, table, guest); }
     catch (error) {
       if (!/duplicate key|23505|client_order_id/i.test(String(error?.message || ""))) throw error;
       await new Promise(resolve => setTimeout(resolve, 1500));
-      return submitCustomerOrder(payload, table);
+      return submitCustomerOrder(payload, table, guest);
     }
   };
   try {
@@ -4508,7 +4522,7 @@ async function createOrderAfterVerification() {
       backendId: result.id,
       trackingToken: result.tracking_token,
       items: cart,
-      customer: {...state.customer},
+      customer: guest ? {name: guest.name, mobile: "", email: ""} : {...state.customer},
       customerType: state.isLoggedIn ? "registered" : "guest",
       orderType: state.orderType,
       address,
@@ -4527,6 +4541,7 @@ async function createOrderAfterVerification() {
     if (table) {   // Batch B1: "Dine-in · Table 7" on the order's cards, also after a reload
       state.order.tableLabel = tableClean(result.table_label, 12) || table.label;
       tableRememberOrder(result.id, state.order.tableLabel);
+      if (guest) tableGuestDone(guest);
     }
     if(state.orderType==="delivery"){state.lastDeliveryAddressId=defaultAddress.id;state.checkoutPinConfirmedId=null;}
     orderAttemptClear();
@@ -4561,6 +4576,9 @@ async function createOrderAfterVerification() {
       orderAttemptClear();
       go("checkout");
       setTimeout(() => toast(tableText("inactive"), 7000));
+    } else if (typeof tableGuestRefusal === "function" && tableGuestRefusal(rawMessage)) {
+      // Batch B1g (376): the server's own words for a guest (sign in instead / very busy / the name).
+      go("checkout");
     } else if (error?.hint === "module_off") {
       if (table && typeof tableRecheck === "function") tableRecheck();   // Batch B1: was it the tables that were switched off?
       // Batch E: ordering (or delivery) was switched off for this restaurant. The cart stays;

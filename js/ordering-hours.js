@@ -151,13 +151,17 @@ function restaurantClosedMessage(type = state.orderType) {
     ? orderingCopy("Please choose pick-up or dine-in.", "يرجى اختيار الاستلام أو الطلب داخل المطعم.")
     : orderingCopy("Please call the restaurant.", "يرجى الاتصال بالمطعم.");
   const opens = orderingOpensText(s.opens_at);
+  // Batch B1g: at a table the order type is not a choice, so no text points to another one.
+  const atTable = typeof tableActive === "function" && !!tableActive();
   if (s.reason === "paused") {
     const reason = String(s.pause_reason || "").trim();
-    return (reason ? reason.replace(/[.!?؟\s]+$/, "") + ". " : "") +
-      orderingCopy("Your cart is saved. Please try again later or choose another order type.",
-        "سلتك محفوظة. يرجى المحاولة لاحقاً أو اختيار نوع طلب آخر.");
+    return (reason ? reason.replace(/[.!?؟\s]+$/, "") + ". " : "") + (atTable
+      ? orderingCopy("Your cart is saved. Please try again later or ask our staff.",
+        "سلتك محفوظة. يرجى المحاولة لاحقاً أو سؤال أحد موظفينا.")
+      : orderingCopy("Your cart is saved. Please try again later or choose another order type.",
+        "سلتك محفوظة. يرجى المحاولة لاحقاً أو اختيار نوع طلب آخر."));
   }
-  const other = ["dinein", "takeaway", "delivery"].find(x => x !== type && orderTypeOpen(x));
+  const other = atTable ? null : ["dinein", "takeaway", "delivery"].find(x => x !== type && orderTypeOpen(x));
   return orderingCopy(
     `Your cart is saved.${opens ? ` You can place this order when we open ${opens}.` : ""}${other ? ` ${orderingTypeName(other)} is still open now.` : ""}`,
     `سلتك محفوظة.${opens ? ` يمكنك إرسال الطلب عند الافتتاح ${opens}.` : ""}${other ? ` ${orderingTypeName(other)} متاح الآن.` : ""}`);

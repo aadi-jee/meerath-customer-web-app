@@ -132,3 +132,90 @@ body.light-theme .table-chip-actions .table-chip-go { border-color: var(--orange
   .home-screen .table-chip-home { width: 42%; margin-top: -78px; margin-inline-start: auto; margin-bottom: 16px; }
   .table-chip-checkout { max-width: 720px; }
 }
+
+/* ---- Batch B1g (376): the two ways to order at a table --------------------------------------------
+   "Order as guest" (a name only) and "Sign in and earn points". Both are full cards with the same
+   weight; the chosen one opens. Gold belongs to the rewards path only. */
+.table-who { display: grid; gap: 10px; margin: 0 0 6px; }
+.table-who-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--cx-radius-md, 14px);
+  transition: border-color var(--cx-fast, 140ms) ease, box-shadow var(--cx-fast, 140ms) ease;
+}
+.table-who-card.on { border-color: var(--orange); box-shadow: 0 0 0 1px var(--orange), var(--cx-shadow-1, 0 4px 14px rgba(0, 0, 0, 0.18)); }
+.table-who-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 14px;
+  background: none;
+  border: 0;
+  border-radius: inherit;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.table-who-radio {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  background: transparent;
+  transition: border-color var(--cx-fast, 140ms) ease;
+}
+.table-who-card.on .table-who-radio { border-color: var(--orange); background: radial-gradient(circle, var(--orange) 0 5px, transparent 6px); }
+.table-who-copy { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.table-who-copy strong { color: var(--text); font-size: 16px; font-weight: 700; line-height: 1.3; }
+.table-who-copy small { color: var(--muted); font-size: 12.5px; font-weight: 500; line-height: 1.4; }
+.table-who-mark { flex: 0 0 auto; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; color: var(--muted); }
+.table-who-mark svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+[dir="rtl"] .table-who-mark svg { transform: scaleX(-1); }
+.table-who-body { padding: 0 14px 14px; }
+.table-who-body .field { width: 100%; margin: 0; }
+.table-who-body .checkout-mobile-intro { margin-top: 0; }
+#app .table-guest-name {
+  min-height: 54px;
+  padding: 13px 15px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--text);
+  font-size: 16px;
+  outline: none;
+}
+#app .table-guest-name:focus { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(240, 138, 26, 0.12); }
+#app .table-guest-name.invalid { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(232, 93, 76, 0.12); }
+.table-guest-hint { margin: 8px 2px 0; color: var(--muted); font-size: 12.5px; line-height: 1.4; text-align: start; }
+.table-guest-error { margin: 8px 2px 0; color: var(--danger); font-size: 13px; font-weight: 600; line-height: 1.4; text-align: start; }
+
+/* The rewards path: gold, and it should attract. */
+.table-who-gold {
+  border-color: rgba(224, 177, 90, 0.5);
+  background: linear-gradient(135deg, rgba(224, 177, 90, 0.16), rgba(224, 177, 90, 0.04) 60%), var(--card);
+}
+.table-who-gold .table-who-copy strong { color: var(--gold); }
+.table-who-gold .table-who-mark { background: rgba(224, 177, 90, 0.16); color: var(--gold); }
+.table-who-gold .table-who-mark svg { fill: currentColor; stroke: none; }
+[dir="rtl"] .table-who-gold .table-who-mark svg { transform: none; }
+.table-who-gold.on { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), var(--cx-shadow-1, 0 4px 14px rgba(0, 0, 0, 0.18)); }
+.table-who-gold.on .table-who-radio { border-color: var(--gold); background: radial-gradient(circle, var(--gold) 0 5px, transparent 6px); }
+
+body.light-theme .table-who-card { border-color: #d8d3ca; }
+body.light-theme .table-who-card.on { border-color: var(--orange); }
+body.light-theme .table-who-gold { border-color: #d9b66a; background: linear-gradient(135deg, #fbf1d9, #fffaf0 60%); }
+body.light-theme .table-who-gold .table-who-copy strong { color: #7a5a12; }
+body.light-theme .table-who-gold .table-who-mark { background: #f3e2b5; color: #8a6614; }
+body.light-theme .table-who-gold.on { border-color: #b8891f; box-shadow: 0 0 0 1px #b8891f, 0 4px 14px rgba(0, 0, 0, 0.06); }
+body.light-theme .table-who-gold.on .table-who-radio { border-color: #b8891f; background: radial-gradient(circle, #b8891f 0 5px, transparent 6px); }
+body.light-theme #app .table-guest-name { background: #fff; border-color: #d8d3ca; }
+
+/* The cart, in place of the coupon box, while ordering as a guest. */
+.table-guest-coupon { margin: 12px 2px 0; color: var(--muted); font-size: 13px; line-height: 1.5; text-align: start; }
+.table-guest-coupon .link { padding: 0; min-height: 0; font-size: 13px; font-weight: 700; }
+@media (min-width: 1025px) { .table-who { max-width: 720px; } }
+.table-who-body .checkout-mobile-field { margin-bottom: 0; }

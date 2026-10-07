@@ -161,7 +161,7 @@ test('a good scan enters table mode: remembered for this tab, dine-in, no welcom
   await run('tableSettled()');
   assert.equal(run('JSON.stringify(scans)'), JSON.stringify([{name: 'oracy_table_scan_v1', params: {p_key: KEY}}]));
   const saved = JSON.parse(run.shared.session.get(TABLE_STORE));
-  assert.deepEqual(saved, {key: KEY, label: '7', section: 'Terrace', branchId: BRANCH, restaurantId: RESTAURANT, at: run.clock.now});
+  assert.deepEqual(saved, {key: KEY, label: '7', section: 'Terrace', branchId: BRANCH, restaurantId: RESTAURANT, at: run.clock.now, guestOrders: false});
   assert.equal(run.shared.local.has(TABLE_STORE), false);      // this tab only: gone when the tab closes
   assert.equal(run('state.orderType'), 'dinein');
   assert.equal(run('state.orderTiming'), 'asap');
@@ -428,15 +428,15 @@ test('"Dine-in · Table 7" is kept with the order and survives a reload; table m
   await run('createOrderAfterVerification()');
   assert.equal(run('state.order.tableLabel'), '7');
   assert.equal(run('state.order.orderType'), 'dinein');
-  assert.equal(run('orderTableSuffix(state.order)'), ' · Table <bdi>7</bdi>');
+  assert.equal(run('orderTableSuffix(state.order)'), '<span class="table-order-name">&nbsp;· Table <bdi>7</bdi></span>');
   assert.equal(run('tableActive().label'), '7');               // people order again at the same table
   assert.equal(JSON.parse(run.shared.local.get('oracy:meerath-kabab:active-customer-order:v1')).tableLabel, '7');
   // a reload of the tab
   const again = environment('', run.shared);
   again('restoreTrackedCustomerOrder(); tableBoot()');
-  assert.equal(again('orderTableSuffix(state.order)'), ' · Table <bdi>7</bdi>');
+  assert.equal(again('orderTableSuffix(state.order)'), '<span class="table-order-name">&nbsp;· Table <bdi>7</bdi></span>');
   // the signed-in Orders screen knows an order only by its id
-  assert.equal(again(`tableOrderSuffix('cccccccc-cccc-4ccc-8ccc-cccccccccccc')`), ' · Table <bdi>7</bdi>');
+  assert.equal(again(`tableOrderSuffix('cccccccc-cccc-4ccc-8ccc-cccccccccccc')`), '<span class="table-order-name">&nbsp;· Table <bdi>7</bdi></span>');
   assert.equal(again(`tableOrderSuffix('${OTHER}')`), '');
   again.clock.now += 25 * HOUR;
   assert.equal(again(`tableOrderSuffix('cccccccc-cccc-4ccc-8ccc-cccccccccccc')`), '');   // forgotten after a day
@@ -560,7 +560,8 @@ test('every new English string has Arabic; the refusal is the contract\'s wordin
     assert.match(text.ar[key], /[؀-ۿ]/, key);
     assert.notEqual(text.ar[key], text.en[key], key);
     assert.deepEqual((text.ar[key].match(/\{\w+\}/g) || []).sort(), (text.en[key].match(/\{\w+\}/g) || []).sort(), key);
-    assert.equal(/\bcode\b|points/i.test(text.en[key]), false, key);
+    // the server's own messages must not look like a voucher / points problem to the checkout
+    if (['inactive', 'guestSignIn', 'busy', 'nameNeeded'].includes(key)) assert.equal(/\bcode\b|points/i.test(text.en[key]), false, key);
   }
   assert.equal(text.en.inactive, INACTIVE);
   assert.equal(run('TABLE_INACTIVE_EN'), INACTIVE);
@@ -581,7 +582,7 @@ test('Arabic draws the same card with the label kept in its own direction', asyn
   assert.match(chip, /داخل المطعم · <bdi>Terrace<\/bdi>/);
   assert.match(chip, /سنحضر طلبك إلى هذه الطاولة\./);
   assert.match(chip, />لست على هذه الطاولة؟<\/button>/);
-  assert.equal(run('tableOrderSuffix(null, "7")'), ' · طاولة <bdi>7</bdi>');
+  assert.equal(run('tableOrderSuffix(null, "7")'), '<span class="table-order-name">&nbsp;· طاولة <bdi>7</bdi></span>');
   // layout uses logical properties only, so right-to-left mirrors by itself
   const css = read('css/table.css');
   assert.equal(/margin-(left|right)|padding-(left|right)|text-align:\s*(left|right)|\b(left|right):/.test(css), false);
@@ -624,14 +625,15 @@ test('table.js is loaded before app.js, started before the first draw, and the c
   assert.ok(scripts.indexOf('js/table.js') > scripts.indexOf('js/ordering-hours.js'));
   assert.ok(scripts.indexOf('js/table.js') > scripts.indexOf('js/data.js'));
   assert.ok(scripts.indexOf('js/table.js') < scripts.indexOf('js/app.js'));
-  for (const file of ['js/table.js', 'js/app.js', 'js/data.js', 'js/account-orders.js', 'css/table.css']) {
-    assert.ok(html.includes(`${file}?v=20261006-b1"`), file);
+  assert.ok(html.includes('js/account-orders.js?v=20261006-b1"'));
+  for (const file of ['js/table.js', 'js/app.js', 'js/data.js', 'css/table.css', 'js/brand-config.js', 'js/ordering-hours.js']) {
+    assert.ok(html.includes(`${file}?v=20261007-b1g"`), file);   // Batch B1g (guest orders, table layout, closed texts)
   }
   const sheets = [...html.matchAll(/<link rel="stylesheet" href="([^"?]+)\?v=/g)].map(m => m[1]);
   assert.ok(sheets.includes('css/table.css'));
   assert.equal(sheets.at(-1), 'css/theme.css');                // the theme layer stays last
   // untouched files keep their keys
-  for (const pin of ['js/push.js?v=20261004-pc1', 'js/ordering-hours.js?v=20261003-batche', 'js/order-addons.js?v=20261003-batche',
+  for (const pin of ['js/push.js?v=20261004-pc1', 'js/order-addons.js?v=20261003-batche',
     'js/i18n.js?v=20261006-cx4f', 'css/theme.css?v=20261006-cx4i', 'js/theme.js?v=20261006-cx4c']) assert.ok(html.includes(pin + '"'), pin);
   const start = app.slice(app.lastIndexOf('\napplyDir();'));
   const boot = start.indexOf('tableBoot()'), draw = start.indexOf('\nrender();');

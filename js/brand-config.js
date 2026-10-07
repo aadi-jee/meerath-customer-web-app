@@ -33,7 +33,9 @@ const APP_CONFIG = Object.freeze({
     layoutPreset: "heritage",
     // CX-1: a theme is a structure (screen layout) plus a style (look).
     // Unknown names fall back to classic + heritage.
-    theme: Object.freeze({structure: "classic", style: "heritage"}),
+    // Batch B1g: tableStructure = the structure a visit from a table's QR always opens in
+    // (the visitor's own choice is not changed and comes back when they leave the table).
+    theme: Object.freeze({structure: "classic", style: "heritage", tableStructure: "scroll"}),
     // CX-4: while true, Account > Appearance offers the other structures on THIS device only
     // (nothing changes for anyone else). Set to false before launch.
     themePreview: true,
@@ -140,11 +142,17 @@ function previewStructure() {
   const saved = readAppStorage("structure");
   return THEME_STRUCTURES.includes(saved) ? saved : "";
 }
+/** Batch B1g: the structure forced while the visitor is at a table (table.js says when), or "". */
+function tableStructure() {
+  const wanted = APP_CONFIG.brand && APP_CONFIG.brand.theme && APP_CONFIG.brand.theme.tableStructure;
+  if (!THEME_STRUCTURES.includes(wanted)) return "";
+  try { return typeof tableShapesLook === "function" && tableShapesLook() ? wanted : ""; } catch (_) { return ""; }
+}
 function brandTheme() {
   const chosen = (APP_CONFIG.brand && APP_CONFIG.brand.theme) || {};
   const preview = previewStructure();
   return {
-    structure: preview || (THEME_STRUCTURES.includes(chosen.structure) ? chosen.structure : THEME_STRUCTURES[0]),
+    structure: tableStructure() || preview || (THEME_STRUCTURES.includes(chosen.structure) ? chosen.structure : THEME_STRUCTURES[0]),
     style: THEME_STYLES.includes(chosen.style) ? chosen.style : THEME_STYLES[0],
   };
 }

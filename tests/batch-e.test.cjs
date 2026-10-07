@@ -287,6 +287,7 @@ test('the server\'s new sentences pass the allow-list and have Arabic words', ()
 
 test('cache keys are bumped for every changed file', () => {
   const html = read('index.html');
-  for (const file of ['css/home.css', 'js/ordering-hours.js', 'js/rewards.js',
+  for (const file of ['css/home.css', 'js/rewards.js',
     'js/order-addons.js']) assert.ok(html.includes(`${file}?v=20261003-batche"`), file);
+  assert.ok(html.includes('js/ordering-hours.js?v=20261007-b1g"'));   // Batch B1g (closed texts at a table) changed ordering-hours.js
 });
