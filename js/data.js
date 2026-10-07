@@ -690,6 +690,8 @@ async function refreshTrackedCustomerOrder() {
         archiveCompletedCustomerOrder(order, remote);
       } else {
         saveTrackedCustomerOrder();
+        // Batch 391: staff may have moved the order to another table (asked here, not on a timer of its own).
+        if (typeof tableFollowOrder === "function") tableFollowOrder(order);
       }
       if (changed && ["confirmation", "track"].includes(state.screen)) renderKeepScroll();
     } catch (error) {

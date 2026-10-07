@@ -633,8 +633,10 @@ test('table.js is loaded before app.js, started before the first draw, and the c
   assert.ok(scripts.indexOf('js/table.js') > scripts.indexOf('js/data.js'));
   assert.ok(scripts.indexOf('js/table.js') < scripts.indexOf('js/app.js'));
   for (const file of ['js/brand-config.js', 'js/ordering-hours.js']) assert.ok(html.includes(`${file}?v=20261007-b1g"`), file);   // Batch B1g
-  for (const file of ['js/app.js', 'js/account-orders.js']) assert.ok(html.includes(`${file}?v=20261007-1b"`), file);    // Batch 1b
-  for (const file of ['js/table.js', 'js/data.js', 'css/table.css']) assert.ok(html.includes(`${file}?v=20261007-388"`), file);   // Batch 388
+  for (const file of ['js/app.js', 'js/account-orders.js']) assert.ok(html.includes(`${file}?v=20261007-391"`), file);   // Batch 391
+  for (const file of []) assert.ok(html.includes(`${file}?v=20261007-1b"`), file);    // Batch 1b
+  for (const file of ['js/table.js', 'js/data.js', 'css/table.css']) assert.ok(html.includes(`${file}?v=20261007-391"`), file);   // Batch 391
+  for (const file of []) assert.ok(html.includes(`${file}?v=20261007-388"`), file);   // Batch 388
   const sheets = [...html.matchAll(/<link rel="stylesheet" href="([^"?]+)\?v=/g)].map(m => m[1]);
   assert.ok(sheets.includes('css/table.css'));
   assert.equal(sheets.at(-1), 'css/theme.css');                // the theme layer stays last

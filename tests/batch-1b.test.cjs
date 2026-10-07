@@ -857,10 +857,11 @@ test('the new files load in the right place, the changed files have new cache ke
   assert.ok(scripts.indexOf('js/table-calls.js') < scripts.indexOf('js/app.js'));
   assert.ok(scripts.indexOf('js/order-note.js') > scripts.indexOf('js/data.js'));
   assert.ok(scripts.indexOf('js/order-note.js') < scripts.indexOf('js/account-orders.js'));
-  for (const file of ['js/table-calls.js', 'js/order-note.js', 'js/app.js', 'js/account-orders.js', 'css/order-note.css']) {
+  for (const file of ['js/app.js', 'js/account-orders.js']) assert.ok(html.includes(`${file}?v=20261007-391"`), file);   // Batch 391
+  for (const file of ['js/table-calls.js', 'js/order-note.js', 'css/order-note.css']) {
     assert.ok(html.includes(`${file}?v=20261007-1b"`), file);
   }
-  for (const pin of ['js/brand-config.js?v=20261007-b1g', 'js/ordering-hours.js?v=20261007-b1g', 'js/order-addons.js?v=20261003-batche', 'js/push.js?v=20261007-388', 'js/table.js?v=20261007-388', 'js/data.js?v=20261007-388', 'css/table.css?v=20261007-388',
+  for (const pin of ['js/brand-config.js?v=20261007-b1g', 'js/ordering-hours.js?v=20261007-b1g', 'js/order-addons.js?v=20261003-batche', 'js/push.js?v=20261007-388', 'js/table.js?v=20261007-391', 'js/data.js?v=20261007-391', 'css/table.css?v=20261007-391',
     'js/i18n.js?v=20261006-cx4f', 'js/rewards.js?v=20261003-batche', 'js/auth.js?v=20261003-gate4', 'css/theme.css?v=20261006-cx4i', 'js/theme.js?v=20261006-cx4c']) {
     assert.ok(html.includes(pin + '"'), pin);
   }

@@ -370,3 +370,22 @@ body.light-theme #tableCallSheet .table-call-note { background: #fff; border-col
 /* Batch 388: the guest's mobile number, when the restaurant asks for it (under the name). */
 #app .table-guest-phone { margin-top: 10px; text-align: start; }
 [dir="rtl"] #app .table-guest-phone { text-align: end; }
+
+/* Batch 391: the only field of the guest card (name not asked) needs no gap above it. */
+#app .table-guest-only { margin-top: 0; }
+/* Batch 391: "Your order is now at Table 7" (an order moved by staff). */
+.table-move-note {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border: 1px solid rgba(240, 138, 26, 0.35);
+  border-radius: 12px;
+  background: rgba(240, 138, 26, 0.08);
+  color: var(--text);
+  font-size: 13.5px;
+  line-height: 1.45;
+  text-align: start;
+}
+.table-move-note strong { font-weight: 700; }
+.table-chip-note.table-move-note { flex: 1 1 100%; padding: 9px 12px; }
+.confirmation-screen .table-move-note { display: block; max-width: 100%; margin-top: 12px; }
+body.light-theme .table-move-note { background: #fff4e6; border-color: #f0c48a; }

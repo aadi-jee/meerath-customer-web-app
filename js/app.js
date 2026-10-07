@@ -2049,7 +2049,9 @@ function orderTableSuffix(order) {
 }
 /** Batch 1b: "Note: Less spicy" for the order's own cards (escaped in order-note.js). */
 function orderNoteLine(order) {
-  return order && typeof orderNoteMarkup === "function" ? orderNoteMarkup(order.backendId, order.note) : "";
+  // Batch 391: and, when staff moved the order, "Your order is now at Table 7" (table.js)
+  return (order && typeof orderNoteMarkup === "function" ? orderNoteMarkup(order.backendId, order.note) : "") +
+    (order && typeof tableMoveNote === "function" ? tableMoveNote(order.backendId, order) : "");
 }
 function confirmation() {
   const o = state.order;

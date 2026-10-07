@@ -38,6 +38,8 @@ const TABLE_TEXT = {
     guestPhoneHint: "Only used to reach you about this order.",
     guestHint: "No mobile number needed.",
     phoneNeeded: TABLE_PHONE_EN,
+    movedNow: "Your order is now at Table {label}",
+    movedScan: "To call staff or order again, scan the QR on that table.",
     guestNameError: "Please enter your name (at least 2 letters).",
     signInEarn: "Sign in and earn {points} points",
     signInPlain: "Sign in with your mobile number",
@@ -73,6 +75,8 @@ const TABLE_TEXT = {
     guestPhoneHint: "يُستخدم فقط للتواصل معك بخصوص هذا الطلب.",
     guestHint: "لا حاجة لرقم الجوال.",
     phoneNeeded: "يرجى إدخال رقم جوال صحيح.",
+    movedNow: "طلبك الآن على طاولة {label}",
+    movedScan: "لنداء الموظف أو لطلب جديد، امسح رمز QR على تلك الطاولة.",
     guestNameError: "يرجى إدخال اسمك (حرفان على الأقل).",
     signInEarn: "سجّل الدخول واكسب {points} نقطة",
     signInPlain: "سجّل الدخول برقم جوالك",
@@ -121,7 +125,9 @@ function tableLoad() {
 /** Batch 388: what a guest is asked for, as the scan said. A database without 388 says nothing:
  *  then it is as before 388 — the name is needed and no number is asked. */
 function tableGuestModes(name, phone) {
-  return {guestNameMode: name === "optional" ? "optional" : "required",
+  // Batch 391: the name may also be "hidden". No value at all = a database without 388 = needed, as then.
+  // A value this app does not know yet is the mild one (optional): it must never invent a duty.
+  return {guestNameMode: name === undefined || name === null || name === "required" ? "required" : name === "hidden" ? "hidden" : "optional",
     guestPhoneMode: phone === "optional" || phone === "required" ? phone : "hidden"};
 }
 function tableClear() {
@@ -345,6 +351,7 @@ function tableChipMarkup(place) {
       ${bell ? leave : ""}
     </div>
     ${bell ? `${bell}${tableCallsStateMarkup()}` : leave}
+    ${tableMovedAwayMarkup(table)}
     ${where === "checkout" ? `<p class="table-chip-note">${escapeHtml(tableText("served"))}</p>` : ""}
   </div>`;
 }
@@ -358,11 +365,11 @@ function tableOrderLabels() {
       Number.isFinite(row.at) && Math.abs(Date.now() - row.at) < TABLE_ORDER_LABEL_MS).slice(0, 12);
   } catch (_) { return []; }
 }
-function tableRememberOrder(id, label) {
+function tableRememberOrder(id, label, moved) {
   const clean = tableClean(label, 12);
   if (!isMenuId(id) || !clean) return;
   try {
-    const list = [{id, label: clean, at: Date.now()}, ...tableOrderLabels().filter(row => row.id !== id)].slice(0, 12);
+    const list = [{id, label: clean, at: Date.now(), ...(moved ? {moved: true} : {})}, ...tableOrderLabels().filter(row => row.id !== id)].slice(0, 12);
     localStorage.setItem(appStorageKey("order-tables"), JSON.stringify(list));
   } catch (_) {}
 }
@@ -393,7 +400,7 @@ function tableGuestPhoneClean(value) {
   const bare = typed.replace(/[\s\-.()]/g, "");
   return /^\+?[0-9]{9,15}$/.test(bare) ? bare : "";
 }
-function tableGuestNameMode() { const table = tableActive(); return table && table.guestNameMode === "optional" ? "optional" : "required"; }
+function tableGuestNameMode() { const table = tableActive(); return table && ["optional", "hidden"].includes(table.guestNameMode) ? table.guestNameMode : "required"; }
 function tableGuestPhoneMode() { const table = tableActive(); return table && ["optional", "required"].includes(table.guestPhoneMode) ? table.guestPhoneMode : "hidden"; }
 /** The name as it will be sent: no control or invisible characters, single spaces, at most 80. */
 function tableGuestClean(value) {
@@ -473,7 +480,8 @@ function tableGuestShowError(text, where = "name") {
 /** Batch 388: what the form holds, judged by the restaurant's settings as last heard:
  *  {name, phone} when it can be sent, or {error, where}. The server judges again. */
 function tableGuestForm() {
-  const name = tableGuestClean(tableGuestNameValue());
+  // Batch 391: name hidden = not asked and not sent (an empty text; the server saves "Guest" whatever comes)
+  const name = tableGuestNameMode() === "hidden" ? "" : tableGuestClean(tableGuestNameValue());
   // a name that is given must be a real one in both modes; an empty one is fine only when optional
   if (name.length < 2 && (name.length > 0 || tableGuestNameMode() === "required")) return {error: tableText("guestNameError"), where: "name"};
   const mode = tableGuestPhoneMode();
@@ -559,20 +567,22 @@ function tableGuestMarkup(mobileEntry) {
   const phoneError = guestOn ? tableGuest.phoneError : "";
   const sub = tableText(nameMode === "required" ? (phoneMode === "required" ? "guestSubBoth" : "guestSub")
     : phoneMode === "required" ? "guestSubPhone" : "guestSubFree");
+  const askName = nameMode !== "hidden";                         // Batch 391: the name may not be asked at all
+  const nothingAsked = !askName && phoneMode === "hidden";       // then the card is only its title and Place Order
   return `<div class="table-who" role="radiogroup" aria-label="${escapeHtml(tableText("whoLabel"))}">
     <div class="table-who-card table-who-guest${guestOn ? " on" : ""}">
       <button type="button" class="table-who-head" role="radio" aria-checked="${guestOn}" onclick="tableChoose('guest')">
         <span class="table-who-radio" aria-hidden="true"></span>
         <span class="table-who-copy"><strong>${escapeHtml(tableText("guestTitle"))}</strong><small>${escapeHtml(sub)}</small></span>
       </button>
-      ${guestOn ? `<div class="table-who-body">
-        <input class="field table-guest-name${error ? " invalid" : ""}" id="tableGuestName" type="text" maxlength="80"
+      ${guestOn && !nothingAsked ? `<div class="table-who-body">
+        ${!askName ? "" : `<input class="field table-guest-name${error ? " invalid" : ""}" id="tableGuestName" type="text" maxlength="80"
           autocomplete="given-name" autocapitalize="words" enterkeyhint="done" dir="auto"
           placeholder="${escapeHtml(nameLabel)}" aria-label="${escapeHtml(nameLabel)}"
           ${error ? `aria-invalid="true"` : ""} value="${escapeHtml(tableGuestNameValue())}" oninput="tableGuestNameInput(this.value)" />
-        ${error ? `<p class="table-guest-error" role="alert">${escapeHtml(error)}</p>` : ""}
+        ${error ? `<p class="table-guest-error" role="alert">${escapeHtml(error)}</p>` : ""}`}
         ${phoneMode === "hidden" ? `<p class="table-guest-hint">${escapeHtml(tableText("guestHint"))}</p>` : `
-        <input class="field table-guest-name table-guest-phone${phoneError ? " invalid" : ""}" id="tableGuestPhone" type="tel" inputmode="tel" maxlength="40"
+        <input class="field table-guest-name table-guest-phone${askName ? "" : " table-guest-only"}${phoneError ? " invalid" : ""}" id="tableGuestPhone" type="tel" inputmode="tel" maxlength="40"
           autocomplete="off" enterkeyhint="done" dir="ltr"
           placeholder="${escapeHtml(phoneLabel)}" aria-label="${escapeHtml(phoneLabel)}"
           ${phoneError ? `aria-invalid="true"` : ""} value="${escapeHtml(tableGuest.phone)}" oninput="tableGuestPhoneInput(this.value)" />
@@ -601,4 +611,55 @@ if (typeof window !== "undefined") {
   window.tableChoose = tableChoose;
   window.tableGuestNameInput = tableGuestNameInput;
   window.tableGuestPhoneInput = tableGuestPhoneInput;
+}
+
+/* ---- Batch 391: an order that staff moved to another table -----------------------------------------
+ * The order's cards show the table the order is at NOW (oracy_track_order_table_v1, asked with the
+ * tracking refresh that already runs, at most every 20 seconds). The phone still holds the QR key of
+ * the table it scanned: the bell and a new order go to THAT table. So the move is said, and the guest
+ * is told to scan the QR on the new table; the key is never changed behind the guest's back. */
+const TABLE_FOLLOW_MS = 20000;
+const tableFollow = {at: 0, off: false, busy: false};
+/** Called after every good tracking answer (data.js). order = the tracked order (state.order). */
+async function tableFollowOrder(order) {
+  if (!order || tableFollow.off || tableFollow.busy || order.orderType !== "dinein" || !tableClean(order.tableLabel, 12) ||
+      !isMenuId(order.backendId) || !isMenuId(order.trackingToken) || Date.now() - tableFollow.at < TABLE_FOLLOW_MS) return;
+  tableFollow.busy = true;
+  tableFollow.at = Date.now();
+  try {
+    const answer = await customerOrderRpc("oracy_track_order_table_v1", {p_order_id: order.backendId, p_tracking_token: order.trackingToken});
+    const label = tableClean(answer && answer.ok === true ? answer.table_label : "", 12);
+    if (!label || label === order.tableLabel || typeof state === "undefined" || state.order !== order) return;   // {ok:false}: what was saved stays
+    order.tableLabel = label;
+    order.tableMoved = true;
+    tableRememberOrder(order.backendId, label, true);
+    if (typeof saveTrackedCustomerOrder === "function") saveTrackedCustomerOrder();
+    if (typeof toast === "function") toast(tableText("movedNow", {label}), 5000);
+    if (["confirmation", "track", "home", "checkout"].includes(state.screen)) {
+      if (typeof renderKeepScroll === "function") renderKeepScroll(); else if (typeof render === "function") render();
+    }
+  } catch (error) {
+    if (error && (error.status === 404 || error.code === "PGRST202")) tableFollow.off = true;   // a database without 391: not asked again
+  } finally { tableFollow.busy = false; }
+}
+/** True when this phone's own table (the QR it scanned) is the one the order is at now. */
+function tableSameAsOrder(label) {
+  const table = tableActive();
+  return !!table && table.label === label;
+}
+/** Under an order's card: "Your order is now at Table 7" (+ what to do for the bell), or "". */
+function tableMoveNote(id, order) {
+  const row = tableOrderLabels().find(item => item.id === id);
+  const moved = order ? order.tableMoved === true : !!(row && row.moved === true);
+  const label = tableClean(order ? order.tableLabel : row && row.label, 12);
+  if (!moved || !label) return "";
+  const scan = tableActive() && !tableSameAsOrder(label) ? ` ${escapeHtml(tableText("movedScan"))}` : "";
+  return `<p class="table-move-note" role="status"><strong>${tableNameHtml(label, "movedNow")}.</strong>${scan}</p>`;
+}
+/** In the "Table N" card of the table the phone scanned, while its tracked order sits at another table. */
+function tableMovedAwayMarkup(table) {
+  const order = typeof state !== "undefined" ? state.order : null;
+  const label = order && order.tableMoved === true ? tableClean(order.tableLabel, 12) : "";
+  if (!label || label === table.label || ["completed", "rejected", "cancelled"].includes(order.status)) return "";
+  return `<p class="table-chip-note table-move-note" role="status"><strong>${tableNameHtml(label, "movedNow")}.</strong> ${escapeHtml(tableText("movedScan"))}</p>`;
 }

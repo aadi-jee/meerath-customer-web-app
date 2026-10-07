@@ -105,7 +105,7 @@ function accountOrdersPage() {
       <div class="order-timeline">${steps.map((step,i)=>`<div class="order-step ${i<idx?'done':i===idx?'now':''}"><div class="order-step-dot"></div><div class="order-step-copy"><strong>${t(step)}</strong></div></div>`).join('')}</div>
       <div class="active-order-items"><h4>${t('orderDetails')}</h4>
       ${(Array.isArray(order.items)?order.items:[]).map(line=>`<div class="active-order-item"><span>${h(line.quantity)} × ${h(line.name)}</span></div>`).join('')}
-      ${typeof orderNoteMarkup === 'function' ? orderNoteMarkup(order.id) : ''}
+      ${typeof orderNoteMarkup === 'function' ? orderNoteMarkup(order.id) : ''}${typeof tableMoveNote === 'function' ? tableMoveNote(order.id) : ''}
       <div class="account-order-total"><span>${authCopy('Total','الإجمالي')}</span><strong>${money(Number(order.total)||0)}</strong></div></div>
       ${typeof pushCardMarkup === 'function' ? pushCardMarkup({id: order.id, token: null}) : ''}
       ${typeof orderAddonsMarkup === 'function' ? orderAddonsMarkup({id: order.id, number: String(order.order_number || ''),

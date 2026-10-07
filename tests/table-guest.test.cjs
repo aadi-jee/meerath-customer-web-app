@@ -417,7 +417,7 @@ test('after a guest order: tracked by its token like any order, with the table, 
   // the tracking call is the usual one, by token
   run.answers((name, params) => ({id: params.p_order_id, order_number: 'MK001042', status: 'preparing', total: 70, updated_at: 'x'}));
   await run('realRefreshTracked()');
-  const tracked = JSON.parse(run('JSON.stringify(calls.at(-1))'));
+  const tracked = JSON.parse(run('JSON.stringify(calls.filter(c => c.name === "oracy_track_customer_order_v1").at(-1))'));
   assert.equal(tracked.name, 'oracy_track_customer_order_v1');
   assert.deepEqual(tracked.params, {p_order_id: order.backendId, p_tracking_token: order.trackingToken});
   assert.equal(run('state.order.status'), 'preparing');
@@ -782,8 +782,10 @@ test('the changed files have new cache keys; untouched files keep theirs', () =>
   const html = read('index.html');
   for (const file of ['js/brand-config.js', 'js/ordering-hours.js']) assert.ok(html.includes(`${file}?v=20261007-b1g"`), file);
   // Batch 1b (order note, call waiter) changed these again
-  for (const file of ['js/app.js', 'js/account-orders.js']) assert.ok(html.includes(`${file}?v=20261007-1b"`), file);
-  for (const file of ['js/data.js', 'js/table.js', 'css/table.css', 'js/push.js']) assert.ok(html.includes(`${file}?v=20261007-388"`), file);   // Batch 388
+  for (const file of ['js/app.js', 'js/account-orders.js']) assert.ok(html.includes(`${file}?v=20261007-391"`), file);   // Batch 391
+  for (const file of []) assert.ok(html.includes(`${file}?v=20261007-1b"`), file);
+  for (const file of ['js/data.js', 'js/table.js', 'css/table.css']) assert.ok(html.includes(`${file}?v=20261007-391"`), file);   // Batch 391
+  for (const file of ['js/push.js']) assert.ok(html.includes(`${file}?v=20261007-388"`), file);   // Batch 388
   for (const pin of ['js/rewards.js?v=20261003-batche', 'js/order-addons.js?v=20261003-batche',
     'js/i18n.js?v=20261006-cx4f', 'js/auth.js?v=20261003-gate4', 'css/theme.css?v=20261006-cx4i',
     'css/rewards.css?v=20261002-rewards2', 'js/theme.js?v=20261006-cx4c']) assert.ok(html.includes(pin + '"'), pin);

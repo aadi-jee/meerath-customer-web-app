@@ -130,7 +130,7 @@ test('the scan says what a guest is asked for; a database without 388 says nothi
   const cases = [['', 'required', 'hidden'], [`{guest_name_mode:'optional', guest_phone_mode:'hidden'}`, 'optional', 'hidden'],
     [`{guest_name_mode:'required', guest_phone_mode:'optional'}`, 'required', 'optional'],
     [`{guest_name_mode:'optional', guest_phone_mode:'required'}`, 'optional', 'required'],
-    [`{guest_name_mode:'OPTIONAL', guest_phone_mode:'yes'}`, 'required', 'hidden'], [`{guest_name_mode:null, guest_phone_mode:1}`, 'required', 'hidden']];
+    [`{guest_name_mode:'OPTIONAL', guest_phone_mode:'yes'}`, 'optional', 'hidden']   /* 391: an unknown name value is the mild one */, [`{guest_name_mode:null, guest_phone_mode:1}`, 'required', 'hidden']];
   for (const [extra, name, phone] of cases) {
     const run = await atTable(extra);
     assert.equal(run('tableActive().guestNameMode'), name, extra);
@@ -609,8 +609,9 @@ test('the pieces around it are independent: own abort timers, no shared controll
 
 test('cache keys: the changed files are new, the others keep theirs', () => {
   const html = read('index.html');
-  for (const file of ['js/table.js', 'js/data.js', 'js/push.js', 'css/table.css']) assert.ok(html.includes(`${file}?v=20261007-388"`), file);
-  for (const pin of ['js/app.js?v=20261007-1b', 'js/table-calls.js?v=20261007-1b', 'js/order-note.js?v=20261007-1b', 'js/account-orders.js?v=20261007-1b',
+  for (const file of ['js/table.js', 'js/data.js', 'css/table.css']) assert.ok(html.includes(`${file}?v=20261007-391"`), file);   // Batch 391
+  for (const file of ['js/push.js']) assert.ok(html.includes(`${file}?v=20261007-388"`), file);
+  for (const pin of ['js/app.js?v=20261007-391', 'js/table-calls.js?v=20261007-1b', 'js/order-note.js?v=20261007-1b', 'js/account-orders.js?v=20261007-391',
     'css/order-note.css?v=20261007-1b', 'js/brand-config.js?v=20261007-b1g', 'js/ordering-hours.js?v=20261007-b1g', 'js/order-addons.js?v=20261003-batche',
     'js/i18n.js?v=20261006-cx4f', 'css/theme.css?v=20261006-cx4i']) assert.ok(html.includes(pin + '"'), pin);
   const orig = read('js/app.js');
