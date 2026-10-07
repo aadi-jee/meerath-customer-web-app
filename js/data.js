@@ -436,7 +436,8 @@ const LEGACY_CUSTOMER_ORDER_HISTORY_STORAGE_KEY = "meerath-customer-order-histor
 const customerOrderConnection = { pending: null, timer: null };
 
 async function customerOrderRpc(name, params) {
-  const signedInOnly = ["oracy_create_customer_order_v1", "oracy_create_pin_delivery_order_v2", "oracy_create_table_order_v1"];
+  const signedInOnly = ["oracy_create_customer_order_v1", "oracy_create_pin_delivery_order_v2", "oracy_create_table_order_v1",
+    "oracy_create_customer_order_v2", "oracy_create_pin_delivery_order_v3"];   // Batch 1b (379): the entries that take the order note
   let accessToken = null;
   let tokenError = null;
   try {
@@ -528,11 +529,18 @@ async function submitCustomerOrder(order, table, guest) {
         address: "", delivery_address_id: null, delivery_address_version: null, expected_delivery_fee: null},
     });
   }
-  return customerOrderRpc(order.fulfillment_type === "delivery" ? "oracy_create_pin_delivery_order_v2" : MENU_CONFIG.rpc.createOrder, {
-    p_restaurant_id: MENU_CONFIG.restaurantId,
-    p_branch_id: branchId,
-    p_order: order,
-  });
+  // Batch 1b (379): the entries that read order_note ("Cooking instructions"). A server that does not
+  // have them yet answers 404 / PGRST202: the order then goes to the function it has, without the
+  // note, once and without a message (the same client_order_id, so nothing can double).
+  const delivery = order.fulfillment_type === "delivery";
+  const params = {p_restaurant_id: MENU_CONFIG.restaurantId, p_branch_id: branchId, p_order: order};
+  try {
+    return await customerOrderRpc(delivery ? "oracy_create_pin_delivery_order_v3" : "oracy_create_customer_order_v2", params);
+  } catch (error) {
+    if (!error || (error.status !== 404 && error.code !== "PGRST202")) throw error;
+    const {order_note, ...withoutNote} = order;
+    return customerOrderRpc(delivery ? "oracy_create_pin_delivery_order_v2" : MENU_CONFIG.rpc.createOrder, {...params, p_order: withoutNote});
+  }
 }
 
 async function requestCustomerDeliveryQuote(address, foodSubtotal) {

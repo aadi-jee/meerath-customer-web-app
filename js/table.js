@@ -96,7 +96,8 @@ function tableLoad() {
     if (TABLE_KEY_SHAPE.test(String(saved.key)) && label && saved.restaurantId === MENU_CONFIG.restaurantId &&
         isMenuId(saved.branchId) && Number.isFinite(saved.at)) {
       tableMode.table = {key: saved.key, label, section: tableClean(saved.section, 40),
-        branchId: saved.branchId, restaurantId: saved.restaurantId, at: saved.at, guestOrders: saved.guestOrders === true};
+        branchId: saved.branchId, restaurantId: saved.restaurantId, at: saved.at, guestOrders: saved.guestOrders === true,
+        serviceCalls: saved.serviceCalls === true};
     } else sessionStorage.removeItem(tableStorageKey());
   } catch (_) {}
 }
@@ -175,7 +176,11 @@ function tableBoot() {
   const key = tableTakeKeyFromUrl();
   const kept = tableActive();
   if (key === null) {
-    if (kept) { tableSkipSplash(); tableApplyLook(); tableEnforce(); }
+    if (kept) {
+      tableSkipSplash(); tableApplyLook(); tableEnforce();
+      // Batch 1b: after a reload the card shows a call that is still running (table-calls.js loads after this file).
+      setTimeout(() => { if (typeof tableCallsStart === "function") tableCallsStart(); }, 0);
+    }
     return;
   }
   // A new scan replaces the remembered table at once: an order must never go to a table the customer left.
@@ -223,13 +228,15 @@ async function tableScan(key, attempt = 1) {
     return;
   }
   tableMode.table = {key, label, section: tableClean(answer.section, 40), branchId: answer.branch_id,
-    restaurantId: answer.restaurant_id, at: Date.now(), guestOrders: answer.guest_orders === true};
+    restaurantId: answer.restaurant_id, at: Date.now(), guestOrders: answer.guest_orders === true,
+    serviceCalls: answer.service_calls === true};   // Batch 1b (382): staff can be called from this table
   tableMode.confirming = false;
   tableStore();
   tableApplyLook();
   tableEnforce();
   tableRedraw();
   if (typeof toast === "function") toast(tableText("ordering", {label}), 3200);
+  if (typeof tableCallsStart === "function") tableCallsStart();   // Batch 1b: is a call already running at this table?
 }
 /** The server refused the key while taking the order: table mode ends, the cart stays. */
 function tableRefused(message) {
@@ -278,13 +285,17 @@ function tableChipMarkup(place) {
         <button type="button" class="table-chip-go" onclick="tableLeave()">${escapeHtml(tableText("leave"))}</button>
       </div></div>`;
   }
-  return `<div class="table-chip table-chip-${where}" role="group">
+  // Batch 1b (382): where staff can be called the bell sits in the card, and the running calls under the name.
+  const bell = typeof tableCallsBellMarkup === "function" ? tableCallsBellMarkup() : "";
+  const leave = `<button type="button" class="table-chip-leave" onclick="tableAskLeave()">${escapeHtml(tableText("leaveAsk"))}</button>`;
+  return `<div class="table-chip table-chip-${where}${bell ? " table-chip-calls" : ""}" role="group">
     <span class="table-chip-icon">${TABLE_ICON}</span>
     <div class="table-chip-copy">
       <small><i class="table-chip-dot" aria-hidden="true"></i>${t("dineIn")}${table.section ? ` · <bdi>${escapeHtml(table.section)}</bdi>` : ""}</small>
       <strong>${name}</strong>
+      ${bell ? leave : ""}
     </div>
-    <button type="button" class="table-chip-leave" onclick="tableAskLeave()">${escapeHtml(tableText("leaveAsk"))}</button>
+    ${bell ? `${bell}${tableCallsStateMarkup()}` : leave}
     ${where === "checkout" ? `<p class="table-chip-note">${escapeHtml(tableText("served"))}</p>` : ""}
   </div>`;
 }

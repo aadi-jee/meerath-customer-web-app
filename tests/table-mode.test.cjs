@@ -161,7 +161,7 @@ test('a good scan enters table mode: remembered for this tab, dine-in, no welcom
   await run('tableSettled()');
   assert.equal(run('JSON.stringify(scans)'), JSON.stringify([{name: 'oracy_table_scan_v1', params: {p_key: KEY}}]));
   const saved = JSON.parse(run.shared.session.get(TABLE_STORE));
-  assert.deepEqual(saved, {key: KEY, label: '7', section: 'Terrace', branchId: BRANCH, restaurantId: RESTAURANT, at: run.clock.now, guestOrders: false});
+  assert.deepEqual(saved, {key: KEY, label: '7', section: 'Terrace', branchId: BRANCH, restaurantId: RESTAURANT, at: run.clock.now, guestOrders: false, serviceCalls: false});
   assert.equal(run.shared.local.has(TABLE_STORE), false);      // this tab only: gone when the tab closes
   assert.equal(run('state.orderType'), 'dinein');
   assert.equal(run('state.orderTiming'), 'asap');
@@ -352,7 +352,7 @@ test('without a table the order goes where it always went, unchanged', async () 
   run(`state.isLoggedIn=true; state.orderType='takeaway'; customerOrderRpc=async(name,params)=>{scans.push({name,params}); return created()}`);
   await run('createOrderAfterVerification()');
   const sent = JSON.parse(run('JSON.stringify(scans)'));
-  assert.equal(sent[0].name, 'oracy_create_customer_order_v1');
+  assert.equal(sent[0].name, 'oracy_create_customer_order_v2');   // Batch 1b (379): the entry that takes the order note; same body
   assert.deepEqual(Object.keys(sent[0].params).sort(), ['p_branch_id', 'p_order', 'p_restaurant_id']);
   assert.equal(sent[0].params.p_order.fulfillment_type, 'takeaway');
   assert.equal(run('state.order.tableLabel'), undefined);
@@ -625,9 +625,9 @@ test('table.js is loaded before app.js, started before the first draw, and the c
   assert.ok(scripts.indexOf('js/table.js') > scripts.indexOf('js/ordering-hours.js'));
   assert.ok(scripts.indexOf('js/table.js') > scripts.indexOf('js/data.js'));
   assert.ok(scripts.indexOf('js/table.js') < scripts.indexOf('js/app.js'));
-  assert.ok(html.includes('js/account-orders.js?v=20261006-b1"'));
-  for (const file of ['js/table.js', 'js/app.js', 'js/data.js', 'css/table.css', 'js/brand-config.js', 'js/ordering-hours.js']) {
-    assert.ok(html.includes(`${file}?v=20261007-b1g"`), file);   // Batch B1g (guest orders, table layout, closed texts)
+  for (const file of ['js/brand-config.js', 'js/ordering-hours.js']) assert.ok(html.includes(`${file}?v=20261007-b1g"`), file);   // Batch B1g
+  for (const file of ['js/table.js', 'js/app.js', 'js/data.js', 'css/table.css', 'js/account-orders.js']) {
+    assert.ok(html.includes(`${file}?v=20261007-1b"`), file);    // Batch 1b (order note, call waiter)
   }
   const sheets = [...html.matchAll(/<link rel="stylesheet" href="([^"?]+)\?v=/g)].map(m => m[1]);
   assert.ok(sheets.includes('css/table.css'));

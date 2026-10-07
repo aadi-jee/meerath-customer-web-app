@@ -1572,7 +1572,7 @@ function cart() {
       </div>`;
     }).join("")}
     ${cartRecommendationsMarkup()}
-    <textarea class="field" rows="2" placeholder="${t("cookingNotes")}" oninput="state.notes=this.value">${escapeHtml(state.notes)}</textarea>
+    ${typeof orderNoteFieldMarkup === "function" ? orderNoteFieldMarkup() : `<textarea class="field" rows="2" placeholder="${t("cookingNotes")}" oninput="state.notes=this.value">${escapeHtml(state.notes)}</textarea>`}
     ${typeof addonTarget === "function" && addonTarget() ? addonCartMarkup() : `${tableGuestOn() ? tableGuestCouponNote() : `<div id="couponBox">${couponBoxMarkup()}</div>`}
     <div class="breakdown" id="cartBreakdown" style="margin-top:14px">${cartSummaryMarkup()}</div>
     ${orderingStripMarkup()}
@@ -2047,6 +2047,10 @@ function checkout() {
 function orderTableSuffix(order) {
   return order && typeof tableOrderSuffix === "function" ? tableOrderSuffix(order.backendId, order.tableLabel) : "";
 }
+/** Batch 1b: "Note: Less spicy" for the order's own cards (escaped in order-note.js). */
+function orderNoteLine(order) {
+  return order && typeof orderNoteMarkup === "function" ? orderNoteMarkup(order.backendId, order.note) : "";
+}
 function confirmation() {
   const o = state.order;
 
@@ -2093,7 +2097,7 @@ function confirmation() {
           <span class="confirmation-type">
             ${t(typeKey)}${orderTableSuffix(o)}
           </span>
-          ${deliveryConfirmationMarkup(o)}
+          ${deliveryConfirmationMarkup(o)}${orderNoteLine(o)}
 
           <p class="confirmation-order">
             ${t("order")}
@@ -2161,7 +2165,7 @@ function confirmation() {
         <span class="confirmation-type">
           ${t(typeKey)}${orderTableSuffix(o)}
         </span>
-        ${deliveryConfirmationMarkup(o)}
+        ${deliveryConfirmationMarkup(o)}${orderNoteLine(o)}
 
         <p class="confirmation-order">
           ${t("order")}
@@ -2366,6 +2370,7 @@ const idx = o ? customerStatusStep(o.status) : 0;
                         .join("")}
 
                       ${typeof orderAddedItemsMarkup === "function" ? orderAddedItemsMarkup(o.backendId) : ""}
+                      ${orderNoteLine(o)}
                     </div>
                     ${typeof pushCardMarkup === "function" && !["completed", "rejected", "cancelled"].includes(o.status)
                         ? pushCardMarkup({id: o.backendId, token: o.trackingToken}) : ""}
@@ -4400,7 +4405,9 @@ function orderAttemptId(cart, address, table, guest) {
     // Batch B1g: a guest is known by the device's guest id; the name is not part of the attempt
     // (a corrected name must not make a second order) and a guest has no voucher or points.
     ...(guest ? ["", "", "", "", 0] : [(state.customer.mobile || "").trim(), (state.customer.name || "").trim(), (state.customer.email || "").trim(),
-    state.couponOn ? (state.voucher?.code || "") : "", state.redeemPoints || 0]), state.notes || "",
+    // Batch 1b (379): the order note is NOT part of the attempt. The server never changes the note of an
+    // order it already saved, so a retry with an edited note must be the same order, not a second one.
+    state.couponOn ? (state.voucher?.code || "") : "", state.redeemPoints || 0]), "",
     cart.map(l => [l.id, l.qty, l.size || null, l.choice || null, (l.extras || []).map(e => e.id || e.name || e).sort(), l.spice || "", l.notes || ""]),
     // Batch B1: the same cart at another table is another order (nothing is added without a table).
     ...(table && table.key ? [["table", table.key]] : []),
@@ -4472,6 +4479,7 @@ async function createOrderAfterVerification() {
   // the same id and the server hands back the order it already made; a
   // changed cart gets a new id.
   const clientOrderId = orderAttemptId(cart, address, table, guest);
+  const orderNote = typeof orderNoteClean === "function" ? orderNoteClean(state.notes) : "";
   /* A retry while the first request is still running meets the server's unique
      id; one quiet re-send a moment later then returns that order. */
   const submitOnce = async (payload) => {
@@ -4489,6 +4497,8 @@ async function createOrderAfterVerification() {
       customer_phone: state.customer.mobile.trim(),
       customer_email: state.customer.email.trim(),
       customer_registered: state.isLoggedIn,
+      // Batch 1b (379): "Cooking instructions" for the whole order (the server cleans and cuts it too).
+      ...(orderNote ? {order_note: orderNote} : {}),
       fulfillment_type: state.orderType,
       schedule_type: state.orderTiming === "asap" ? "asap" : "scheduled",
       order_timing: state.orderTiming,
@@ -4538,6 +4548,11 @@ async function createOrderAfterVerification() {
       createdAt: Date.parse(result.created_at),
       step: 0,
     };
+    // Batch 1b (379): the note as the server saved it (on a repeat: the first one). A server that
+    // does not take notes yet answers without it, and then none is shown.
+    const savedNote = typeof orderNoteClean === "function" ? orderNoteClean(result.order_note) : "";
+    if (savedNote) { state.order.note = savedNote; orderNoteRemember(result.id, savedNote); }
+    state.notes = "";
     if (table) {   // Batch B1: "Dine-in · Table 7" on the order's cards, also after a reload
       state.order.tableLabel = tableClean(result.table_label, 12) || table.label;
       tableRememberOrder(result.id, state.order.tableLabel);
