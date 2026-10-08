@@ -411,9 +411,11 @@ test('the new words have Arabic and say neither "code" nor "points"; cache keys 
   }
   assert.deepEqual(Object.keys(text.ar).sort(), Object.keys(text.en).sort());
   const html = read('index.html');
-  for (const file of ['js/table.js', 'js/data.js', 'js/app.js', 'js/account-orders.js', 'css/table.css']) assert.ok(html.includes(`${file}?v=20261007-391"`), file);
+  for (const file of ['css/table.css']) assert.ok(html.includes(`${file}?v=20261007-391"`), file);
+  assert.ok(html.includes('js/table.js?v=20261008-3a"'));   // Batch 3a (C4: no coupon line without codes)
+  for (const file of ['js/data.js', 'js/app.js', 'js/account-orders.js']) assert.ok(html.includes(`${file}?v=20261008-3a"`), file);   // Batch 3a
   for (const pin of ['js/push.js?v=20261007-388', 'js/table-calls.js?v=20261007-1b', 'js/order-note.js?v=20261007-1b', 'css/order-note.css?v=20261007-1b',
-    'js/brand-config.js?v=20261007-b1g', 'js/ordering-hours.js?v=20261007-b1g', 'js/order-addons.js?v=20261003-batche', 'css/theme.css?v=20261006-cx4i']) {
+    'js/brand-config.js?v=20261007-b1g', 'js/ordering-hours.js?v=20261007-b1g', 'js/order-addons.js?v=20261008-3a', 'css/theme.css?v=20261006-cx4i']) {
     assert.ok(html.includes(pin + '"'), pin);
   }
   assert.equal(/margin-(left|right)|padding-(left|right)|text-align:\s*(left|right)|\b(left|right):/.test(read('css/table.css')), false);

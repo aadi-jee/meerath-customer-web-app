@@ -96,6 +96,7 @@ function addonCartMarkup() {
     <div class="addon-cart-row"><span>${addonCopy("Items to add", "الأصناف المضافة")}</span><strong>${money(sum)}</strong></div>
     <p class="addon-cart-hint">${addonCopy("The restaurant confirms and adds these to your bill. You pay once, at the end.",
       "يؤكد المطعم الطلب ويضيف الأصناف إلى فاتورتك. تدفع مرة واحدة في النهاية.")}</p>
+    ${typeof promoAddonNote === "function" ? promoAddonNote(target.id) : ""}
     <button class="btn btn-primary" id="addonSend" ${orderAddons.sending ? "disabled" : ""} onclick="sendOrderAddon()">
       ${orderAddons.sending ? addonCopy("Sending…", "جارٍ الإرسال…") : addonCopy("Send to restaurant", "إرسال إلى المطعم")}</button>
   </div>`;

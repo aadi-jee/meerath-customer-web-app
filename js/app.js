@@ -429,6 +429,9 @@ function voucherMessage(message) {
   return min ? `هذا الكود يتطلب طعاماً بقيمة ${money(Number(min[1]))} على الأقل` : t("couponBad");
 }
 function totals() {
+  // Batch 3a (394): when the server has priced this cart, its numbers are the ones (cart-quote.js).
+  const priced = typeof cartQuoteTotals === "function" ? cartQuoteTotals() : null;
+  if (priced) return priced;
   // Sum integer halalas; the line prices already include VAT and item offers.
   const cents = n => Math.round(Number(n) * 100);
   const itemsCents = state.cart.reduce((n,l) => n + cents(l.price) * l.qty, 0);
@@ -451,6 +454,9 @@ function totals() {
     regularItemsTotal:regularCents / 100, offerSavings:Math.max(0, regularCents - itemsCents) / 100};
 }
 function cartSummaryMarkup() {
+  // Batch 3a (394): the breakdown from the server's price (lines, offers applied, one hint), when there is one.
+  const quoted = typeof cartQuoteSummaryMarkup === "function" ? cartQuoteSummaryMarkup() : null;
+  if (quoted !== null) return quoted;
   const tot = totals();
   return `${offerSpendMarkup()}<div><span>${cartCopy("Items total (VAT included)", "إجمالي الأصناف (شامل الضريبة)")}</span><span>${money(tot.regularItemsTotal)}</span></div>
     ${tot.offerSavings ? `<div class="offer-saving"><span>${cartCopy("Offer savings", "توفير العروض")}</span><span>− ${money(tot.offerSavings)}</span></div>` : ""}
@@ -1215,6 +1221,7 @@ function home() {
 
 ${homeOrderNoteMarkup()}
       ${homeBannersMarkup()}
+      ${typeof promoStripMarkup === "function" ? promoStripMarkup() : ""}
       <div class="h-row"><h3><span class="cx-text-shimmer">${t("todaysSpecial")}</span></h3><button class="link" onclick="go('menu')">${t("seeAll")}</button></div>
       <div class="scroll">
         ${!specials.length && menuReady() ? `<p class="menu-hint">${menuText("noSpecials")}</p>` : ""}
@@ -1229,7 +1236,7 @@ ${homeOrderNoteMarkup()}
             (c) =>
               `<button class="cat cat-photo" onclick="go('listing',{categoryId:'${c.id}'})">
   ${hasOwnPhoto(c) ? `<img src="${c.image}" alt="${loc(c, "name")}" loading="lazy" />` : photoPlaceholder("cx-ph-cat")}
-  <span class="cat-label">${loc(c, "name")}</span>
+  <span class="cat-label">${loc(c, "name")}</span>${typeof promoCategoryBadge === "function" ? promoCategoryBadge(c.id) : ""}
 </button>`
           )
           .join("")}
@@ -1266,6 +1273,7 @@ function itemCardMarkup(i) {
           ${hasOwnPhoto(i) ? `<img src="${i.image}" alt="${loc(i, "name")}" loading="lazy" onclick="openItem('${i.id}')" />` : `<span class="cx-ph-tap" onclick="openItem('${i.id}')">${photoPlaceholder("cx-ph-item")}</span>`}
           <div onclick="openItem('${i.id}')">
             ${i.offer ? `<span class="badge">${offerLabel(i.offer)}</span>` : ""}
+            ${typeof promoItemBadge === "function" ? promoItemBadge(i) : ""}
             ${i.bestSeller ? `<span class="badge">${t("bestSeller")}</span>` : ""}
             <h4>${loc(i,"name")}</h4><p>${loc(i,"desc")}</p>
             <div class="price">${itemPriceMarkup(i)}</div>
@@ -1382,6 +1390,7 @@ function homeScroll() {
       </div>`}
       ${homeOrderNoteMarkup()}
       ${homeBannersMarkup()}
+      ${typeof promoStripMarkup === "function" ? promoStripMarkup() : ""}
       <div class="cx-catbar" id="cxMenuTop" role="tablist" aria-label="${t("categories")}">
         <button class="cx-catbar-search" onclick="menuJump('search')" aria-label="${t("search")}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></button>
         ${menuFirstLoad() ? "" : sections.map((sec, n) => `<button class="cx-chip ${n === 0 ? "on" : ""}" data-chip="${sec.key}" onclick="menuJump('${sec.key}')">${sec.title}</button>`).join("")}
@@ -1391,8 +1400,8 @@ function homeScroll() {
       ${!sections.length && menuReady() ? `<p class="menu-hint">${menuText("noItems")}</p>` : ""}
       ${sections.map(sec => `<section class="cx-sec" id="cx-sec-${sec.key}" data-sec="${sec.key}">
         ${sec.image
-          ? `<div class="cx-banner"><img src="${sec.image}" alt="" loading="lazy" /><div class="cx-banner-copy"><h3>${sec.title}</h3><small>${itemsCountLabel(sec.count)}</small></div></div>`
-          : `<div class="h-row"><h3>${sec.kind === "special" ? `<span class="cx-text-shimmer">${sec.title}</span>` : sec.title}</h3>${sec.count ? `<small class="cx-sec-count">${itemsCountLabel(sec.count)}</small>` : ""}</div>`}
+          ? `<div class="cx-banner"><img src="${sec.image}" alt="" loading="lazy" /><div class="cx-banner-copy"><h3>${sec.title}</h3><small>${itemsCountLabel(sec.count)}</small>${typeof promoCategoryBadge === "function" && sec.key.startsWith("cat-") ? promoCategoryBadge(sec.key.slice(4)) : ""}</div></div>`
+          : `<div class="h-row"><h3>${sec.kind === "special" ? `<span class="cx-text-shimmer">${sec.title}</span>` : sec.title}</h3>${sec.count ? `<small class="cx-sec-count">${itemsCountLabel(sec.count)}</small>` : ""}${typeof promoCategoryBadge === "function" && sec.key.startsWith("cat-") ? promoCategoryBadge(sec.key.slice(4)) : ""}</div>`}
         ${sec.kind === "special"
           ? `<div class="scroll">${sec.items.map(specialCardMarkup).join("")}</div>`
           : sec.groups.map(group => `${group.title ? `<h4 class="cx-sub"><span>${group.title}</span><small>${group.items.length}</small></h4>` : ""}
@@ -1568,7 +1577,7 @@ function cart() {
             <button class="link cart-remove" onclick="removeCartItem(${idx})">${cartCopy("Remove", "إزالة")}</button>
           </div>
         </div>
-        <strong class="cart-line-total">${money(linePrice(l))}</strong>
+        <strong class="cart-line-total">${(typeof cartQuoteLineInner === "function" && cartQuoteLineInner(idx)) || money(linePrice(l))}</strong>
       </div>`;
     }).join("")}
     ${cartRecommendationsMarkup()}
@@ -1577,7 +1586,7 @@ function cart() {
     <div class="breakdown" id="cartBreakdown" style="margin-top:14px">${cartSummaryMarkup()}</div>
     ${orderingStripMarkup()}
     <div class="cx-cta-bar">
-      <div class="cx-cta-total"><span>${t("total")}</span><strong data-cx-total>${money(totals().total)}</strong></div>
+      <div class="cx-cta-total"><span>${typeof cartQuoteTotalLabel === "function" ? cartQuoteTotalLabel() : t("total")}</span><strong data-cx-total>${money(totals().total)}</strong></div>
       <button class="btn btn-primary" onclick="go('checkout')">${t("proceed")}</button>
     </div>`}
   </section>`;
@@ -1901,7 +1910,7 @@ function checkoutOrderLinesMarkup() {
   if (!state.cart.length) return "";
   return `<div class="cx-co-order">
     <div class="cx-co-head"><h3 class="checkout-section-title">${cartCopy("Your order", "طلبك")}</h3><button type="button" class="link" onclick="go('cart')">${cartCopy("Edit", "تعديل")}</button></div>
-    ${state.cart.map(line => { const item = itemById(line.id); return `<div class="cx-co-line"><span><b>${Number(line.qty) || 0}×</b> ${item ? loc(item, "name") : ""}</span><span>${money(roundMoney(line.price * line.qty))}</span></div>`; }).join("")}
+    ${state.cart.map((line, index) => { const item = itemById(line.id); return `<div class="cx-co-line"><span><b>${Number(line.qty) || 0}×</b> ${item ? loc(item, "name") : ""}</span><span>${(typeof cartQuoteLineInner === "function" && cartQuoteLineInner(index)) || money(roundMoney(line.price * line.qty))}</span></div>`; }).join("")}
   </div>`;
 }
 
@@ -2030,7 +2039,7 @@ function checkout() {
       <div class="breakdown checkout-total-card">${cartSummaryMarkup()}</div>
 
       <div class="cx-cta-bar">
-      <div class="cx-cta-total"><span>${t("total")}</span><strong data-cx-total>${money(totals().total)}</strong></div>
+      <div class="cx-cta-total"><span>${typeof cartQuoteTotalLabel === "function" ? cartQuoteTotalLabel() : t("total")}</span><strong data-cx-total>${money(totals().total)}</strong></div>
       <button
         class="btn btn-primary checkout-place-order"
         onclick="placeOrder()"
@@ -2040,7 +2049,7 @@ function checkout() {
       </button>
       </div>
 
-    </section>${checkoutAddressSheetMarkup()}`;
+    </section>${checkoutAddressSheetMarkup()}${typeof cartQuoteChangedMarkup === "function" ? cartQuoteChangedMarkup() : ""}`;
 }
 
 /** Batch B1: " · Table 7" for the order's own cards (escaped in table.js). */
@@ -2051,7 +2060,9 @@ function orderTableSuffix(order) {
 function orderNoteLine(order) {
   // Batch 391: and, when staff moved the order, "Your order is now at Table 7" (table.js)
   return (order && typeof orderNoteMarkup === "function" ? orderNoteMarkup(order.backendId, order.note) : "") +
-    (order && typeof tableMoveNote === "function" ? tableMoveNote(order.backendId, order) : "");
+    (order && typeof tableMoveNote === "function" ? tableMoveNote(order.backendId, order) : "") +
+    // Batch 3a (394): the promotions and the total the server saved with the order
+    (order && typeof promoOrderBlock === "function" ? promoOrderBlock(order) : "");
 }
 function confirmation() {
   const o = state.order;
@@ -2517,7 +2528,8 @@ function offers() {
 </div>
       <button class="link" onclick="refreshMenu()">${state.lang === "ar" ? "تحديث العروض" : "Refresh offers"}</button>
       ${menuReady() && menuConnection.payload?.offers_version !== 1 ? `<p class="menu-hint" role="status">${state.lang === "ar" ? "العروض قيد التحديث. يرجى المحاولة لاحقاً." : "Offers are being updated. Please check again shortly."}</p>` : ""}
-      ${menuReady() && menuConnection.payload?.offers_version === 1 && !list.length ? `<p class="menu-hint">${menuText("noOffers")}</p>` : ""}
+      ${typeof promoOffersMarkup === "function" ? promoOffersMarkup() : ""}
+      ${menuReady() && menuConnection.payload?.offers_version === 1 && !list.length && !(typeof promoLiveCount === "function" && promoLiveCount()) ? `<p class="menu-hint">${menuText("noOffers")}</p>` : ""}
       <div class="menu-items-grid">
       ${list
         .map((o) => {
@@ -4239,6 +4251,9 @@ function chgQty(idx, d, button) {
 // Batch D: the code box in the cart. Not applied: the field and "Apply code".
 // Applied: "Coupon applied" with the code, and "Remove coupon" beside it.
 function couponBoxMarkup() {
+  // Batch 3a (394): one field "Coupon or promo code"; the price answer says what the code is (cart-quote.js).
+  const priced = typeof cartQuoteCodeBox === "function" ? cartQuoteCodeBox() : null;
+  if (priced !== null) return priced;
   if (typeof featureOn === "function" && !featureOn("vouchers")) return "";   // Batch E: codes switched off
   if (state.couponOn && state.voucher?.code) {
     return `<div class="coupon-applied" role="status">
@@ -4255,6 +4270,7 @@ function refreshCouponBox() {
 }
 // Take the code off again (the customer can type another one).
 function removeCoupon() {
+  if (typeof cartQuoteDropCode === "function") cartQuoteDropCode();   // Batch 3a: the next price is asked without it
   state.couponOn = false;
   state.voucher = null;
   state.coupon = "";
@@ -4262,6 +4278,8 @@ function removeCoupon() {
   updateCartBreakdown();
 }
 async function applyCoupon() {
+  // Batch 3a (394): on a database that prices the cart, the code goes with the cart to the price function.
+  if (typeof cartQuoteApplyCode === "function" && await cartQuoteApplyCode()) return;
   const code = state.coupon.trim().toUpperCase();
   state.couponOn = false;
   state.voucher = null;
@@ -4493,6 +4511,14 @@ async function createOrderAfterVerification() {
     }
   };
   try {
+    // Batch 3a (394): on a database that prices the cart, the order carries the key of the price the
+    // customer saw. No price -> no order; a higher price is shown first and confirmed again. On a
+    // database without 394 this is null and the order goes exactly the way of before.
+    const priced = typeof cartQuoteForOrder === "function" ? await cartQuoteForOrder() : null;
+    if (priced && priced.stop) return;
+    if (priced && (priced.fingerprint !== cartQuoteFingerprint() || JSON.stringify(cart.map(l => [l.id, l.qty])) !== JSON.stringify(state.cart.map(l => [l.id, l.qty])))) {
+      return toast(cartCopy("Your cart changed. Please check it and place your order again.", "تغيّرت سلتك. راجعها وأكد الطلب مرة أخرى."), 6000);
+    }
     const result = await submitOnce({
       client_order_id: clientOrderId,
       customer_name: state.customer.name.trim(),
@@ -4528,7 +4554,13 @@ async function createOrderAfterVerification() {
           })),
         };
       }),
+      // Batch 3a (394): the same code and points the price was asked with, and its key. The server
+      // takes the delivery fee from the price, so the fee of before is not sent with a key.
+      ...(priced ? {coupon_code: priced.code, expected_delivery_fee: null, quote_key: priced.key} : {}),
     });
+    // Batch 3a (394): "the price has changed" — nothing was saved; the new price is shown (cart-quote.js).
+    if (priced && cartQuotePriceChanged(result, priced)) return;
+    if (priced && (!result || !result.id || result.ok === false)) throw new Error(cartCopy("Could not place order. Try again.", "تعذر إرسال الطلب. حاول مرة أخرى."));
     state.order = {
       id: result.order_number,
       backendId: result.id,
@@ -4550,6 +4582,11 @@ async function createOrderAfterVerification() {
       createdAt: Date.parse(result.created_at),
       step: 0,
     };
+    if (priced && typeof promoOrderRemember === "function") {
+      // Batch 3a (394): what the server saved — its total, and the promotions it wrote on the order.
+      const kept = promoOrderRemember(result.id, result);
+      Object.assign(state.order, {quoted: true, discount: kept ? kept.discount : 0, promotions: kept ? kept.promotions : []});
+    }
     // Batch 1b (379): the note as the server saved it (on a repeat: the first one). A server that
     // does not take notes yet answers without it, and then none is shown.
     const savedNote = typeof orderNoteClean === "function" ? orderNoteClean(result.order_note) : "";
@@ -4568,6 +4605,7 @@ async function createOrderAfterVerification() {
     state.voucher = null;
     state.coupon = "";
     state.redeemPoints = 0;
+    if (typeof cartQuoteReset === "function") cartQuoteReset();
     if (typeof loadRewardsSummary === "function") loadRewardsSummary(true);
     saveTrackedCustomerOrder();
     go("confirmation");
@@ -4580,6 +4618,9 @@ async function createOrderAfterVerification() {
         : orderingClosedTitle() + ". " + restaurantClosedMessage();
       go("checkout");
       setTimeout(() => toast(message, 7000));
+    } else if (typeof cartQuoteKeyRefused === "function" && cartQuoteKeyRefused(error)) {
+      // Batch 3a (394): the order did not carry a good price key. Nothing was saved; the price is asked again.
+      go("checkout");
     } else if (/Client order ID conflict/i.test(rawMessage)) {
       // Gate 4 (280): the attempt id met an order that is not this customer's
       // (the same cart was sent to another branch, or the id is stale): a new
@@ -4626,11 +4667,15 @@ async function createOrderAfterVerification() {
         // take it off so the customer sees the real total and can order.
         state.couponOn = false;
         state.voucher = null;
+        if (typeof cartQuoteDropCode === "function") { cartQuoteDropCode(); cartQuoteStale(); }
         toast(voucherMessage(rawMessage), 7000);
       } else {
         // Gate 2: the busy/too-many messages have Arabic words too.
         const known = state.lang === "ar" && VOUCHER_MESSAGES_AR[rawMessage];
-        toast(known || rawMessage || cartCopy("Could not place order. Try again.", "تعذر إرسال الطلب. حاول مرة أخرى."), 5000);
+        // Batch 3a (C6): the stable word beside the sentence is worded in both languages; "other" keeps the sentence.
+        const worded = typeof promoErrorText === "function" ? promoErrorText(error?.hint) : "";
+        if (typeof PROMO_CART_ERRORS !== "undefined" && PROMO_CART_ERRORS.includes(error?.hint) && typeof refreshMenu === "function") refreshMenu();
+        toast(worded || known || rawMessage || cartCopy("Could not place order. Try again.", "تعذر إرسال الطلب. حاول مرة أخرى."), 5000);
       }
     }
   } finally {

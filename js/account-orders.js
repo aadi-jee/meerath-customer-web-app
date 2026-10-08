@@ -106,6 +106,7 @@ function accountOrdersPage() {
       <div class="active-order-items"><h4>${t('orderDetails')}</h4>
       ${(Array.isArray(order.items)?order.items:[]).map(line=>`<div class="active-order-item"><span>${h(line.quantity)} × ${h(line.name)}</span></div>`).join('')}
       ${typeof orderNoteMarkup === 'function' ? orderNoteMarkup(order.id) : ''}${typeof tableMoveNote === 'function' ? tableMoveNote(order.id) : ''}
+      ${typeof promoOrderRows === 'function' ? promoOrderRows(order.id) : ''}
       <div class="account-order-total"><span>${authCopy('Total','الإجمالي')}</span><strong>${money(Number(order.total)||0)}</strong></div></div>
       ${typeof pushCardMarkup === 'function' ? pushCardMarkup({id: order.id, token: null}) : ''}
       ${typeof orderAddonsMarkup === 'function' ? orderAddonsMarkup({id: order.id, number: String(order.order_number || ''),
@@ -119,6 +120,7 @@ function accountOrdersPage() {
     ${typeof rewardsOrderLine === 'function' ? rewardsOrderLine(order.order_number) : ''}
     <details class="account-order-details"><summary>${t('orderDetails')}</summary>
     ${(Array.isArray(order.items)?order.items:[]).map(line=>`<div class="active-order-item">${h(line.quantity)} × ${h(line.name)}</div>`).join('')}
+    ${typeof promoOrderRows === 'function' ? promoOrderRows(order.id) : ''}
     ${order.rejection_reason?`<p>${h(order.rejection_reason)}</p>`:''}</details></article>`).join('');
   return `<section class="screen orders-screen account-orders-screen">
     <div class="topbar orders-topbar"><h2>${t('orders')}</h2><div class="account-orders-actions">

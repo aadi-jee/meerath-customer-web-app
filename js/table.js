@@ -603,6 +603,8 @@ function tableGuestMarkup(mobileEntry) {
 /** In the cart, in place of the coupon box while ordering as a guest. */
 function tableGuestCouponNote() {
   if (typeof featureOn === "function" && !featureOn("vouchers")) return "";
+  // Batch 3a (C4): a restaurant with no code and no voucher running has nothing to sign in for
+  if (typeof cartQuoteCodesAvailable === "function" && cartQuoteCodesAvailable() === false) return "";
   return `<p class="table-guest-coupon">${escapeHtml(tableText("couponAsk"))}
     <button type="button" class="link" onclick="tableChoose('signin')">${escapeHtml(tableText("couponLink"))}</button></p>`;
 }

@@ -202,7 +202,7 @@ test('files changed in CX-4 have new cache keys and the classic rules are untouc
   const html = read('index.html'), css = read('css/theme.css'), spy = read('js/theme.js');
   assert.ok(html.includes('js/brand-config.js?v=20261007-b1g"'));   // Batch B1g (table layout) changed brand-config.js
   for (const file of ['css/theme.css']) assert.ok(html.includes(`${file}?v=20261006-cx4i"`), file);
-  assert.ok(html.includes('js/app.js?v=20261007-391"'));   // Batch 1b (order note) changed app.js
+  assert.ok(html.includes('js/app.js?v=20261008-3a"'));   // Batch 1b (order note) changed app.js
   assert.ok(css.includes('.cx-catbar-cart { display: none; }'));                       // phones keep the cart dock
   assert.match(css, /@media \(min-width: 1025px\) \{\n  html\[data-structure="scroll"\] #app > \.home-screen > \.cx-catbar \{\n    position: sticky;/);   // laptop too
   for (const file of ['js/delivery-location.js', 'js/i18n.js']) assert.ok(html.includes(`${file}?v=20261006-cx4f"`), file);

@@ -344,6 +344,8 @@ function applyMenuPayload(payload) {
   }
   const cartChanged = reconcileMenuCart();
   saveCartDraft();
+  // Batch 3a (394): a changed menu may have changed the prices: the cart's price is asked again.
+  if (changed && typeof cartQuoteStale === "function") cartQuoteStale();
   return {changed, cartChanged};
 }
 function refreshMenuUI() {
@@ -459,9 +461,10 @@ const LEGACY_CUSTOMER_ORDER_STORAGE_KEY = "meerath-active-customer-order-v1";
 const LEGACY_CUSTOMER_ORDER_HISTORY_STORAGE_KEY = "meerath-customer-order-history-v1";
 const customerOrderConnection = { pending: null, timer: null };
 
-async function customerOrderRpc(name, params) {
+async function customerOrderRpc(name, params, options) {
   const signedInOnly = ["oracy_create_customer_order_v1", "oracy_create_pin_delivery_order_v2", "oracy_create_table_order_v1",
-    "oracy_create_customer_order_v2", "oracy_create_pin_delivery_order_v3"];   // Batch 1b (379): the entries that take the order note
+    "oracy_create_customer_order_v2", "oracy_create_pin_delivery_order_v3",   // Batch 1b (379): the entries that take the order note
+    "oracy_create_customer_order_v3", "oracy_create_table_order_v2"];          // Batch 3a (394): the entries that take the price key
   let accessToken = null;
   let tokenError = null;
   try {
@@ -478,7 +481,9 @@ async function customerOrderRpc(name, params) {
   // Gate 3: a hung request must not freeze Place Order for ever — 12 s, then
   // the customer may try again (the same client_order_id makes a retry safe).
   const controller = typeof AbortController === "function" ? new AbortController() : null;
-  const timer = setTimeout(() => controller?.abort(), 12000);
+  // Batch 3a: the price of the cart is asked often; a newer question stops the one on its way.
+  if (controller && options && typeof options.onStart === "function") options.onStart(controller);
+  const timer = setTimeout(() => controller?.abort(), options && options.timeoutMs > 0 ? options.timeoutMs : 12000);
   let response;
   try {
     response = await fetch(`${MENU_CONFIG.url}/rest/v1/rpc/${name}`, {
@@ -512,6 +517,9 @@ async function customerOrderRpc(name, params) {
       refusal.hint = "module_off";
       if (typeof loadOrderingHours === "function") loadOrderingHours();
     }
+    // Batch 3a (394): the price and order functions put a stable word beside every sentence they write
+    // (contract, Reconciliation C6). Only for their own errors (P0001 / 22023), as the server words them.
+    if (detail && ["P0001", "22023"].includes(detail.code) && typeof detail.hint === "string" && /^[a-z_]{2,40}$/.test(detail.hint)) refusal.hint = detail.hint;
     throw refusal;
   }
   return response.json();
@@ -533,6 +541,13 @@ function customerRpcMessage(status, detail) {
 
 async function submitCustomerOrder(order, table, guest) {
   const branchId = selectMenuBranch(menuConnection.payload?.branches || []);
+  // Batch 3a (394): an order that carries the key of its price goes to the functions that read it
+  // (v3 / table v2 / table guest v2) and ONLY to them: there is no way back to an older function with
+  // a key, and no way to a new function without one. An order without a key is the order of before.
+  const priced = Object.prototype.hasOwnProperty.call(order, "quote_key");
+  if (priced && !(typeof order.quote_key === "string" && /^[0-9a-f]{32}$/.test(order.quote_key))) {
+    throw new Error("We could not confirm the price. Check your connection and try again.");
+  }
   // Batch B1 (373): an order from a table's QR. The key names the restaurant, the branch and the
   // table; the server forces dine-in, now. A table of another branch is never sent.
   if (table && table.key) {
@@ -542,14 +557,14 @@ async function submitCustomerOrder(order, table, guest) {
     if (guest && guest.id && typeof state !== "undefined" && !state.isLoggedIn) {
       const {customer_phone, customer_email, customer_registered, coupon_code, redeem_points, address,
         delivery_address_id, delivery_address_version, expected_delivery_fee, order_timing, suggested_eta, ...rest} = order;
-      return customerOrderRpc("oracy_create_table_guest_order_v1", {
+      return customerOrderRpc(priced ? "oracy_create_table_guest_order_v2" : "oracy_create_table_guest_order_v1", {
         p_key: table.key,
         // Batch 388: the name may be empty and a mobile number may be asked, as the restaurant set it.
         p_order: {...rest, customer_name: guest.name, guest_id: guest.id, ...(guest.phone ? {guest_phone: guest.phone} : {}),
           fulfillment_type: "dinein", schedule_type: "asap", scheduled_for: null},
       });
     }
-    return customerOrderRpc("oracy_create_table_order_v1", {
+    return customerOrderRpc(priced ? "oracy_create_table_order_v2" : "oracy_create_table_order_v1", {
       p_key: table.key,
       p_order: {...order, fulfillment_type: "dinein", schedule_type: "asap", order_timing: "asap", scheduled_for: null,
         address: "", delivery_address_id: null, delivery_address_version: null, expected_delivery_fee: null},
@@ -560,6 +575,11 @@ async function submitCustomerOrder(order, table, guest) {
   // note, once and without a message (the same client_order_id, so nothing can double).
   const delivery = order.fulfillment_type === "delivery";
   const params = {p_restaurant_id: MENU_CONFIG.restaurantId, p_branch_id: branchId, p_order: order};
+  if (priced) {
+    // pick-up, dine-in and delivery: one function. The server sets the delivery fee from the price.
+    const {expected_delivery_fee, ...body} = order;
+    return customerOrderRpc("oracy_create_customer_order_v3", {...params, p_order: body});
+  }
   try {
     return await customerOrderRpc(delivery ? "oracy_create_pin_delivery_order_v3" : "oracy_create_customer_order_v2", params);
   } catch (error) {

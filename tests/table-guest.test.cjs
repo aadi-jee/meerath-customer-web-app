@@ -782,11 +782,13 @@ test('the changed files have new cache keys; untouched files keep theirs', () =>
   const html = read('index.html');
   for (const file of ['js/brand-config.js', 'js/ordering-hours.js']) assert.ok(html.includes(`${file}?v=20261007-b1g"`), file);
   // Batch 1b (order note, call waiter) changed these again
-  for (const file of ['js/app.js', 'js/account-orders.js']) assert.ok(html.includes(`${file}?v=20261007-391"`), file);   // Batch 391
+  for (const file of ['js/app.js', 'js/account-orders.js']) assert.ok(html.includes(`${file}?v=20261008-3a"`), file);   // Batch 3a
   for (const file of []) assert.ok(html.includes(`${file}?v=20261007-1b"`), file);
-  for (const file of ['js/data.js', 'js/table.js', 'css/table.css']) assert.ok(html.includes(`${file}?v=20261007-391"`), file);   // Batch 391
+  for (const file of ['css/table.css']) assert.ok(html.includes(`${file}?v=20261007-391"`), file);
+  assert.ok(html.includes('js/table.js?v=20261008-3a"'));   // Batch 3a (C4: no coupon line without codes)   // Batch 391
+  for (const file of ['js/data.js']) assert.ok(html.includes(`${file}?v=20261008-3a"`), file);   // Batch 3a
   for (const file of ['js/push.js']) assert.ok(html.includes(`${file}?v=20261007-388"`), file);   // Batch 388
-  for (const pin of ['js/rewards.js?v=20261003-batche', 'js/order-addons.js?v=20261003-batche',
+  for (const pin of ['js/rewards.js?v=20261003-batche', 'js/order-addons.js?v=20261008-3a',
     'js/i18n.js?v=20261006-cx4f', 'js/auth.js?v=20261003-gate4', 'css/theme.css?v=20261006-cx4i',
     'css/rewards.css?v=20261002-rewards2', 'js/theme.js?v=20261006-cx4c']) assert.ok(html.includes(pin + '"'), pin);
   // every call from the other files into table.js is guarded, so each still works alone

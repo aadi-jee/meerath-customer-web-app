@@ -609,10 +609,12 @@ test('the pieces around it are independent: own abort timers, no shared controll
 
 test('cache keys: the changed files are new, the others keep theirs', () => {
   const html = read('index.html');
-  for (const file of ['js/table.js', 'js/data.js', 'css/table.css']) assert.ok(html.includes(`${file}?v=20261007-391"`), file);   // Batch 391
+  for (const file of ['css/table.css']) assert.ok(html.includes(`${file}?v=20261007-391"`), file);
+  assert.ok(html.includes('js/table.js?v=20261008-3a"'));   // Batch 3a (C4: no coupon line without codes)   // Batch 391
+  for (const file of ['js/data.js']) assert.ok(html.includes(`${file}?v=20261008-3a"`), file);   // Batch 3a
   for (const file of ['js/push.js']) assert.ok(html.includes(`${file}?v=20261007-388"`), file);
-  for (const pin of ['js/app.js?v=20261007-391', 'js/table-calls.js?v=20261007-1b', 'js/order-note.js?v=20261007-1b', 'js/account-orders.js?v=20261007-391',
-    'css/order-note.css?v=20261007-1b', 'js/brand-config.js?v=20261007-b1g', 'js/ordering-hours.js?v=20261007-b1g', 'js/order-addons.js?v=20261003-batche',
+  for (const pin of ['js/app.js?v=20261008-3a', 'js/table-calls.js?v=20261007-1b', 'js/order-note.js?v=20261007-1b', 'js/account-orders.js?v=20261008-3a',
+    'css/order-note.css?v=20261007-1b', 'js/brand-config.js?v=20261007-b1g', 'js/ordering-hours.js?v=20261007-b1g', 'js/order-addons.js?v=20261008-3a',
     'js/i18n.js?v=20261006-cx4f', 'css/theme.css?v=20261006-cx4i']) assert.ok(html.includes(pin + '"'), pin);
   const orig = read('js/app.js');
   assert.ok(orig.includes('if (tableGuestOn()) return tableGuestNameOk() ? createOrderAfterVerification() : undefined;'));   // app.js needed no change

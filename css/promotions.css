@@ -1,0 +1,158 @@
+/* Batch 3a (394): promotions — the priced cart, the "price has changed" sheet, the banners and badges.
+   Additive: nothing of the existing sheets is changed. */
+
+/* ---- cart and checkout summary ---- */
+.breakdown .pq-hint {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px dashed rgba(240, 138, 26, 0.55);
+  border-radius: 12px;
+  color: var(--gold, #ffab20);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.breakdown .pq-applied-title {
+  margin: 10px 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+html[dir="rtl"] .breakdown .pq-applied-title { letter-spacing: 0; }
+.breakdown .pq-applied { color: var(--gold, #ffab20); align-items: flex-start; }
+.breakdown .pq-applied > span:first-child { overflow-wrap: anywhere; line-height: 1.4; }
+.breakdown .pq-delivery-offer { margin: -4px 0 8px; color: var(--gold, #ffab20); font-size: 12px; line-height: 1.4; }
+.breakdown .pq-wait, .breakdown p.pq-wait { opacity: 0.45; transition: opacity 0.15s ease; }
+.pq-was { color: var(--muted); font-weight: 400; text-decoration: line-through; }
+.pq-now { color: var(--gold, #ffab20); }
+/* the quiet line under the totals keeps its height, so nothing moves when a price is confirmed */
+.breakdown .pq-state {
+  min-height: 16px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+.breakdown .included-vat:has(+ .pq-state) { margin-bottom: 2px; }
+.breakdown .pq-state-off { color: var(--text); line-height: 1.5; }
+.breakdown .pq-state .link { font-size: 12px; }
+.cart-line-total .pq-was, .cx-co-line .pq-was { font-size: 12px; margin-inline-end: 4px; }
+
+/* ---- the code box ---- */
+.pq-code-note { flex: 1 1 100%; margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.pq-code-bad { color: #ff8a73; }
+.coupon-applied.pq-code-held { border-color: var(--line); }
+.coupon-applied.pq-code-held .coupon-applied-text { color: var(--text); }
+.coupon-applied.pq-code-wait { border-style: dashed; }
+
+/* ---- "The price has changed" ---- */
+.pq-sheet .cx-sheet-panel h3 { margin-bottom: 2px; }
+.pq-sheet-why { margin: 0; color: var(--text); font-size: 15px; line-height: 1.5; }
+.pq-sheet-totals {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
+.pq-sheet-totals > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.pq-sheet-was { color: var(--muted); font-size: 14px; }
+.pq-sheet-now span { font-weight: 600; }
+.pq-sheet-now strong { font-size: 22px; white-space: nowrap; }
+.pq-sheet-note { margin: 0; color: var(--muted); font-size: 13px; }
+
+/* ---- an order's own card: its promotions and its total ---- */
+.pq-order { display: grid; gap: 6px; margin: 10px 0 0; }
+.pq-order-row, .pq-order-total { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.pq-order-row { color: var(--gold, #ffab20); }
+.pq-order-row > span:first-child { overflow-wrap: anywhere; text-align: start; }
+.pq-order-row > span:last-child, .pq-order-total strong { white-space: nowrap; }
+.pq-order-total { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--line); font-size: 14px; }
+.confirmation-screen .pq-order, .confirmation-screen .pq-order-total { width: min(100%, 320px); margin-inline: auto; }
+.confirmation-screen .pq-order { margin-top: 14px; }
+.pq-addon-note { font-weight: 600; color: var(--text); }
+
+/* ---- Home: the strip of running promotions; Offers: the list ---- */
+.pq-strip {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+.pq-strip::-webkit-scrollbar { display: none; }
+.pq-card {
+  flex: 0 0 min(78%, 300px);
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  scroll-snap-align: start;
+}
+.pq-strip-one .pq-card, .pq-card-wide { flex: 1 1 100%; width: 100%; }
+.pq-card.on { border-color: rgba(240, 138, 26, 0.55); }
+.pq-card strong { font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+.pq-card small { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.pq-card-tag {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+html[dir="rtl"] .pq-card-tag { letter-spacing: 0; }
+.pq-card.on .pq-card-tag { color: var(--gold, #ffab20); }
+.pq-card:focus-visible { outline: 2px solid var(--gold, #ffab20); outline-offset: 3px; }
+.pq-list { display: grid; gap: 10px; margin: 12px 0 18px; }
+.pq-list-note { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+
+/* ---- the quiet badge on an item or a category of a running promotion ---- */
+.pq-badge {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 3px 8px;
+  border: 1px solid rgba(240, 138, 26, 0.55);
+  border-radius: 999px;
+  color: var(--gold, #ffab20);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.pq-badge-cat { margin: 0; margin-inline-start: 8px; vertical-align: middle; }
+.cat-photo { position: relative; }
+.cat .pq-badge-cat { position: absolute; top: 8px; inset-inline-start: 8px; margin: 0; background: rgba(0, 0, 0, 0.72); }
+
+body.light-theme .breakdown .pq-hint,
+body.light-theme .breakdown .pq-applied,
+body.light-theme .breakdown .pq-delivery-offer,
+body.light-theme .pq-now,
+body.light-theme .pq-order-row,
+body.light-theme .pq-card.on .pq-card-tag,
+body.light-theme .pq-badge { color: #a85a00; }
+body.light-theme .pq-code-bad { color: #b3261e; }
+body.light-theme .cat .pq-badge-cat { background: rgba(255, 255, 255, 0.92); }
+@media (prefers-reduced-motion: reduce) { .breakdown .pq-wait { transition: none; } }
+.breakdown .pq-state-off { margin-top: 8px; }
+.cat.cat-photo .pq-badge-cat { font-size: 11px; font-weight: 700; }
+/* C8: before an address — the fee is still to come */
+.breakdown .pq-pending { margin: 8px 0 2px; color: var(--text); font-size: 13px; line-height: 1.45; }
+/* Licence round (9 Oct): the licence line on an Offers card and on an order's promotion line */
+.pq-card-licensed { cursor: default; }
+.pq-card-open { display: grid; gap: 4px; justify-items: start; width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.pq-card-open:focus-visible { outline: 2px solid var(--gold, #ffab20); outline-offset: 3px; border-radius: 8px; }
+.pq-licence { margin: 2px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.pq-licence a { color: var(--gold, #ffab20); font-weight: 600; text-decoration: underline; }
+.pq-order .pq-licence { margin: -2px 0 2px; text-align: start; }
+body.light-theme .pq-licence a { color: #a85a00; }
