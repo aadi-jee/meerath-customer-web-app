@@ -1285,9 +1285,11 @@ test('"add more items" is the old path in 3a: no price is asked, the old functio
   await run('createOrderAfterVerification()');
   run(`state.cart=cartOf(1,0); state.addonFor={id:'${ORDER}',number:'MK-0031',token:'${TOKEN}'}; state.screen='cart'; calls.length=0`);
   assert.equal(run('cartQuoteWanted()'), false);
-  const cart = run('cart()'); await run.tick();
+  assert.doesNotMatch(run('cart()'), /pq-addon-note/);              // 3b: said only once the server has told which rule applies
+  await run.tick();
+  const cart = run('cart()');
   assert.equal(quotes(run).length, 0);
-  assert.match(cart, /<p class="addon-cart-hint pq-addon-note" role="note">Offers are not applied to added items\.<\/p>/);
+  assert.match(cart, /<p class="addon-cart-hint pq-addon-note" role="note">Offers are not applied to added items\.<\/p>/);   // an answer without the 3b key: the rule of before
   assert.doesNotMatch(cart, /couponInput|pq-hint|Offers applied/);
   assert.equal(run('totals().quoted'), undefined);
   run(`state.lang='ar'`);
@@ -1304,6 +1306,7 @@ test('"add more items" is the old path in 3a: no price is asked, the old functio
   // a promotion is running (badges on the menu): said too, so the badge is not a promise for added items
   const live = await withLive([liveRow()]);
   live(`state.addonFor={id:'${TOKEN}',number:'MK-9',token:null}`);
+  live('addonCartMarkup()'); await live.tick(0);
   assert.match(live('addonCartMarkup()'), /Offers are not applied to added items\./);
 });
 
@@ -1319,7 +1322,8 @@ test('the new files load before app.js, every changed file has a new cache key, 
   for (const file of ['js/promo-reasons.js', 'js/app.js', 'js/data.js', 'js/table.js', 'js/account-orders.js', 'js/order-addons.js']) {
     assert.ok(html.includes(`${file}?v=20261008-3a"`), file);
   }
-  for (const file of ['js/cart-quote.js', 'js/promotions.js', 'css/promotions.css']) assert.ok(html.includes(`${file}?v=20261009-3al"`), file);   // Licence round
+  assert.ok(html.includes('css/promotions.css?v=20261009-3al"'));   // Licence round
+  for (const file of ['js/cart-quote.js', 'js/promotions.js']) assert.ok(html.includes(`${file}?v=20261009-3b"`), file);   // 3b
   for (const pin of ['js/table.js?v=20261008-3a', 'css/table.css?v=20261007-391', 'js/push.js?v=20261007-388', 'js/table-calls.js?v=20261007-1b', 'js/rewards.js?v=20261003-batche',
     'js/i18n.js?v=20261006-cx4f', 'js/auth.js?v=20261003-gate4', 'css/theme.css?v=20261006-cx4i', 'js/theme.js?v=20261006-cx4c']) assert.ok(html.includes(pin + '"'), pin);
   assert.equal(html.match(/<link rel="stylesheet" href="(css\/[^"?]+)/g).at(-1).endsWith('css/theme.css'), true);

@@ -25,6 +25,9 @@ function promoSeconds(text) {
 function promoLiveClean(row) {
   if (!row || typeof row !== "object" || !isMenuId(row.promotion_id)) return null;
   if (!["percent", "amount", "delivery_percent", "delivery_amount"].includes(row.kind)) return null;
+  // 3b: a promotion for the till only (channels ["pos"]) is never an app offer. The server answers per channel;
+  // this only guards a row that says its channels and has neither the app nor the tables' QR among them.
+  if (Array.isArray(row.channels) && !row.channels.some(c => c === "app" || c === "table_qr")) return null;
   const value = Number(row.value);
   if (!Number.isFinite(value) || value <= 0) return null;
   const hours = (Array.isArray(row.hours) ? row.hours : []).slice(0, 28).map(h => {

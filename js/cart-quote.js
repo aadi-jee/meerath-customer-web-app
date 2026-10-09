@@ -818,8 +818,24 @@ function promoServerClean(answer, id) {
   if (!answer || typeof answer !== "object" || Array.isArray(answer)) return null;
   if (answer.order_id && String(answer.order_id).toLowerCase() !== String(id).toLowerCase()) return null;
   return {id, server: true, has: answer.has_promotions === true, total: cartQuoteNumber(answer.total, NaN),
-    discount: Math.max(0, cartQuoteNumber(answer.discount)), promotions: promoOrderClean(answer.promotions),
-    addedInFull: answer.added_items_in_full !== false};
+    discount: Math.max(0, cartQuoteNumber(answer.discount)), promotions: promoOrderWithAdjustments(answer),
+    // 394: true (items added are charged in full). 400 (3b): false — the whole order is priced again when
+    // added items are accepted. Absent (null): read as the rule of before (promoAddonNote).
+    addedInFull: answer.added_items_in_full === true ? true : answer.added_items_in_full === false ? false : null};
+}
+/* 3b (API-3B-CONTRACT 6, verified on the replica — INTEGRATION-3B.md): promotions[].amount is the CURRENT amount
+ * of each promotion on the order (it already includes what items added later gave), and a promotion that counts
+ * for the first time after an add-on is its own row. adjustments[] is history only and is never added to the
+ * amounts. The rows are shown as answered, by their names. Safety cap: if the rows ever add up to more than the
+ * server's own promotion total, one line with that total is shown instead of a split that cannot be right. */
+function promoOrderWithAdjustments(answer) {
+  const rows = promoOrderClean(answer.promotions);
+  const target = cartQuoteNumber(answer.total_reduction, cartQuoteNumber(answer.promotion_discount, NaN));
+  const sum = roundMoney(rows.reduce((n, p) => n + p.amount, 0));
+  if (Number.isFinite(target) && target >= 0 && sum > target + 0.005) {
+    return target > 0.004 ? [{promotion_id: "", name_en: "", name_ar: "", text_en: "", text_ar: "", kind: "", value: 0, level: "order", amount: roundMoney(target), combined: true}] : [];
+  }
+  return rows;
 }
 function promoOrderAsk(id, token) {
   if (promoServer.off || !isMenuId(id) || typeof customerOrderRpc !== "function" || cartQuote.support === "no") return;
@@ -852,7 +868,7 @@ function promoOrderRows(id, order) {
   const info = promoOrderInfo(id, order);
   if (!info || !info.promotions.length) return "";
   return `<div class="pq-order" role="group" aria-label="${cartQuoteCopy("Offers applied", "العروض المطبقة")}">${info.promotions.map(p =>
-    `<div class="pq-order-row"><span>${escapeHtml(cartQuotePromoText(p))}</span><span>− ${cartQuoteMoney(p.amount)}</span></div>${promoLicenceMarkup(p)}`).join("")}</div>`;
+    `<div class="pq-order-row"><span>${escapeHtml(p.combined ? cartQuoteCopy("Offers applied", "العروض المطبقة") : cartQuotePromoText(p))}</span><span>− ${cartQuoteMoney(p.amount)}</span></div>${promoLicenceMarkup(p)}`).join("")}</div>`;
 }
 /** The same rows and the saved total, for the confirmation and the tracking card of this device's order. */
 function promoOrderBlock(order) {
@@ -861,15 +877,26 @@ function promoOrderBlock(order) {
   const total = cartQuoteNumber(info && info.server && Number.isFinite(info.total) ? info.total : order.total, NaN);
   return `${promoOrderRows(order.backendId, order)}${Number.isFinite(total) ? `<div class="pq-order-total"><span>${t("total")}</span><strong>${cartQuoteMoney(total)}</strong></div>` : ""}`;
 }
-/** Contract 10 and C5 (added_items_in_full): items added to an order are charged in full. Said in the add-on sheet when it matters. */
+/** The add-on sheet's line about offers. 394 (added_items_in_full true, or a server without the order read):
+ *  "Offers are not applied to added items." 400 / 3b (false): the whole order is priced again when the
+ *  restaurant accepts them, and the order never pays more for what it already had. Said only when it matters
+ *  (the order has a promotion, or one is running), and only once the server has said which rule applies. */
 function promoAddonNote(id) {
   const own = typeof state !== "undefined" && state.order && state.order.backendId === id ? state.order : null;
   const token = typeof state !== "undefined" && state.addonFor && state.addonFor.id === id ? state.addonFor.token : null;
   const info = promoOrderInfo(id, own, token);
-  const given = Boolean(info && info.promotions.length && info.addedInFull !== false);
   const live = typeof promoLiveNow === "function" && promoLiveNow().length > 0;
-  if (!given && !live) return "";
-  return `<p class="addon-cart-hint pq-addon-note" role="note">${cartQuoteCopy("Offers are not applied to added items.", "لا تُطبَّق العروض على الأصناف المضافة.")}</p>`;
+  if (!(info && info.promotions.length) && !live) return "";
+  // the server's answer decides; an answer without the key is the rule of before (charged in full)
+  const rule = info && info.server ? (info.addedInFull === false ? "repriced" : "full") : promoServer.off ? "full" : "";
+  if (rule === "full") {
+    return `<p class="addon-cart-hint pq-addon-note" role="note">${cartQuoteCopy("Offers are not applied to added items.", "لا تُطبَّق العروض على الأصناف المضافة.")}</p>`;
+  }
+  if (rule === "repriced") {
+    return `<p class="addon-cart-hint pq-addon-note" role="note">${cartQuoteCopy("When the restaurant accepts these items, offers are checked again for the whole order. You never pay more for what you already ordered.",
+      "عند قبول المطعم لهذه الأصناف تُحتسب العروض من جديد على الطلب كاملاً، ولن تدفع أكثر مقابل ما طلبته سابقاً.")}</p>`;
+  }
+  return "";
 }
 
 if (typeof setInterval === "function") setInterval(() => { if (cartQuoteVisible()) cartQuoteSync(); }, 20000);
