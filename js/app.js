@@ -615,7 +615,7 @@ function nav(active) {
     // CX-4: Home is the menu in the scroll structure, so its place goes to Rewards.
     // With points switched off for the restaurant, the place goes to Offers instead.
     !structureIs("scroll") ? ["menu", icons.menu, "menu"]
-      : (rewardsTabOn() ? ["rewards", rewardsIcon, "rewards"] : ["offers", offersIcon, "offers"]),
+      : (rewardsTabOn() || (typeof walletTabOn === "function" && walletTabOn()) ? ["rewards", rewardsIcon, "rewards"] : ["offers", offersIcon, "offers"]),
     ["track", icons.orders, "orders"],
     ["more", icons.more, "more"],
     ["account", icons.account, "account"],
@@ -1582,6 +1582,7 @@ function cart() {
     }).join("")}
     ${cartRecommendationsMarkup()}
     ${typeof orderNoteFieldMarkup === "function" ? orderNoteFieldMarkup() : `<textarea class="field" rows="2" placeholder="${t("cookingNotes")}" oninput="state.notes=this.value">${escapeHtml(state.notes)}</textarea>`}
+    ${typeof walletCartMarkup === "function" ? walletCartMarkup() : ""}
     ${typeof addonTarget === "function" && addonTarget() ? addonCartMarkup() : `${tableGuestOn() ? tableGuestCouponNote() : `<div id="couponBox">${couponBoxMarkup()}</div>`}
     <div class="breakdown" id="cartBreakdown" style="margin-top:14px">${cartSummaryMarkup()}</div>
     ${orderingStripMarkup()}
@@ -2075,7 +2076,7 @@ function confirmation() {
     return `<section class="screen confirmation-screen"><div class="success">
       <img class="confirmation-brand-logo" src="${APP_CONFIG.brand.logo}" alt="${escapeHtml(APP_CONFIG.brand.logoAlt)}" />
       <h2>${cartCopy("Order could not be accepted", "تعذر قبول الطلب")}</h2>
-      <p class="confirmation-message">${escapeHtml(o.rejectionReason || cartCopy("Please contact the restaurant for help.", "يرجى التواصل مع المطعم للمساعدة."))}</p>
+      <p class="confirmation-message${typeof orderAutoRejected === "function" && orderAutoRejected(o.rejectionReason) ? " order-auto-reject" : ""}">${escapeHtml((typeof orderRejectionText === "function" ? orderRejectionText(o.rejectionReason) : o.rejectionReason) || cartCopy("Please contact the restaurant for help.", "يرجى التواصل مع المطعم للمساعدة."))}</p>
       <p class="confirmation-order">${t("order")} <strong>${escapeHtml(o.id)}</strong></p>
     </div><a class="btn btn-wa" href="${waLink(t("order") + " " + o.id)}" target="_blank" rel="noopener">${t("whatsappHelp")}</a>
     <button class="btn btn-ghost" onclick="go('home')">${t("continueShopping")}</button></section>`;
@@ -3081,7 +3082,10 @@ async function verifyOtp() {
       } else {
         go("profileSetupPage");
       }
-    } else if (profile?.full_name) go("account");
+    } else if (profile?.full_name) {
+      go("account");
+      if (typeof walletWelcomeCheck === "function") walletWelcomeCheck();   // Release A: a welcome gift waiting for this account
+    }
     else go("profileSetupPage");
   } catch (error) {
     console.error("Customer account setup failed:", error);
@@ -3176,6 +3180,7 @@ async function completeProfile() {
       await createOrderAfterVerification();
     } else {
       go("account");
+      if (typeof walletWelcomeCheck === "function") walletWelcomeCheck();   // Release A: the welcome gift of a new account
     }
   } catch (error) {
     toast(authMessage(error), 6000);
@@ -3551,6 +3556,7 @@ function signedInAccount() {
       </div>
 
 ${typeof rewardsAccountCardMarkup === "function" ? rewardsAccountCardMarkup() : ""}
+${typeof walletAccountCardMarkup === "function" ? walletAccountCardMarkup() : ""}
       <div class="account-section-title account-settings-title">
         ${t("myAccount")}
       </div>
@@ -3875,6 +3881,7 @@ ${typeof rewardsOn === "function" && rewardsOn() ? `
       </button>
 
 ` : ""}
+${typeof walletGuestCardMarkup === "function" ? walletGuestCardMarkup() : ""}
       <div class="account-section-title account-settings-title">
       ${t("myAccount")}
      </div>
@@ -4220,6 +4227,7 @@ function updateCartBreakdown() {
   if (box) box.innerHTML = cartSummaryMarkup();
   const addon = document.getElementById("addonCart");   // Batch A: the "items to add" sum follows the cart
   if (addon && typeof addonCartMarkup === "function") addon.outerHTML = addonCartMarkup();
+  if (typeof walletNudgeRefresh === "function") walletNudgeRefresh();   // Release A: the coupon line follows the cart
 }
 function chgQty(idx, d, button) {
   const line = state.cart[idx];
@@ -4607,6 +4615,7 @@ async function createOrderAfterVerification() {
     state.redeemPoints = 0;
     if (typeof cartQuoteReset === "function") cartQuoteReset();
     if (typeof loadRewardsSummary === "function") loadRewardsSummary(true);
+    if (typeof walletStale === "function") walletStale();   // Release A: a coupon just used is not offered again
     saveTrackedCustomerOrder();
     go("confirmation");
     refreshTrackedCustomerOrder();
@@ -4737,7 +4746,8 @@ try {
 if (typeof tableBoot === "function") tableBoot();
 render();
 
-bootstrapCustomerAuth();
+// Release A: a welcome gift not yet shown on this device (e.g. an account made while placing an order).
+Promise.resolve(bootstrapCustomerAuth()).then(ok => { if (ok && typeof walletWelcomeCheck === "function") walletWelcomeCheck(); }).catch(() => {});
 
 startMenuSync();
 startCustomerOrderSync();

@@ -575,7 +575,7 @@ test('the Account screen has the row for a signed-in customer only, and the chan
   assert.ok(app.indexOf(hook) > app.indexOf('function signedInAccount()') && app.indexOf(hook) < app.indexOf('function account()'));
   const html = read('index.html');
   for (const file of ['css/order-addons.css']) assert.ok(html.includes(`${file}?v=20261004-pc1"`), file);
-  assert.ok(html.includes('js/push.js?v=20261007-388"'));   // Batch 388 (no notification card at a table) changed push.js
+  assert.ok(html.includes('js/push.js?v=20261010-ra"'));   // Release A (?wallet=1) changed push.js
   const push = read('js/push.js');
   assert.equal(push.split('p_on: true').length, 1);            // nothing agrees with a fixed "true"
   assert.equal(push.split('pushOffersSet(').length, 3);        // the function and the switch's own handler

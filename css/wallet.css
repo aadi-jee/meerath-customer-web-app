@@ -1,0 +1,274 @@
+/* Release A (415): the Rewards hub — coupons, the points progress bar, the cart's coupon line,
+   the welcome sheet; and (412) the kind words for an order the restaurant did not answer.
+   Additive: nothing of the existing screens is changed. Uses the theme's own tokens. */
+
+.wallet-screen { padding-bottom: 24px; }
+.wallet-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 0 10px;
+  font-size: var(--cx-text-lg, 17px);
+}
+.wallet-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: var(--cx-radius-pill, 999px);
+  background: var(--cx-action, #f08a1a);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+.wallet-list { display: grid; gap: 12px; }
+
+/* ---- a coupon: a ticket with the value on the start side ---- */
+.wallet-coupon {
+  --wallet-notch: 9px;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(96px, 30%) minmax(0, 1fr);
+  min-height: 132px;
+  border: 1px solid rgba(224, 177, 90, 0.35);
+  border-radius: 18px;
+  background: var(--card, #141414);
+  color: var(--text);
+  box-shadow: var(--card-shadow, 0 4px 14px rgba(0, 0, 0, 0.18));
+  overflow: hidden;
+  animation: wallet-in var(--cx-base, 240ms) var(--cx-ease, ease) both;
+}
+.wallet-coupon-value {
+  position: relative;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 4px;
+  padding: 14px 10px;
+  background: linear-gradient(150deg, rgba(240, 138, 26, 0.95), rgba(201, 120, 20, 0.92));
+  color: #fff;
+  text-align: center;
+}
+/* the perforation between the two halves, with a notch at each end */
+.wallet-coupon-value::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  inset-inline-end: -1px;
+  border-inline-end: 2px dashed rgba(255, 255, 255, 0.55);
+}
+.wallet-coupon::before,
+.wallet-coupon::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset-inline-start: calc(max(96px, 30%) - var(--wallet-notch));
+  width: calc(var(--wallet-notch) * 2);
+  height: calc(var(--wallet-notch) * 2);
+  border-radius: 50%;
+  background: var(--bg, #070707);
+}
+.wallet-coupon::before { top: calc(var(--wallet-notch) * -1); }
+.wallet-coupon::after { bottom: calc(var(--wallet-notch) * -1); }
+.wallet-coupon-value strong {
+  font-size: clamp(22px, 7vw, 30px);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+html[dir="rtl"] .wallet-coupon-value strong { letter-spacing: 0; }
+.wallet-coupon-value small { font-size: 12px; font-weight: 600; opacity: 0.92; }
+.wallet-coupon-body { display: grid; align-content: start; gap: 4px; min-width: 0; padding: 14px 14px 12px; padding-inline-start: 18px; }
+.wallet-coupon-tag {
+  color: var(--gold, #e0b15a);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+html[dir="rtl"] .wallet-coupon-tag { letter-spacing: 0; }
+.wallet-coupon-body h4 { margin: 0; font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+.wallet-coupon-body p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.wallet-coupon-ends { font-weight: 600; }
+.wallet-coupon.is-urgent .wallet-coupon-ends { color: #fbbf24; }
+.wallet-coupon-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.wallet-coupon-foot code {
+  padding: 4px 8px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font: 600 12px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.06em;
+  unicode-bidi: isolate;
+}
+.wallet-use { min-height: 40px; padding: 8px 16px; width: auto; font-size: 14px; border-radius: var(--cx-radius-pill, 999px); }
+.wallet-coupon-state {
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--cx-radius-pill, 999px);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ---- used and expired: greyed ---- */
+.wallet-coupon.is-past { border-color: var(--line); box-shadow: none; filter: grayscale(1); opacity: 0.62; }
+.wallet-coupon.is-past .wallet-coupon-value { background: linear-gradient(150deg, #5b5b5b, #3d3d3d); }
+.wallet-past .wallet-h { color: var(--muted); font-size: var(--cx-text-md, 15px); }
+
+/* ---- loading and empty ---- */
+.wallet-skeleton {
+  min-height: 132px;
+  border-color: var(--line);
+  background: linear-gradient(90deg, var(--card) 0%, rgba(255, 255, 255, 0.06) 50%, var(--card) 100%) 0 0 / 200% 100%;
+  animation: wallet-shimmer 1.2s linear infinite;
+}
+.wallet-skeleton::before, .wallet-skeleton::after { display: none; }
+.wallet-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 26px 16px;
+  border: 1px dashed var(--line);
+  border-radius: 18px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.5;
+}
+.wallet-empty strong { color: var(--text); font-size: 16px; }
+.wallet-empty p { margin: 0; font-size: 14px; }
+.wallet-empty .btn { width: auto; margin-top: 6px; padding-inline: 22px; }
+.wallet-empty-icon, .wallet-nudge-icon, .wallet-welcome-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(240, 138, 26, 0.14);
+  color: var(--cx-action, #f08a1a);
+}
+.wallet-empty-icon svg, .wallet-nudge-icon svg, .wallet-welcome-icon svg, .wallet-account-card .account-reward-icon svg {
+  width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* ---- the points progress bar (inside the points card) ---- */
+.wallet-progress { display: grid; gap: 6px; margin-top: 12px; }
+.wallet-progress-track {
+  height: 10px;
+  border-radius: var(--cx-radius-pill, 999px);
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.wallet-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--gold, #e0b15a), var(--cx-action, #f08a1a));
+  transition: width var(--cx-slow, 420ms) var(--cx-ease, ease);
+}
+html[dir="rtl"] .wallet-progress-track span { background: linear-gradient(270deg, var(--gold, #e0b15a), var(--cx-action, #f08a1a)); }
+.wallet-progress p { margin: 0; color: var(--gold, #e0b15a); font-size: 13px; font-weight: 600; }
+
+/* ---- the cart: "You have a coupon" ---- */
+#walletNudge:empty { display: none; }
+.wallet-nudge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid rgba(240, 138, 26, 0.55);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(240, 138, 26, 0.16), rgba(240, 138, 26, 0.04));
+  animation: wallet-in var(--cx-base, 240ms) var(--cx-ease, ease) both;
+}
+.wallet-nudge.is-short { border-style: dashed; background: transparent; }
+.wallet-nudge-icon { width: 40px; height: 40px; }
+.wallet-nudge-copy { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.wallet-nudge-copy strong { font-size: 14px; line-height: 1.35; }
+.wallet-nudge-copy small { color: var(--muted); font-size: 12px; }
+.wallet-nudge-use { flex: none; width: auto; min-height: 40px; padding: 8px 16px; border-radius: var(--cx-radius-pill, 999px); font-size: 14px; }
+
+/* ---- the welcome sheet ---- */
+.wallet-welcome-panel { align-items: center; text-align: center; overflow: hidden; }
+.wallet-welcome-icon { width: 64px; height: 64px; margin-top: 8px; animation: wallet-pop 600ms var(--cx-ease, ease) both; }
+.wallet-welcome-icon svg { width: 32px; height: 32px; }
+.wallet-welcome-panel h3 { margin: 0; }
+.wallet-welcome-value {
+  margin: 0;
+  color: var(--cx-action, #f08a1a);
+  font-size: clamp(34px, 11vw, 44px);
+  font-weight: 800;
+  line-height: 1.05;
+}
+.wallet-welcome-what { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.wallet-welcome-what span { color: var(--text); font-weight: 600; }
+.wallet-welcome-code {
+  padding: 6px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  font: 700 14px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.1em;
+}
+.wallet-welcome-panel .btn { width: 100%; }
+.wallet-welcome-note { margin: -4px 0 0; color: var(--muted); font-size: 12px; }
+.wallet-confetti { position: absolute; inset: 0 0 auto; height: 120px; pointer-events: none; }
+.wallet-confetti i {
+  position: absolute;
+  top: -12px;
+  width: 7px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--cx-action, #f08a1a);
+  opacity: 0;
+  animation: wallet-fall 1.6s var(--cx-ease, ease) forwards;
+}
+.wallet-confetti i:nth-child(3n) { background: var(--gold, #e0b15a); }
+.wallet-confetti i:nth-child(4n) { background: #4ade80; }
+.wallet-confetti i:nth-child(1) { left: 6%; animation-delay: 0.05s; }
+.wallet-confetti i:nth-child(2) { left: 14%; animation-delay: 0.2s; }
+.wallet-confetti i:nth-child(3) { left: 22%; animation-delay: 0.1s; }
+.wallet-confetti i:nth-child(4) { left: 31%; animation-delay: 0.3s; }
+.wallet-confetti i:nth-child(5) { left: 40%; animation-delay: 0.15s; }
+.wallet-confetti i:nth-child(6) { left: 49%; animation-delay: 0.35s; }
+.wallet-confetti i:nth-child(7) { left: 58%; animation-delay: 0.05s; }
+.wallet-confetti i:nth-child(8) { left: 66%; animation-delay: 0.25s; }
+.wallet-confetti i:nth-child(9) { left: 74%; animation-delay: 0.12s; }
+.wallet-confetti i:nth-child(10) { left: 82%; animation-delay: 0.32s; }
+.wallet-confetti i:nth-child(11) { left: 89%; animation-delay: 0.18s; }
+.wallet-confetti i:nth-child(12) { left: 95%; animation-delay: 0.4s; }
+
+/* ---- the order the restaurant did not answer (412) ---- */
+.order-auto-reject { margin: 8px 0 0; color: var(--text); font-size: 13px; line-height: 1.55; }
+.confirmation-message.order-auto-reject { font-size: 15px; }
+.order-auto-reject-card { border-color: rgba(248, 113, 113, 0.4); }
+.order-auto-reject-card .btn { margin-top: 12px; }
+
+@keyframes wallet-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes wallet-shimmer { to { background-position: -200% 0; } }
+@keyframes wallet-pop { 0% { transform: scale(0.6); opacity: 0; } 70% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes wallet-fall { 0% { opacity: 1; transform: translateY(0) rotate(0); } 100% { opacity: 0; transform: translateY(130px) rotate(260deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .wallet-coupon, .wallet-nudge, .wallet-welcome-icon, .wallet-skeleton { animation: none; }
+  .wallet-confetti { display: none; }
+  .wallet-progress-track span { transition: none; }
+}
+
+/* ---- light theme ---- */
+body.light-theme .wallet-coupon { border-color: rgba(168, 90, 0, 0.28); }
+body.light-theme .wallet-coupon-tag,
+body.light-theme .wallet-progress p { color: #a85a00; }
+body.light-theme .wallet-coupon.is-urgent .wallet-coupon-ends { color: #b45309; }
+body.light-theme .wallet-progress-track { background: rgba(0, 0, 0, 0.1); }
+body.light-theme .wallet-skeleton { background: linear-gradient(90deg, var(--card) 0%, rgba(0, 0, 0, 0.06) 50%, var(--card) 100%) 0 0 / 200% 100%; }
+body.light-theme .order-auto-reject-card { border-color: rgba(179, 38, 30, 0.35); }
+
+@media (max-width: 360px) {
+  .wallet-coupon { grid-template-columns: 88px minmax(0, 1fr); }
+  .wallet-coupon::before, .wallet-coupon::after { inset-inline-start: calc(88px - var(--wallet-notch)); }
+  .wallet-coupon-value strong { font-size: 22px; }
+}

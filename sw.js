@@ -1,5 +1,5 @@
-/* ORACY customer app — service worker (Batch P, Batch PC).
- * Its only jobs: show an order or offer notification and open the right screen when it is tapped.
+/* ORACY customer app — service worker (Batch P, Batch PC, Release A).
+ * Its only jobs: show an order, offer or coupon notification and open the right screen when it is tapped.
  * It caches nothing, so customers always get the current app. */
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
@@ -16,6 +16,11 @@ function offerTarget(data) {
 }
 function offerUrl(target) {
   return `./?go=${target.go}${target.id ? `&id=${target.id}` : ""}${target.c ? `&c=${target.c}` : ""}`;
+}
+/* Release A (order-push v8): "your coupon ends soon". The address is fixed here: the Rewards hub. */
+const WALLET_URL = "./?wallet=1";
+function couponMessage(data) {
+  return data.kind === "coupon" || (typeof data.tag === "string" && /^coupon-/.test(data.tag));
 }
 
 self.addEventListener("push", (event) => {
@@ -37,6 +42,18 @@ self.addEventListener("push", (event) => {
       }));
     return;
   }
+  if (couponMessage(data)) {
+    event.waitUntil(self.registration.showNotification(
+      typeof data.title === "string" && data.title ? data.title.slice(0, 80) : "Your coupon", {
+        body,
+        tag: typeof data.tag === "string" && /^coupon-/.test(data.tag) && UUID.test(data.tag.slice(7)) ? data.tag.toLowerCase() : "coupon",
+        renotify: false,
+        icon: "assets/icons/icon-192.png",
+        badge: "assets/icons/badge-96.png",
+        data: {kind: "coupon", url: WALLET_URL},   // never the message's own address
+      }));
+    return;
+  }
   const title = typeof data.title === "string" && data.title ? data.title.slice(0, 80) : "Order update";
   event.waitUntil(self.registration.showNotification(title, {
     body,
@@ -52,7 +69,8 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const shown = event.notification.data || {};
   let message = {type: "oracy-open-orders"}, url = "./?orders=1";
-  if (shown.kind === "offer") {
+  if (shown.kind === "coupon") { message = {type: "oracy-open-wallet"}; url = WALLET_URL; }
+  else if (shown.kind === "offer") {
     if (event.action === "stop") { message = {type: "oracy-manage-offers"}; url = "./?offers=manage"; }
     else {
       const target = offerTarget(shown);   // checked again: nothing but the four words and ids leaves here

@@ -1319,12 +1319,13 @@ test('the new files load before app.js, every changed file has a new cache key, 
     assert.ok(scripts.indexOf(file) > scripts.indexOf('js/rewards.js') && scripts.indexOf(file) < scripts.indexOf('js/app.js'), file);
   }
   assert.ok(scripts.indexOf('js/promo-reasons.js') < scripts.indexOf('js/cart-quote.js'));
-  for (const file of ['js/promo-reasons.js', 'js/app.js', 'js/data.js', 'js/table.js', 'js/account-orders.js', 'js/order-addons.js']) {
+  for (const file of ['js/promo-reasons.js', 'js/data.js', 'js/table.js', 'js/order-addons.js']) {
     assert.ok(html.includes(`${file}?v=20261008-3a"`), file);
   }
+  for (const file of ['js/app.js', 'js/account-orders.js']) assert.ok(html.includes(`${file}?v=20261010-ra"`), file);   // Release A
   assert.ok(html.includes('css/promotions.css?v=20261009-3al"'));   // Licence round
   for (const file of ['js/cart-quote.js', 'js/promotions.js']) assert.ok(html.includes(`${file}?v=20261009-3b"`), file);   // 3b
-  for (const pin of ['js/table.js?v=20261008-3a', 'css/table.css?v=20261007-391', 'js/push.js?v=20261007-388', 'js/table-calls.js?v=20261007-1b', 'js/rewards.js?v=20261003-batche',
+  for (const pin of ['js/table.js?v=20261008-3a', 'css/table.css?v=20261007-391', 'js/push.js?v=20261010-ra', 'js/table-calls.js?v=20261007-1b', 'js/rewards.js?v=20261010-ra',
     'js/i18n.js?v=20261006-cx4f', 'js/auth.js?v=20261003-gate4', 'css/theme.css?v=20261006-cx4i', 'js/theme.js?v=20261006-cx4c']) assert.ok(html.includes(pin + '"'), pin);
   assert.equal(html.match(/<link rel="stylesheet" href="(css\/[^"?]+)/g).at(-1).endsWith('css/theme.css'), true);
   // every customer sentence of the new files is written in both languages

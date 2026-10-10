@@ -178,16 +178,20 @@ if (pushSupported()) {
     if (event.data?.type === "oracy-open-orders" && typeof go === "function") { state.orderTab = "active"; go("track"); }
     else if (event.data?.type === "oracy-open-offer") pushOpenOffer(event.data);
     else if (event.data?.type === "oracy-manage-offers") pushOffersManage();
+    else if (event.data?.type === "oracy-open-wallet") pushOpenWallet();   // Release A: a coupon reminder
   });
 }
-/* Opened from a notification: an order goes straight to the Orders screen, an offer to what it is about. */
+/* Opened from a notification: an order goes straight to the Orders screen, an offer to what it is about,
+ * a coupon reminder (Release A, ?wallet=1) to the Rewards hub. */
 function pushOpenFromLink() {
   try {
     const query = new URLSearchParams(location.search);
     const offer = query.has("go") ? {go: query.get("go"), id: query.get("id"), c: query.get("c")} : null;
     const manage = query.get("offers") === "manage";
-    if (query.get("orders") !== "1" && !offer && !manage) return;
+    const wallet = query.get("wallet") === "1";
+    if (query.get("orders") !== "1" && !offer && !manage && !wallet) return;
     history.replaceState(history.state, "", location.pathname);
+    if (wallet) { pushOpenWallet(); return; }
     if (offer) { pushOpenOffer(offer); return; }
     if (manage) { pushOffersManage(); return; }
     state.orderTab = "active";
@@ -195,6 +199,11 @@ function pushOpenFromLink() {
   } catch (_) {}
 }
 if (typeof window !== "undefined") window.addEventListener("load", () => setTimeout(pushOpenFromLink, 400));
+/** Release A: the wallet (coupons and points). wallet.js waits for the restaurant's switches, then opens Rewards. */
+function pushOpenWallet() {
+  if (typeof walletOpen === "function") walletOpen();
+  else if (typeof go === "function") go("rewards");
+}
 /* Signing out: this device stops following the account (it can be turned on again for an order). */
 async function pushDetach() {
   pushState.subscribed = false;

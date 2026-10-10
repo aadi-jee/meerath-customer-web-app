@@ -266,18 +266,20 @@ function rewardsAccountCardMarkup() {
     </button>`;
 }
 
-function rewardsScreenMarkup() {
-  const r = rewardsState.rules;
-  if (!rewardsOn()) {
-    return `<section class="screen"><div class="topbar">${back("account")}<h2>${brandedRewardsLabel()}</h2>${langSwitch()}</div>
-      <div class="empty">${rewardsCopy("Points are not available right now.", "النقاط غير متاحة حالياً.")}</div></section>${nav("account")}`;
-  }
-  if (!state.isLoggedIn) {
-    return `<section class="screen"><div class="topbar">${back("account")}<h2>${brandedRewardsLabel()}</h2>${langSwitch()}</div>
-      <div class="empty">${rewardsCopy("Sign in to see your points.", "سجّل الدخول لعرض نقاطك.")}<br>
-      <button class="link" onclick="go('signInPage')">${t("signInCreate")}</button></div></section>${nav("account")}`;
-  }
-  const s = rewardsState.summary || {};
+/** The points card: balance, value, expiry and (Release A) the progress bar to the next reward. */
+function rewardsPointsCardMarkup(s) {
+  return `<div class="points">
+      <small style="color:var(--gold)">${rewardsCopy("Your points", "نقاطك")}</small>
+      <h2>${rewardsNumber(s.balance)} ${rewardsCopy("points", "نقطة")}</h2>
+      <p>${rewardsCopy(`Usable now: ${money(rewardsNumber(s.usable_value))}`, `قابلة للاستخدام الآن: ${money(rewardsNumber(s.usable_value))}`)}</p>
+      ${rewardsNextExpiryLine(s, true)}
+      ${typeof walletProgressMarkup === "function" ? walletProgressMarkup() : ""}
+      <button class="btn btn-primary" style="margin-top:12px" onclick="go('menu')">${rewardsCopy("Order and use points", "اطلب واستخدم نقاطك")}</button>
+    </div>`;
+}
+
+/** How it works, when points expire, and the history. */
+function rewardsDetailsMarkup(r, s) {
   const history = Array.isArray(s.history) ? s.history : [];
   const how = [
     rewardsCopy(`Earn ${rewardsNumber(r.earn_points_per_unit)} point for every ${money(1)} you pay for food.`,
@@ -289,16 +291,7 @@ function rewardsScreenMarkup() {
     rewardsCopy("Catering orders: the restaurant adds your points to your account after payment. Meal-distribution requests do not earn points.",
                 "طلبات التموين: يضيف المطعم نقاطك إلى حسابك بعد الدفع. طلبات توزيع الوجبات لا تكسب نقاطاً."),
   ];
-  return `<section class="screen rewards-screen">
-    <div class="topbar">${back("account")}<h2>${brandedRewardsLabel()}</h2>${langSwitch()}</div>
-    <div class="points">
-      <small style="color:var(--gold)">${rewardsCopy("Your points", "نقاطك")}</small>
-      <h2>${rewardsNumber(s.balance)} ${rewardsCopy("points", "نقطة")}</h2>
-      <p>${rewardsCopy(`Usable now: ${money(rewardsNumber(s.usable_value))}`, `قابلة للاستخدام الآن: ${money(rewardsNumber(s.usable_value))}`)}</p>
-      ${rewardsNextExpiryLine(s, true)}
-      <button class="btn btn-primary" style="margin-top:12px" onclick="go('menu')">${rewardsCopy("Order and use points", "اطلب واستخدم نقاطك")}</button>
-    </div>
-    ${rewardsState.error ? `<p class="delivery-quote-error">${escapeHtml(rewardsState.error)}</p>` : ""}
+  return `${rewardsState.error ? `<p class="delivery-quote-error">${escapeHtml(rewardsState.error)}</p>` : ""}
     <h3 style="margin:18px 0 10px">${rewardsCopy("How it works", "كيف تعمل")}</h3>
     <ul class="rewards-how">${how.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
     ${rewardsExpiryList(s).length > 1 ? `<h3 style="margin:18px 0 10px">${rewardsCopy("When your points expire", "متى تنتهي نقاطك")}</h3>
@@ -311,7 +304,27 @@ function rewardsScreenMarkup() {
           <span>${h.order_number ? escapeHtml(h.order_number) + " · " : ""}${rewardsDate(h.at)}</span></div>
         <b class="${rewardsNumber(h.points) < 0 ? "minus" : "plus"}">${rewardsNumber(h.points) > 0 ? "+" : ""}${rewardsNumber(h.points)}</b>
       </div>`).join("")
-      : `<div class="empty">${rewardsCopy("No points yet — they appear after your first paid order.", "لا توجد نقاط بعد — تظهر بعد أول طلب مدفوع.")}</div>`}
+      : `<div class="empty">${rewardsCopy("No points yet — they appear after your first paid order.", "لا توجد نقاط بعد — تظهر بعد أول طلب مدفوع.")}</div>`}`;
+}
+
+function rewardsScreenMarkup() {
+  // Release A (415): with the wallet switched on, this screen is the Rewards hub (coupons + points, wallet.js).
+  if (typeof walletOn === "function" && walletOn() && typeof walletScreenMarkup === "function") return walletScreenMarkup();
+  const r = rewardsState.rules;
+  if (!rewardsOn()) {
+    return `<section class="screen"><div class="topbar">${back("account")}<h2>${brandedRewardsLabel()}</h2>${langSwitch()}</div>
+      <div class="empty">${rewardsCopy("Points are not available right now.", "النقاط غير متاحة حالياً.")}</div></section>${nav("account")}`;
+  }
+  if (!state.isLoggedIn) {
+    return `<section class="screen"><div class="topbar">${back("account")}<h2>${brandedRewardsLabel()}</h2>${langSwitch()}</div>
+      <div class="empty">${rewardsCopy("Sign in to see your points.", "سجّل الدخول لعرض نقاطك.")}<br>
+      <button class="link" onclick="go('signInPage')">${t("signInCreate")}</button></div></section>${nav("account")}`;
+  }
+  const s = rewardsState.summary || {};
+  return `<section class="screen rewards-screen">
+    <div class="topbar">${back("account")}<h2>${brandedRewardsLabel()}</h2>${langSwitch()}</div>
+    ${rewardsPointsCardMarkup(s)}
+    ${rewardsDetailsMarkup(r, s)}
   </section>${nav("account")}`;
 }
 

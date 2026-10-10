@@ -71,6 +71,21 @@ function accountOrderStatus(status) {
   const pair = names[status] || ['Unknown status','حالة غير معروفة'];
   return authCopy(...pair);
 }
+/* Release A (412): an app order nobody answered in time is rejected by the server with exactly this reason
+ * (and, in the push message, detail.auto = "timeout"). The customer gets a kind sentence, not the raw reason. */
+const ORDER_AUTO_REJECT_REASON = 'Restaurant did not respond';
+function orderAutoRejected(reason, auto) {
+  return auto === 'timeout' || auto === true || reason === ORDER_AUTO_REJECT_REASON;
+}
+function orderAutoRejectText() {
+  return state.lang === 'ar'
+    ? 'لم يؤكد المطعم طلبك في الوقت المحدد، لذلك أُلغي الطلب. كل ما استخدمته (القسيمة أو النقاط) عاد إلى حسابك.'
+    : 'The restaurant did not confirm your order in time, so it was cancelled. Anything you used (voucher, points) is back in your account.';
+}
+/** The words shown for a rejected order: the kind sentence for a time-out, else the restaurant's own reason. */
+function orderRejectionText(reason, auto) {
+  return orderAutoRejected(reason, auto) ? orderAutoRejectText() : String(reason || '');
+}
 function accountOrderType(type) {
   return t(type === 'delivery' ? 'delivery' : type === 'takeaway' ? 'takeaway' : 'dineIn');
 }
@@ -118,10 +133,19 @@ function accountOrdersPage() {
     <span class="history-status ${order.status==='rejected'||order.status==='cancelled'?'account-status-negative':''}">${h(accountOrderStatus(order.status))}</span></div>
     <div class="history-order-meta"><span>${h(accountOrderType(order.fulfillment_type))}${typeof tableOrderSuffix === 'function' ? tableOrderSuffix(order.id) : ''}</span><span>${(count => typeof itemsCountLabel === 'function' ? itemsCountLabel(count) : `${count} ${t('items')}`)((Array.isArray(order.items)?order.items:[]).reduce((n,line)=>n+(Number(line.quantity)||0),0))}</span><strong>${money(Number(order.total)||0)}</strong></div>
     ${typeof rewardsOrderLine === 'function' ? rewardsOrderLine(order.order_number) : ''}
+    ${order.status==='rejected'&&orderAutoRejected(order.rejection_reason)?`<p class="order-auto-reject" role="note">${h(orderAutoRejectText())}</p>`:''}
     <details class="account-order-details"><summary>${t('orderDetails')}</summary>
     ${(Array.isArray(order.items)?order.items:[]).map(line=>`<div class="active-order-item">${h(line.quantity)} × ${h(line.name)}</div>`).join('')}
     ${typeof promoOrderRows === 'function' ? promoOrderRows(order.id) : ''}
-    ${order.rejection_reason?`<p>${h(order.rejection_reason)}</p>`:''}</details></article>`).join('');
+    ${order.rejection_reason&&!orderAutoRejected(order.rejection_reason)?`<p>${h(order.rejection_reason)}</p>`:''}</details></article>`).join('');
+  // Release A (412): an order the restaurant did not answer leaves the active list; for 3 hours it is said so there too.
+  const timedOut = history ? [] : accountOrders.rows.filter(o => o.status === 'rejected' && orderAutoRejected(o.rejection_reason) &&
+    Date.now() - Date.parse(o.created_at) < 3 * 3600000);
+  const timedOutCards = timedOut.map(order => `<article class="active-order-card order-auto-reject-card" role="status">
+    <div class="active-order-head"><div><span>${authCopy('Order not confirmed','لم يُؤكَّد الطلب')}</span><strong>#${h(order.order_number)}</strong></div>
+    <span class="history-status account-status-negative">${h(accountOrderStatus(order.status))}</span></div>
+    <p class="order-auto-reject">${h(orderAutoRejectText())}</p>
+    <button class="btn btn-ghost" onclick="go('menu')">${t('browseMenu')}</button></article>`).join('');
   return `<section class="screen orders-screen account-orders-screen">
     <div class="topbar orders-topbar"><h2>${t('orders')}</h2><div class="account-orders-actions">
       <button class="account-orders-refresh" onclick="loadAccountOrders()" ${accountOrders.busy?'disabled':''}>${authCopy('Refresh','تحديث')}</button>${langSwitch()}</div></div>
@@ -129,8 +153,8 @@ function accountOrdersPage() {
       <button class="${history?'active':''}" onclick="state.orderTab='history';renderKeepScroll()">${t('history')}</button></div>
     ${accountOrders.error?`<div class="account-orders-notice" role="alert">${authCopy('Could not load orders. Please retry.','تعذر تحميل الطلبات. حاول مجدداً.')}</div>`:''}
     ${accountOrders.busy&&!accountOrders.rows.length?`<div class="account-orders-notice" role="status">${authCopy('Loading orders…','جارٍ تحميل الطلبات…')}</div>`:''}
-    ${!accountOrders.busy&&!accountOrders.error&&!visible.length?empty:''}
-    ${history?`<div class="order-history-list">${historyCards}</div>`:`<div class="account-active-orders">${activeCards}</div>`}
+    ${!accountOrders.busy&&!accountOrders.error&&!visible.length&&!timedOut.length?empty:''}
+    ${history?`<div class="order-history-list">${historyCards}</div>`:`<div class="account-active-orders">${timedOutCards}${activeCards}</div>`}
     ${accountOrders.more&&(history||visible.length)?`<button class="btn btn-ghost account-load-more" onclick="loadAccountOrders(true)" ${accountOrders.busy?'disabled':''}>${authCopy('Load more','تحميل المزيد')}</button>`:''}
     </section>${nav('track')}`;
 }
